@@ -996,6 +996,458 @@
       padding: 24px;
     }
 
+    .hotel-topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 0 34px;
+      color: #fff;
+      background: linear-gradient(135deg, #0F2A43 0%, #16395B 100%);
+      border-bottom: 3px solid #D4AF37;
+      box-shadow: 0 14px 34px rgba(15, 42, 67, 0.24);
+    }
+
+    .hotel-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(212, 175, 55, 0.72);
+      border-radius: 50%;
+      color: #D4AF37;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 16px;
+      letter-spacing: 0;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .brand-kicker {
+      color: #D4AF37;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .brand-title {
+      margin-top: 3px;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-meta {
+      color: rgba(255, 255, 255, 0.76);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    body {
+      background:
+        linear-gradient(180deg, rgba(15, 42, 67, 0.06), transparent 220px),
+        #F7F5EF;
+    }
+
+    main {
+      padding-top: 24px;
+    }
+
+    .page-intro,
+    .upload-panel,
+    .status,
+    .result-wrap,
+    .calendar-section,
+    .asset-section,
+    .ai-chat-panel {
+      border-radius: 16px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      background: #FFFFFF;
+      box-shadow: 0 18px 44px rgba(15, 42, 67, 0.09);
+    }
+
+    .page-intro {
+      align-items: center;
+      padding: 24px 28px;
+      margin-bottom: 18px;
+      border-left: 5px solid #D4AF37;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 245, 239, 0.9)),
+        #FFFFFF;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      margin-bottom: 8px;
+      color: #D4AF37;
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .page-intro h1 {
+      color: #0F2A43;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    .upload-dropzone {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 18px;
+      min-height: 118px;
+      padding: 22px;
+      border: 1.5px dashed rgba(212, 175, 55, 0.78);
+      background:
+        linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(255, 255, 255, 0.96)),
+        #FFFFFF;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .upload-dropzone:hover {
+      transform: translateY(-2px);
+      border-color: #D4AF37;
+      box-shadow: 0 22px 52px rgba(15, 42, 67, 0.13);
+    }
+
+    .upload-symbol {
+      width: 58px;
+      height: 58px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 16px;
+      color: #D4AF37;
+      background: #0F2A43;
+      font-size: 28px;
+      font-weight: 900;
+      box-shadow: 0 12px 24px rgba(15, 42, 67, 0.22);
+    }
+
+    .upload-copy {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .upload-copy strong {
+      color: #0F2A43;
+      font-size: 18px;
+      font-weight: 850;
+    }
+
+    .upload-copy span {
+      color: #667085;
+      font-size: 14px;
+    }
+
+    .upload-action {
+      justify-self: end;
+    }
+
+    .file-name {
+      grid-column: 2 / -1;
+      color: #16395B;
+      font-weight: 700;
+    }
+
+    .upload-button,
+    .primary-button {
+      min-height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0F2A43, #16395B);
+      box-shadow: 0 10px 18px rgba(15, 42, 67, 0.16);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    .upload-button:hover,
+    .primary-button:hover {
+      transform: translateY(-1px);
+      background: linear-gradient(135deg, #16395B, #0F2A43);
+      box-shadow: 0 14px 24px rgba(15, 42, 67, 0.2);
+    }
+
+    .secondary-button,
+    .icon-button,
+    .workspace-tab {
+      border-radius: 12px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .secondary-button:hover,
+    .icon-button:hover,
+    .workspace-tab:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(15, 42, 67, 0.1);
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin: 20px 0 18px;
+    }
+
+    .kpi-card {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-height: 106px;
+      padding: 20px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      border-radius: 16px;
+      background: #FFFFFF;
+      box-shadow: 0 16px 34px rgba(15, 42, 67, 0.08);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 22px 46px rgba(15, 42, 67, 0.14);
+    }
+
+    .kpi-icon {
+      width: 46px;
+      height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      border-radius: 14px;
+      color: #D4AF37;
+      background: #0F2A43;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .kpi-label {
+      color: #667085;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .kpi-value {
+      margin-top: 5px;
+      color: #0F2A43;
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .card-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .info-card {
+      border-radius: 16px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      background: linear-gradient(180deg, #FFFFFF, rgba(247, 245, 239, 0.55));
+      box-shadow: 0 12px 26px rgba(15, 42, 67, 0.07);
+    }
+
+    .info-label {
+      color: #D4AF37;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+    }
+
+    .info-value {
+      color: #0F2A43;
+      font-weight: 800;
+    }
+
+    .workspace-tabs {
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .workspace-tab.active {
+      color: #FFFFFF;
+      border-color: #0F2A43;
+      background: #0F2A43;
+    }
+
+    .calendar-section {
+      padding: 20px;
+    }
+
+    .calendar-header {
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(15, 42, 67, 0.08);
+    }
+
+    .calendar-title {
+      color: #0F2A43;
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .calendar-grid {
+      gap: 6px;
+      margin-top: 14px;
+    }
+
+    .weekday {
+      color: #16395B;
+      background: rgba(15, 42, 67, 0.06);
+      border-radius: 12px;
+      font-weight: 850;
+    }
+
+    .calendar-day {
+      min-height: 132px;
+      border-color: rgba(15, 42, 67, 0.1);
+      border-radius: 14px;
+      background: #FFFFFF;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.62);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .calendar-day:hover {
+      transform: translateY(-2px);
+      border-color: rgba(212, 175, 55, 0.72);
+      box-shadow: 0 12px 26px rgba(15, 42, 67, 0.12);
+    }
+
+    .calendar-day.today {
+      border-color: #D4AF37;
+      background: linear-gradient(180deg, rgba(212, 175, 55, 0.12), #FFFFFF 42%);
+    }
+
+    .calendar-day.today .day-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 28px;
+      padding: 0 8px;
+      border-radius: 999px;
+      color: #FFFFFF;
+      background: #0F2A43;
+    }
+
+    .calendar-day.has-events .day-number::after {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-left: 6px;
+      border-radius: 50%;
+      background: #D4AF37;
+      vertical-align: middle;
+    }
+
+    .event-pill {
+      border-radius: 999px;
+      font-weight: 800;
+      box-shadow: 0 5px 12px rgba(15, 42, 67, 0.08);
+    }
+
+    .asset-section {
+      padding: 22px;
+    }
+
+    .asset-header h2,
+    .ai-chat-header h2 {
+      color: #0F2A43;
+      font-weight: 900;
+    }
+
+    .ai-chat-panel {
+      position: sticky;
+      top: 96px;
+      overflow: hidden;
+      border-top: 4px solid #D4AF37;
+      background:
+        linear-gradient(180deg, rgba(15, 42, 67, 0.04), #FFFFFF 160px),
+        #FFFFFF;
+    }
+
+    .ai-chat-header {
+      padding: 22px 20px 16px;
+      background: #FFFFFF;
+      border-bottom: 1px solid rgba(15, 42, 67, 0.08);
+    }
+
+    .ai-chat-header p {
+      color: #667085;
+    }
+
+    .suggested-questions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 14px;
+      background: rgba(247, 245, 239, 0.78);
+      border-bottom: 1px solid rgba(15, 42, 67, 0.08);
+    }
+
+    .suggested-question {
+      min-height: 40px;
+      padding: 0 10px;
+      border: 1px solid rgba(212, 175, 55, 0.45);
+      border-radius: 12px;
+      color: #0F2A43;
+      background: #FFFFFF;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .suggested-question:hover {
+      transform: translateY(-1px);
+      border-color: #D4AF37;
+      box-shadow: 0 8px 18px rgba(15, 42, 67, 0.1);
+    }
+
+    .chat-messages {
+      background: linear-gradient(180deg, #FFFFFF, rgba(247, 245, 239, 0.58));
+    }
+
+    .chat-bubble {
+      border-radius: 16px;
+    }
+
+    .chat-message.assistant .chat-bubble {
+      color: #0F2A43;
+      background: #F7F5EF;
+      border: 1px solid rgba(15, 42, 67, 0.08);
+    }
+
+    .chat-message.user .chat-bubble {
+      background: #0F2A43;
+    }
+
+    .chat-form {
+      border-top: 1px solid rgba(15, 42, 67, 0.08);
+      background: #FFFFFF;
+    }
+
+    .chat-form textarea,
+    input,
+    textarea,
+    select {
+      border-radius: 12px;
+    }
+
+    .mobile-bottom-nav {
+      display: none;
+    }
+
     @media (max-width: 768px) {
       :root {
         --mobile-content-width: max(100vw, 700px);
@@ -1253,20 +1705,163 @@
         grid-template-columns: 1fr;
       }
     }
+
+    @media (max-width: 768px) {
+      .hotel-topbar {
+        width: var(--mobile-content-width, 100vw);
+        min-width: var(--mobile-content-width, 100vw);
+        height: auto;
+        min-height: 76px;
+        padding: 14px 18px;
+        align-items: center;
+      }
+
+      .brand-meta {
+        display: none;
+      }
+
+      .brand-title {
+        font-size: 16px;
+      }
+
+      .page-intro,
+      .upload-panel,
+      .status,
+      .result-wrap,
+      .kpi-grid,
+      .calendar-section,
+      .asset-section,
+      .ai-chat-panel {
+        width: 100%;
+        min-width: var(--mobile-content-width, 100vw);
+      }
+
+      .page-intro {
+        padding: 20px;
+      }
+
+      .page-intro h1 {
+        font-size: 24px;
+      }
+
+      .upload-dropzone {
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+      }
+
+      .upload-action {
+        grid-column: 1 / -1;
+        justify-self: stretch;
+      }
+
+      .upload-button {
+        width: 100%;
+      }
+
+      .file-name {
+        grid-column: 1 / -1;
+      }
+
+      .kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .kpi-card {
+        min-height: 96px;
+        padding: 16px;
+      }
+
+      .card-grid,
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .calendar-day {
+        min-height: 116px;
+      }
+
+      .ai-chat-panel {
+        position: static;
+      }
+
+      .suggested-questions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mobile-bottom-nav {
+        position: fixed;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 50;
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        min-height: 64px;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        border-top: 1px solid rgba(212, 175, 55, 0.55);
+        background: rgba(15, 42, 67, 0.97);
+        box-shadow: 0 -14px 34px rgba(15, 42, 67, 0.26);
+      }
+
+      .mobile-bottom-nav button {
+        min-height: 50px;
+        display: grid;
+        place-items: center;
+        gap: 2px;
+        border: 0;
+        border-radius: 14px;
+        color: rgba(255, 255, 255, 0.86);
+        background: transparent;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .mobile-bottom-nav button span {
+        color: #D4AF37;
+        font-size: 16px;
+        line-height: 1;
+      }
+
+      .mobile-bottom-nav button:active,
+      .mobile-bottom-nav button:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      body {
+        padding-bottom: 76px;
+      }
+    }
   </style>
 </head>
 <body>
+  <header class="hotel-topbar">
+    <div class="hotel-brand">
+      <div class="brand-mark">VE</div>
+      <div>
+        <div class="brand-kicker">BANQUET ERP</div>
+        <div class="brand-title">VENEZIA HOTEL &amp; SUITE</div>
+      </div>
+    </div>
+    <div class="brand-meta">Luxury Hotel Operations</div>
+  </header>
+
   <main>
     <div class="erp-workspace">
-    <header>
+    <header class="page-intro" id="homeSection">
       <div>
-        <h1>이벤트오더 엑셀 프리뷰</h1>
-        <p>엑셀 파일을 업로드하면 이벤트오더 핵심 정보만 추출해서 확인할 수 있습니다.</p>
+        <span class="eyebrow">Event Order Intelligence</span>
+        <h1>연회장 운영 대시보드</h1>
+        <p>이벤오더 업로드부터 캘린더, 자산, AI 운영 지원까지 한 화면에서 관리합니다.</p>
       </div>
     </header>
 
-    <section class="upload-panel" aria-label="엑셀 업로드">
-      <div>
+    <section class="upload-panel upload-dropzone" id="uploadSection" aria-label="엑셀 업로드">
+      <div class="upload-symbol" aria-hidden="true">↑</div>
+      <div class="upload-copy">
+        <strong>이벤오더 엑셀 업로드</strong>
+        <span>파일을 선택하면 행사 정보, Schedule, Items를 자동으로 읽습니다.</span>
+      </div>
+      <div class="upload-action">
         <input id="excelInput" class="file-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <label class="upload-button" for="excelInput">엑셀 업로드</label>
       </div>
@@ -1276,6 +1871,37 @@
     <div id="status" class="status">.xlsx 파일을 선택해주세요.</div>
     <section id="resultWrap" class="result-wrap" aria-label="추출 결과">
       <div class="empty-state">업로드된 이벤트오더 정보가 여기에 표시됩니다.</div>
+    </section>
+
+    <section class="kpi-grid" aria-label="연회 KPI">
+      <article class="kpi-card">
+        <div class="kpi-icon" aria-hidden="true">●</div>
+        <div>
+          <div class="kpi-label">오늘 행사 수</div>
+          <div id="todayEventsKpi" class="kpi-value">0</div>
+        </div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-icon" aria-hidden="true">◆</div>
+        <div>
+          <div class="kpi-label">이번주 행사 수</div>
+          <div id="weekEventsKpi" class="kpi-value">0</div>
+        </div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-icon" aria-hidden="true">∑</div>
+        <div>
+          <div class="kpi-label">예정 인원</div>
+          <div id="expectedPeopleKpi" class="kpi-value">0</div>
+        </div>
+      </article>
+      <article class="kpi-card">
+        <div class="kpi-icon" aria-hidden="true">□</div>
+        <div>
+          <div class="kpi-label">사용 중인 연회장 수</div>
+          <div id="venuesKpi" class="kpi-value">0</div>
+        </div>
+      </article>
     </section>
 
     <div class="workspace-tabs" role="tablist" aria-label="ERP 메뉴">
@@ -1342,6 +1968,12 @@
           <p>여수 베네치아 호텔 연회팀 전용 AI 비서입니다.<br>저장된 이벤오더 데이터와 연회장 운영 정보를 기반으로 답변합니다.</p>
         </div>
       </div>
+      <div class="suggested-questions" aria-label="추천 질문">
+        <button class="suggested-question" type="button" data-question="오늘 행사 요약해줘">오늘 행사 요약</button>
+        <button class="suggested-question" type="button" data-question="다음 주 준비 체크리스트 만들어줘">준비 체크리스트</button>
+        <button class="suggested-question" type="button" data-question="저장된 행사 인원 계산해줘">인원 계산</button>
+        <button class="suggested-question" type="button" data-question="연회장 장비와 자산 확인해줘">장비 확인</button>
+      </div>
       <div id="chatMessages" class="chat-messages" aria-live="polite">
         <div class="chat-message assistant">
           <div class="chat-bubble">저장된 이벤오더, 연회장 운영 정보, 준비 체크리스트를 물어보세요.</div>
@@ -1363,6 +1995,14 @@
       <div id="modalBody" class="modal-body"></div>
     </div>
   </div>
+
+  <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴">
+    <button type="button" data-mobile-target="home"><span aria-hidden="true">⌂</span><strong>홈</strong></button>
+    <button type="button" data-mobile-target="calendar"><span aria-hidden="true">□</span><strong>캘린더</strong></button>
+    <button type="button" data-mobile-target="assets"><span aria-hidden="true">◇</span><strong>자산관리</strong></button>
+    <button type="button" data-mobile-target="ai"><span aria-hidden="true">AI</span><strong>AI</strong></button>
+    <button type="button" data-mobile-target="settings"><span aria-hidden="true">⚙</span><strong>설정</strong></button>
+  </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
@@ -1394,6 +2034,12 @@
     const chatInput = document.querySelector("#chatInput");
     const chatMessages = document.querySelector("#chatMessages");
     const chatSendButton = document.querySelector("#chatSendButton");
+    const todayEventsKpi = document.querySelector("#todayEventsKpi");
+    const weekEventsKpi = document.querySelector("#weekEventsKpi");
+    const expectedPeopleKpi = document.querySelector("#expectedPeopleKpi");
+    const venuesKpi = document.querySelector("#venuesKpi");
+    const suggestedQuestionButtons = document.querySelectorAll("[data-question]");
+    const mobileNavButtons = document.querySelectorAll("[data-mobile-target]");
 
     const storageKey = "banquetErpEvents.v1";
     const supabaseConfig = {
@@ -1460,6 +2106,17 @@
     refreshAssetsButton.addEventListener("click", loadBanquetAssets);
     assetCancelButton.addEventListener("click", resetAssetForm);
     assetForm.addEventListener("submit", saveBanquetAsset);
+
+    suggestedQuestionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        chatInput.value = button.dataset.question || "";
+        chatInput.focus();
+      });
+    });
+
+    mobileNavButtons.forEach((button) => {
+      button.addEventListener("click", () => handleMobileNavigation(button.dataset.mobileTarget));
+    });
 
     chatForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -2353,11 +3010,94 @@
       return normalized ? Number.parseInt(normalized, 10) : null;
     }
 
+    function handleMobileNavigation(target) {
+      if (target === "home") {
+        document.querySelector("#homeSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      if (target === "calendar") {
+        activateWorkspaceTab("calendar");
+        calendarPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      if (target === "assets") {
+        activateWorkspaceTab("assets");
+        loadBanquetAssets();
+        assetPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+
+      if (target === "ai") {
+        document.querySelector(".ai-chat-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        chatInput.focus();
+        return;
+      }
+
+      statusBox.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function parsePeopleCount(value) {
+      if (value === null || value === undefined) return 0;
+      const parsed = Number.parseInt(String(value).replace(/[^0-9-]/g, ""), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    function dateKeyToDate(dateKey) {
+      const [year, month, day] = String(dateKey || "").split("-").map(Number);
+      if (!year || !month || !day) return null;
+      return new Date(year, month - 1, day);
+    }
+
+    function isSameOrAfterDateKey(dateKey, baseDateKey) {
+      return String(dateKey || "") >= String(baseDateKey || "");
+    }
+
+    function isDateKeyInRange(dateKey, startDate, endDate) {
+      const date = dateKeyToDate(dateKey);
+      if (!date) return false;
+      return date >= startDate && date <= endDate;
+    }
+
+    function updateKpiDashboard() {
+      if (!todayEventsKpi || !weekEventsKpi || !expectedPeopleKpi || !venuesKpi) return;
+
+      const today = new Date();
+      const todayKey = formatDateKey(today);
+      const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+      const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6, 23, 59, 59);
+
+      const todayCount = savedEvents.filter((eventItem) => eventItem.calendarDates?.includes(todayKey)).length;
+      const weekCount = savedEvents.filter((eventItem) =>
+        eventItem.calendarDates?.some((dateKey) => isDateKeyInRange(dateKey, weekStart, weekEnd))
+      ).length;
+
+      let expectedPeople = 0;
+      const activeVenues = new Set();
+      savedEvents.forEach((eventItem) => {
+        const isUpcoming = eventItem.calendarDates?.some((dateKey) => isSameOrAfterDateKey(dateKey, todayKey));
+        if (!isUpcoming) return;
+
+        if (eventItem.venue) activeVenues.add(normalizeText(eventItem.venue));
+        (eventItem.schedule || []).forEach((scheduleItem) => {
+          expectedPeople += parsePeopleCount(scheduleItem.people);
+          if (scheduleItem.venue) activeVenues.add(normalizeText(scheduleItem.venue));
+        });
+      });
+
+      todayEventsKpi.textContent = todayCount.toLocaleString("ko-KR");
+      weekEventsKpi.textContent = weekCount.toLocaleString("ko-KR");
+      expectedPeopleKpi.textContent = expectedPeople.toLocaleString("ko-KR");
+      venuesKpi.textContent = activeVenues.size.toLocaleString("ko-KR");
+    }
+
     function renderCalendar() {
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
       calendarTitle.textContent = `${year}년 ${month + 1}월`;
       calendarGrid.innerHTML = "";
+      const todayKey = formatDateKey(new Date());
 
       ["일", "월", "화", "수", "목", "금", "토"].forEach((weekday) => {
         const cell = document.createElement("div");
@@ -2375,6 +3115,8 @@
         const dayEvents = savedEvents.filter((item) => item.calendarDates?.includes(dateKey));
         const dayCell = document.createElement("div");
         dayCell.className = `calendar-day${date.getMonth() === month ? "" : " outside"}`;
+        if (dateKey === todayKey) dayCell.classList.add("today");
+        if (dayEvents.length > 0) dayCell.classList.add("has-events");
 
         const dayNumber = document.createElement("div");
         dayNumber.className = "day-number";
@@ -2396,6 +3138,8 @@
 
         calendarGrid.append(dayCell);
       }
+
+      updateKpiDashboard();
     }
 
     function openEventModal(eventItem, calendarDateKey = eventItem.calendarDates?.[0] || null) {
