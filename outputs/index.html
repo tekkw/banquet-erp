@@ -1,0 +1,3064 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>이벤트오더 엑셀 프리뷰</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --line: #d8dde6;
+      --line-strong: #aeb7c5;
+      --text: #202631;
+      --muted: #667085;
+      --brand: #1d6f64;
+      --brand-dark: #15574e;
+      --warn-bg: #fff6df;
+      --warn-line: #f0ca68;
+      --error-bg: #fff0f0;
+      --error-line: #ee9b9b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+    }
+
+    main {
+      width: min(1680px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 28px 0 40px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 380px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .erp-workspace {
+      min-width: 0;
+    }
+
+    header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 26px;
+      font-weight: 750;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .upload-panel {
+      display: grid;
+      grid-template-columns: minmax(230px, max-content) 1fr;
+      gap: 16px;
+      align-items: center;
+      padding: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .file-input {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+
+    .upload-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .upload-button:hover {
+      background: var(--brand-dark);
+    }
+
+    .primary-button,
+    .icon-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      border: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 750;
+    }
+
+    .primary-button {
+      padding: 0 15px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 14px;
+    }
+
+    .primary-button:disabled {
+      background: #98a2b3;
+      cursor: not-allowed;
+    }
+
+    .icon-button {
+      width: 38px;
+      background: var(--surface);
+      border: 1px solid var(--line-strong);
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    .file-name {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 14px;
+      overflow-wrap: anywhere;
+    }
+
+    .status {
+      margin-top: 14px;
+      padding: 11px 13px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status.error {
+      border-color: var(--error-line);
+      background: var(--error-bg);
+      color: #8a1f1f;
+    }
+
+    .status.warn {
+      border-color: var(--warn-line);
+      background: var(--warn-bg);
+      color: #73510d;
+    }
+
+    .sheet-bar {
+      display: none;
+      gap: 8px;
+      align-items: center;
+      margin-top: 18px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .sheet-bar.visible {
+      display: flex;
+    }
+
+    .sheet-button {
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .sheet-button.active {
+      border-color: var(--brand);
+      background: #e7f4f1;
+      color: var(--brand-dark);
+      font-weight: 700;
+    }
+
+    .result-wrap {
+      margin-top: 18px;
+      min-height: 220px;
+    }
+
+    .preview-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+
+    .workspace-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 18px 0 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .workspace-tab {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-bottom: 0;
+      border-radius: 7px 7px 0 0;
+      background: #eef2f6;
+      color: #475467;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .workspace-tab.active {
+      background: var(--surface);
+      color: var(--brand-dark);
+      border-color: var(--line-strong);
+    }
+
+    .tab-panel[hidden] {
+      display: none;
+    }
+
+    .asset-section {
+      margin-top: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .asset-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .asset-header h2 {
+      margin: 0 0 4px;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .asset-form {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.8fr) minmax(90px, 0.7fr) minmax(180px, 1.3fr) auto auto;
+      gap: 8px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .asset-form input {
+      min-width: 0;
+      min-height: 36px;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      padding: 0 9px;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .asset-table-wrap {
+      max-height: 430px;
+      overflow: auto;
+    }
+
+    .asset-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    .asset-table th,
+    .asset-table td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .asset-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #eef2f6;
+      color: #475467;
+      font-weight: 800;
+    }
+
+    .asset-table .number-cell {
+      text-align: right;
+    }
+
+    .asset-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .asset-actions button {
+      min-height: 30px;
+      padding: 0 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .asset-actions .danger-button {
+      border-color: #ee9b9b;
+      background: #fff0f0;
+      color: #9d2424;
+    }
+
+    .calendar-save-settings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 16px;
+      padding: 16px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .setting-label {
+      display: block;
+      margin-bottom: 8px;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .date-adder {
+      display: flex;
+      gap: 8px;
+    }
+
+    .date-adder input {
+      min-height: 38px;
+      padding: 0 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .date-chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 10px;
+    }
+
+    .date-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 0 7px 0 10px;
+      border: 1px solid #b9ddd5;
+      border-radius: 6px;
+      background: #e7f4f1;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .chip-remove {
+      width: 20px;
+      height: 20px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .color-options {
+      display: flex;
+      gap: 9px;
+      align-items: center;
+      min-height: 38px;
+    }
+
+    .color-option {
+      width: 28px;
+      height: 28px;
+      border: 2px solid transparent;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .color-option.selected {
+      border-color: #1d2939;
+      box-shadow: 0 0 0 2px #fff;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .info-card {
+      min-height: 104px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .info-label {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .info-value {
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 750;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .info-card.missing .info-value {
+      color: #98a2b3;
+      font-weight: 650;
+    }
+
+    .schedule-card {
+      grid-column: 1 / -1;
+    }
+
+    .wide-card {
+      grid-column: 1 / -1;
+    }
+
+    .text-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding-left: 18px;
+      line-height: 1.45;
+    }
+
+    .schedule-list {
+      display: grid;
+      gap: 9px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .schedule-list li {
+      position: relative;
+      padding-left: 18px;
+      color: var(--text);
+      font-size: 16px;
+      font-weight: 650;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+    }
+
+    .schedule-list li::before {
+      content: "•";
+      position: absolute;
+      left: 0;
+      color: var(--brand);
+      font-weight: 800;
+    }
+
+    .schedule-table-wrap {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .schedule-table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    .schedule-table th,
+    .schedule-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      line-height: 1.35;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .schedule-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #eef2f6;
+      color: #344054;
+      font-weight: 800;
+    }
+
+    .schedule-table .number-cell,
+    .schedule-table .number-header {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .schedule-table.schedule-data col:nth-child(1) { width: 15%; }
+    .schedule-table.schedule-data col:nth-child(2) { width: 20%; }
+    .schedule-table.schedule-data col:nth-child(3) { width: 35%; }
+    .schedule-table.schedule-data col:nth-child(4) { width: 20%; }
+    .schedule-table.schedule-data col:nth-child(5) { width: 10%; }
+
+    .schedule-table.items-data col:nth-child(1) { width: 40%; }
+    .schedule-table.items-data col:nth-child(2) { width: 20%; }
+    .schedule-table.items-data col:nth-child(3) { width: 10%; }
+    .schedule-table.items-data col:nth-child(4) { width: 30%; }
+
+    .schedule-table.items-data td:first-child,
+    .schedule-table.items-data th:first-child {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .schedule-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .calendar-section {
+      margin-top: 24px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .calendar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .calendar-title {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .calendar-nav {
+      display: flex;
+      gap: 8px;
+    }
+
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+
+    .weekday,
+    .calendar-day {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .weekday:nth-child(7n),
+    .calendar-day:nth-child(7n) {
+      border-right: 0;
+    }
+
+    .weekday {
+      padding: 10px;
+      background: #eef2f6;
+      color: #475467;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .calendar-day {
+      min-height: 118px;
+      padding: 8px;
+      background: #fff;
+    }
+
+    .calendar-day.outside {
+      background: #f8fafc;
+      color: #98a2b3;
+    }
+
+    .day-number {
+      margin-bottom: 7px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .event-pill {
+      display: block;
+      width: 100%;
+      margin-top: 5px;
+      padding: 6px 7px;
+      border: 1px solid #b9ddd5;
+      border-radius: 6px;
+      background: #e7f4f1;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 750;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ai-chat-panel {
+      position: sticky;
+      top: 18px;
+      display: grid;
+      grid-template-rows: auto minmax(360px, calc(100vh - 260px)) auto;
+      min-height: 640px;
+      max-height: calc(100vh - 36px);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+      overflow: hidden;
+    }
+
+    .ai-chat-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .ai-chat-header h2 {
+      margin: 0 0 5px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .ai-chat-header p {
+      font-size: 13px;
+    }
+
+    .chat-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px;
+      overflow: auto;
+      background: #fbfcfe;
+    }
+
+    .chat-message {
+      display: flex;
+    }
+
+    .chat-message.user {
+      justify-content: flex-end;
+    }
+
+    .chat-bubble {
+      max-width: 88%;
+      padding: 10px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: keep-all;
+      overflow-wrap: anywhere;
+    }
+
+    .chat-message.user .chat-bubble {
+      border-color: #96cfc5;
+      background: #e7f4f1;
+      color: var(--brand-dark);
+    }
+
+    .chat-message.error .chat-bubble {
+      border-color: var(--error-line);
+      background: var(--error-bg);
+      color: #8a1f1f;
+    }
+
+    .chat-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .chat-form textarea {
+      width: 100%;
+      min-height: 72px;
+      max-height: 150px;
+      resize: vertical;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      padding: 9px 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .chat-form textarea:focus {
+      outline: 2px solid rgba(29, 111, 100, 0.2);
+      border-color: var(--brand);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.42);
+      z-index: 10;
+    }
+
+    .modal-backdrop.visible {
+      display: flex;
+    }
+
+    .modal {
+      width: min(720px, 100%);
+      max-height: min(720px, calc(100vh - 40px));
+      overflow: auto;
+      background: var(--surface);
+      border-radius: 8px;
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 800;
+    }
+
+    .modal-body {
+      padding: 18px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .file-storage-note {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .secondary-button,
+    .danger-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .secondary-button {
+      border: 1px solid var(--line-strong);
+      background: #fff;
+      color: var(--text);
+    }
+
+    .danger-button {
+      border: 1px solid #e69898;
+      background: #fff0f0;
+      color: #9d2424;
+    }
+
+    .form-field {
+      display: grid;
+      gap: 7px;
+      margin-bottom: 12px;
+    }
+
+    .form-field label {
+      color: #475467;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .form-field input,
+    .form-field textarea,
+    .editable-table input {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+
+    .form-field input {
+      min-height: 38px;
+      padding: 0 10px;
+    }
+
+    .form-field textarea {
+      min-height: 96px;
+      padding: 9px 10px;
+      line-height: 1.45;
+      resize: vertical;
+    }
+
+    .editable-table input {
+      min-height: 30px;
+      padding: 4px 6px;
+    }
+
+    .editable-table td {
+      padding: 5px 6px;
+    }
+
+    .table-row-delete {
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 4px;
+      background: #fff0f0;
+      color: #9d2424;
+      cursor: pointer;
+      font-size: 17px;
+    }
+
+    .table-add-row {
+      margin-top: 8px;
+    }
+
+    .delete-choice-panel {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid #e69898;
+      border-radius: 6px;
+      background: #fff8f8;
+    }
+
+    .delete-choice-message {
+      width: 100%;
+      color: #7a271a;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .table-wrap {
+      margin-top: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+      max-height: calc(100vh - 230px);
+      min-height: 300px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      min-width: 96px;
+      max-width: 360px;
+      padding: 8px 10px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #eef2f6;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    th:first-child,
+    td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      min-width: 54px;
+      width: 54px;
+      max-width: 54px;
+      background: #f8fafc;
+      color: var(--muted);
+      text-align: center;
+      font-weight: 700;
+    }
+
+    th:first-child {
+      z-index: 3;
+      background: #e6ebf2;
+    }
+
+    .empty-state {
+      display: grid;
+      min-height: 300px;
+      place-items: center;
+      color: var(--muted);
+      text-align: center;
+      padding: 24px;
+    }
+
+    @media (max-width: 720px) {
+      main {
+        width: min(100% - 20px, 1280px);
+        padding-top: 18px;
+        display: block;
+      }
+
+      .ai-chat-panel {
+        position: static;
+        margin-top: 18px;
+        min-height: 520px;
+      }
+
+      header,
+      .upload-panel {
+        display: block;
+      }
+
+      .file-name {
+        margin-top: 12px;
+      }
+
+      .card-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .calendar-day {
+        min-height: 92px;
+        padding: 6px;
+      }
+
+      .event-pill {
+        font-size: 12px;
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="erp-workspace">
+    <header>
+      <div>
+        <h1>이벤트오더 엑셀 프리뷰</h1>
+        <p>엑셀 파일을 업로드하면 이벤트오더 핵심 정보만 추출해서 확인할 수 있습니다.</p>
+      </div>
+    </header>
+
+    <section class="upload-panel" aria-label="엑셀 업로드">
+      <div>
+        <input id="excelInput" class="file-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <label class="upload-button" for="excelInput">엑셀 업로드</label>
+      </div>
+      <div id="fileName" class="file-name">아직 업로드된 파일이 없습니다.</div>
+    </section>
+
+    <div id="status" class="status">.xlsx 파일을 선택해주세요.</div>
+    <section id="resultWrap" class="result-wrap" aria-label="추출 결과">
+      <div class="empty-state">업로드된 이벤트오더 정보가 여기에 표시됩니다.</div>
+    </section>
+
+    <div class="workspace-tabs" role="tablist" aria-label="ERP 메뉴">
+      <button id="calendarTabButton" class="workspace-tab active" type="button" role="tab" aria-selected="true" aria-controls="calendarPanel">행사 캘린더</button>
+      <button id="assetTabButton" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="assetPanel">자산 관리</button>
+    </div>
+
+    <section id="calendarPanel" class="tab-panel calendar-section" aria-label="월간 캘린더" role="tabpanel">
+      <div class="calendar-header">
+        <button id="prevMonth" class="icon-button" type="button" aria-label="이전 달">‹</button>
+        <h2 id="calendarTitle" class="calendar-title"></h2>
+        <button id="nextMonth" class="icon-button" type="button" aria-label="다음 달">›</button>
+      </div>
+      <div id="calendarGrid" class="calendar-grid"></div>
+    </section>
+
+    <section id="assetPanel" class="tab-panel asset-section" aria-label="banquet_assets 관리" role="tabpanel" hidden>
+      <div class="asset-header">
+        <div>
+          <h2>연회장 자산 관리</h2>
+          <p>AI 비서가 참고할 연회장 자산을 등록합니다.</p>
+        </div>
+        <button id="refreshAssetsButton" class="secondary-button" type="button">새로고침</button>
+      </div>
+      <form id="assetForm" class="asset-form">
+        <input id="assetNameInput" type="text" placeholder="자산명" required>
+        <input id="assetFloorInput" type="text" placeholder="층">
+        <input id="assetQuantityInput" type="number" min="0" step="1" placeholder="수량">
+        <input id="assetSpecInput" type="text" placeholder="규격">
+        <button id="assetSaveButton" class="primary-button" type="submit">등록</button>
+        <button id="assetCancelButton" class="secondary-button" type="button" hidden>취소</button>
+      </form>
+      <div class="asset-table-wrap">
+        <table class="asset-table">
+          <colgroup>
+            <col style="width: 34%;">
+            <col style="width: 14%;">
+            <col style="width: 12%;">
+            <col style="width: 28%;">
+            <col style="width: 12%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>자산명</th>
+              <th>층</th>
+              <th class="number-cell">수량</th>
+              <th>규격</th>
+              <th>관리</th>
+            </tr>
+          </thead>
+          <tbody id="assetTableBody">
+            <tr><td colspan="5">등록된 자산을 불러오는 중입니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    </div>
+
+    <aside class="ai-chat-panel" aria-label="연회장 AI 비서">
+      <div class="ai-chat-header">
+        <div>
+          <h2>연회장 AI 비서</h2>
+          <p><strong>(Banquet AI Assistant)</strong></p>
+          <p>여수 베네치아 호텔 연회팀 전용 AI 비서입니다.<br>저장된 이벤오더 데이터와 연회장 운영 정보를 기반으로 답변합니다.</p>
+        </div>
+      </div>
+      <div id="chatMessages" class="chat-messages" aria-live="polite">
+        <div class="chat-message assistant">
+          <div class="chat-bubble">저장된 이벤오더, 연회장 운영 정보, 준비 체크리스트를 물어보세요.</div>
+        </div>
+      </div>
+      <form id="chatForm" class="chat-form">
+        <textarea id="chatInput" rows="3" placeholder="예: 6월 26일 행사 스케줄 알려줘"></textarea>
+        <button id="chatSendButton" class="primary-button" type="submit">질문</button>
+      </form>
+    </aside>
+  </main>
+
+  <div id="eventModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitle" class="modal-title">행사 상세정보</h2>
+        <button id="closeModal" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    const input = document.querySelector("#excelInput");
+    const fileName = document.querySelector("#fileName");
+    const statusBox = document.querySelector("#status");
+    const resultWrap = document.querySelector("#resultWrap");
+    const calendarTitle = document.querySelector("#calendarTitle");
+    const calendarGrid = document.querySelector("#calendarGrid");
+    const prevMonthButton = document.querySelector("#prevMonth");
+    const nextMonthButton = document.querySelector("#nextMonth");
+    const eventModal = document.querySelector("#eventModal");
+    const closeModalButton = document.querySelector("#closeModal");
+    const modalBody = document.querySelector("#modalBody");
+    const calendarTabButton = document.querySelector("#calendarTabButton");
+    const assetTabButton = document.querySelector("#assetTabButton");
+    const calendarPanel = document.querySelector("#calendarPanel");
+    const assetPanel = document.querySelector("#assetPanel");
+    const assetForm = document.querySelector("#assetForm");
+    const assetNameInput = document.querySelector("#assetNameInput");
+    const assetFloorInput = document.querySelector("#assetFloorInput");
+    const assetQuantityInput = document.querySelector("#assetQuantityInput");
+    const assetSpecInput = document.querySelector("#assetSpecInput");
+    const assetSaveButton = document.querySelector("#assetSaveButton");
+    const assetCancelButton = document.querySelector("#assetCancelButton");
+    const assetTableBody = document.querySelector("#assetTableBody");
+    const refreshAssetsButton = document.querySelector("#refreshAssetsButton");
+    const chatForm = document.querySelector("#chatForm");
+    const chatInput = document.querySelector("#chatInput");
+    const chatMessages = document.querySelector("#chatMessages");
+    const chatSendButton = document.querySelector("#chatSendButton");
+
+    const storageKey = "banquetErpEvents.v1";
+    const supabaseConfig = {
+      url: "https://pnolttdubxxmxorufpyk.supabase.co",
+      anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2x0dGR1Ynh4bXhvcnVmcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMDYxMTIsImV4cCI6MjA5NzU4MjExMn0.WhDRdoQUSQdQTfkcdEvzV2QT642vROHJxAE6k7hLqxA",
+      bucket: "event-orders",
+      chatFunction: "event-order-ai-chat",
+      functionUrl: "https://pnolttdubxxmxorufpyk.supabase.co/functions/v1/event-order-ai-chat",
+    };
+
+    let loadedSheets = [];
+    let pendingEvent = null;
+    let previewExtracted = null;
+    let uploadedOriginalFile = null;
+    let savedEvents = [];
+    let banquetAssets = [];
+    let editingAssetId = null;
+    let calendarDate = new Date();
+    let selectedSaveDates = [];
+    let selectedEventColor = "green";
+    let activeEventId = null;
+    let activeCalendarDate = null;
+
+    const eventColors = {
+      green: { label: "초록", background: "#d9f0ea", border: "#8fcdbf", text: "#15574e" },
+      blue: { label: "파랑", background: "#dceafa", border: "#9fc2eb", text: "#175a9c" },
+      yellow: { label: "노랑", background: "#fff1bd", border: "#e9c65d", text: "#7a5600" },
+      red: { label: "빨강", background: "#ffe1e1", border: "#eea1a1", text: "#9d2424" },
+      purple: { label: "보라", background: "#ece4ff", border: "#c1a9ef", text: "#5f3c99" },
+      gray: { label: "회색", background: "#e9edf2", border: "#b8c0cc", text: "#475467" },
+    };
+
+    const fields = [
+      { key: "eventName", label: "행사명", type: "text" },
+      { key: "host", label: "행사주최", type: "text" },
+      { key: "eventDate", label: "행사일시", type: "date" },
+      { key: "place", label: "장소", type: "text" },
+      { key: "schedule", label: "Schedule", type: "schedule" },
+      { key: "items", label: "Items", type: "items" },
+      { key: "layout", label: "Lay out & EQP", type: "list" },
+      { key: "others", label: "Others", type: "list" },
+    ];
+
+    prevMonthButton.addEventListener("click", () => {
+      calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+      renderCalendar();
+    });
+
+    nextMonthButton.addEventListener("click", () => {
+      calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+      renderCalendar();
+    });
+
+    closeModalButton.addEventListener("click", closeEventModal);
+    eventModal.addEventListener("click", (event) => {
+      if (event.target === eventModal) closeEventModal();
+    });
+
+    calendarTabButton.addEventListener("click", () => activateWorkspaceTab("calendar"));
+    assetTabButton.addEventListener("click", () => {
+      activateWorkspaceTab("assets");
+      loadBanquetAssets();
+    });
+    refreshAssetsButton.addEventListener("click", loadBanquetAssets);
+    assetCancelButton.addEventListener("click", resetAssetForm);
+    assetForm.addEventListener("submit", saveBanquetAsset);
+
+    chatForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const question = chatInput.value.trim();
+      if (!question || chatSendButton.disabled) return;
+
+      appendChatMessage("user", question);
+      chatInput.value = "";
+      chatInput.focus();
+      chatSendButton.disabled = true;
+      chatSendButton.textContent = "답변 중";
+
+      try {
+        const answer = await askEventOrderAi(question);
+        appendChatMessage("assistant", answer);
+      } catch (error) {
+        console.error("AI chat error:", error);
+        appendChatMessage("error", error.message || "AI 답변을 가져오지 못했습니다.");
+      } finally {
+        chatSendButton.disabled = false;
+        chatSendButton.textContent = "질문";
+      }
+    });
+
+    input.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      uploadedOriginalFile = file;
+      fileName.textContent = file.name;
+      setStatus("엑셀 파일을 읽는 중입니다...");
+      resultWrap.innerHTML = '<div class="empty-state">파일을 분석하고 있습니다.</div>';
+
+      try {
+        if (!file.name.toLowerCase().endsWith(".xlsx")) {
+          throw new Error(".xlsx 형식의 엑셀 파일만 지원합니다.");
+        }
+
+        const buffer = await file.arrayBuffer();
+        loadedSheets = await readXlsx(buffer);
+
+        if (!loadedSheets.length) {
+          setStatus("읽을 수 있는 시트를 찾지 못했습니다.", "warn");
+          resultWrap.innerHTML = '<div class="empty-state">표시할 정보가 없습니다.</div>';
+          return;
+        }
+
+        const extracted = extractEventOrderInfo(loadedSheets);
+        previewExtracted = extracted;
+        pendingEvent = normalizeEventForSave(extracted);
+        selectedSaveDates = extractDateRange(extracted.eventDate);
+        selectedEventColor = "green";
+        renderExtractedInfo(extracted);
+        const totalRows = loadedSheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
+        const foundCount = fields.filter((field) => {
+          const value = extracted[field.key];
+          return Array.isArray(value) ? value.length > 0 : Boolean(value);
+        }).length;
+        const statusType = foundCount < fields.length ? "warn" : "";
+        setStatus(`${loadedSheets.length}개 시트, 총 ${totalRows.toLocaleString("ko-KR")}개 행에서 ${foundCount}/${fields.length}개 항목을 추출했습니다.`, statusType);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "엑셀 파일을 읽는 중 오류가 발생했습니다.", "error");
+        resultWrap.innerHTML = '<div class="empty-state">파일을 다시 선택해주세요.</div>';
+      }
+    });
+
+    function setStatus(message, type = "") {
+      statusBox.textContent = message;
+      statusBox.className = `status ${type}`.trim();
+    }
+
+    function appendChatMessage(type, message) {
+      const row = document.createElement("div");
+      row.className = `chat-message ${type}`;
+      const bubble = document.createElement("div");
+      bubble.className = "chat-bubble";
+      bubble.textContent = message;
+      row.append(bubble);
+      chatMessages.append(row);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async function askEventOrderAi(question) {
+      const response = await fetch(supabaseConfig.functionUrl, {
+        method: "POST",
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question,
+        }),
+      });
+
+      const body = await parseSupabaseResponse(response).catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || response.statusText || "AI Edge Function 호출에 실패했습니다.");
+      }
+      return body?.answer || "답변이 비어 있습니다.";
+    }
+
+    function renderExtractedInfo(extracted) {
+      const grid = document.createElement("div");
+      grid.className = "card-grid";
+
+      fields.forEach((field) => {
+        const value = extracted[field.key];
+        const card = document.createElement("article");
+        const isCollection = ["schedule", "items", "list"].includes(field.type);
+        const hasValue = isCollection ? Array.isArray(value) && value.length > 0 : Boolean(value);
+        const isWide = isCollection;
+        card.className = `info-card${isWide ? " wide-card" : ""}${hasValue ? "" : " missing"}`;
+
+        const label = document.createElement("div");
+        label.className = "info-label";
+        label.textContent = field.label;
+
+        const content = field.type === "schedule"
+          ? createScheduleTable(value)
+          : field.type === "items"
+            ? createItemsTable(value)
+            : field.type === "list"
+              ? createTextList(value)
+              : document.createElement("div");
+
+        if (!["schedule", "items", "list"].includes(field.type)) {
+          content.className = "info-value";
+          content.textContent = value || "추출 실패";
+        }
+
+        card.append(label, content);
+        grid.append(card);
+      });
+
+      const settings = createCalendarSaveSettings();
+
+      const actions = document.createElement("div");
+      actions.className = "preview-actions";
+
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = "primary-button";
+      saveButton.textContent = "저장";
+      saveButton.disabled = !pendingEvent?.eventName || selectedSaveDates.length === 0;
+      saveButton.addEventListener("click", savePendingEvent);
+      actions.append(saveButton);
+
+      resultWrap.replaceChildren(grid, settings, actions);
+    }
+
+    function createCalendarSaveSettings() {
+      const settings = document.createElement("section");
+      settings.className = "calendar-save-settings";
+
+      const dateGroup = document.createElement("div");
+      const dateLabel = document.createElement("label");
+      dateLabel.className = "setting-label";
+      dateLabel.textContent = "캘린더 저장 날짜";
+      dateGroup.append(dateLabel);
+
+      const dateAdder = document.createElement("div");
+      dateAdder.className = "date-adder";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date";
+      dateInput.value = "";
+      const addDateButton = document.createElement("button");
+      addDateButton.type = "button";
+      addDateButton.className = "primary-button";
+      addDateButton.textContent = "추가";
+      addDateButton.addEventListener("click", () => {
+        if (!dateInput.value || selectedSaveDates.includes(dateInput.value)) return;
+        selectedSaveDates = [...selectedSaveDates, dateInput.value].sort();
+        renderExtractedInfo(previewExtracted);
+      });
+      dateAdder.append(dateInput, addDateButton);
+
+      const chips = document.createElement("div");
+      chips.className = "date-chip-list";
+      selectedSaveDates.forEach((dateKey) => {
+        const chip = document.createElement("span");
+        chip.className = "date-chip";
+        chip.textContent = formatDateLabel(dateKey);
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "chip-remove";
+        remove.setAttribute("aria-label", `${dateKey} 삭제`);
+        remove.textContent = "×";
+        remove.addEventListener("click", () => {
+          selectedSaveDates = selectedSaveDates.filter((item) => item !== dateKey);
+          renderExtractedInfo(previewExtracted);
+        });
+        chip.append(remove);
+        chips.append(chip);
+      });
+      dateGroup.append(dateAdder, chips);
+
+      const colorGroup = document.createElement("div");
+      const colorLabel = document.createElement("div");
+      colorLabel.className = "setting-label";
+      colorLabel.textContent = "캘린더 일정 색상";
+      const options = document.createElement("div");
+      options.className = "color-options";
+      Object.entries(eventColors).forEach(([key, color]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = `color-option${selectedEventColor === key ? " selected" : ""}`;
+        button.title = color.label;
+        button.setAttribute("aria-label", color.label);
+        button.style.background = color.background;
+        button.addEventListener("click", () => {
+          selectedEventColor = key;
+          renderExtractedInfo(previewExtracted);
+        });
+        options.append(button);
+      });
+      colorGroup.append(colorLabel, options);
+
+      settings.append(dateGroup, colorGroup);
+      return settings;
+    }
+
+    function createScheduleTable(scheduleRows) {
+      if (!Array.isArray(scheduleRows) || scheduleRows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "info-value";
+        empty.textContent = "추출 실패";
+        return empty;
+      }
+
+      return createDataTable(
+        ["날짜", "시간", "내용", "장소", "인원"],
+        scheduleRows.map((item) => [item.date, item.time, item.content, item.venue, item.people]),
+        "schedule"
+      );
+    }
+
+    function createItemsTable(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "info-value";
+        empty.textContent = "추출 실패";
+        return empty;
+      }
+
+      return createDataTable(
+        ["항목명", "단가", "수량", "금액"],
+        items.map((item) => [item.itemName, item.unitPrice, item.quantity, item.amount]),
+        "items"
+      );
+    }
+
+    function createTextList(values) {
+      if (!Array.isArray(values) || values.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "info-value";
+        empty.textContent = "추출 실패";
+        return empty;
+      }
+
+      const list = document.createElement("ul");
+      list.className = "text-list";
+      values.forEach((value) => {
+        const item = document.createElement("li");
+        item.textContent = value;
+        list.append(item);
+      });
+      return list;
+    }
+
+    function createDataTable(headers, rows, tableType) {
+      const wrap = document.createElement("div");
+      wrap.className = "schedule-table-wrap";
+      const table = document.createElement("table");
+      table.className = `schedule-table ${tableType}-data`;
+
+      const colgroup = document.createElement("colgroup");
+      headers.forEach(() => colgroup.append(document.createElement("col")));
+      table.append(colgroup);
+
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      headers.forEach((label, index) => {
+        const th = document.createElement("th");
+        if (isNumericColumn(tableType, index)) th.className = "number-header";
+        th.textContent = label;
+        headRow.append(th);
+      });
+      thead.append(headRow);
+      table.append(thead);
+
+      const tbody = document.createElement("tbody");
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        row.forEach((value, index) => {
+          const td = document.createElement("td");
+          if (isNumericColumn(tableType, index)) td.className = "number-cell";
+          td.textContent = value || "";
+          tr.append(td);
+        });
+        tbody.append(tr);
+      });
+      table.append(tbody);
+      wrap.append(table);
+      return wrap;
+    }
+
+    function isNumericColumn(tableType, index) {
+      return (tableType === "schedule" && index === 4)
+        || (tableType === "items" && [1, 2, 3].includes(index));
+    }
+
+    function extractEventOrderInfo(sheets) {
+      return {
+        eventName: findFixedRowValue(sheets, "행사명(Name of Event)"),
+        host: findFixedRowValue(sheets, "행사주최(Name of Company)"),
+        eventDate: findFixedRowValue(sheets, "행사일시(Date / Time)"),
+        place: findFixedRowValue(sheets, "장소(Venue)"),
+        schedule: extractScheduleRows(sheets),
+        items: extractItems(sheets),
+        layout: extractSectionColumnValues(sheets, "Lay out & EQP", "Others"),
+        others: extractSectionColumnValues(sheets, "Others", "시설(Engineering)"),
+      };
+    }
+
+    function findFixedRowValue(sheets, label) {
+      const normalizedLabel = normalizeLabel(label);
+      for (const sheet of sheets) {
+        for (const row of sheet.rows) {
+          const hasLabel = (row || []).some((cell) => normalizeLabel(cell) === normalizedLabel);
+          if (hasLabel) return cleanValue(row?.[3]);
+        }
+      }
+      return "";
+    }
+
+    function normalizeEventForSave(extracted) {
+      return {
+        id: `event-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        eventName: cleanValue(extracted.eventName),
+        companyName: cleanValue(extracted.host),
+        eventDateTime: cleanValue(extracted.eventDate),
+        venue: cleanValue(extracted.place),
+        schedule: Array.isArray(extracted.schedule) ? extracted.schedule : [],
+        items: Array.isArray(extracted.items) ? extracted.items : [],
+        layoutEqp: Array.isArray(extracted.layout) ? extracted.layout : [],
+        others: Array.isArray(extracted.others) ? extracted.others : [],
+        calendarDates: [],
+        color: selectedEventColor,
+        originalFilename: uploadedOriginalFile?.name || "",
+        storagePath: "",
+        internalMemo: "",
+        originalFileObject: uploadedOriginalFile || null,
+      };
+    }
+
+    async function savePendingEvent() {
+      if (!pendingEvent?.eventName || selectedSaveDates.length === 0) return;
+
+      if (!pendingEvent.originalFileObject) {
+        setStatus("원본 엑셀 파일을 찾지 못했습니다. 파일을 다시 업로드해주세요.", "error");
+        return;
+      }
+
+      setStatus("원본 엑셀 파일을 Supabase Storage에 업로드하는 중입니다...");
+
+      let uploadedFile;
+      try {
+        uploadedFile = await uploadOriginalFile(pendingEvent.originalFileObject);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "원본 엑셀 파일 업로드에 실패했습니다. 행사 데이터는 저장되지 않았습니다.", "error");
+        return;
+      }
+
+      const eventToSave = {
+        ...pendingEvent,
+        calendarDates: [...selectedSaveDates],
+        color: selectedEventColor,
+        storagePath: uploadedFile.storagePath,
+        originalFileUrl: uploadedFile.publicUrl,
+      };
+      let savedEvent;
+      try {
+        setStatus("행사 데이터를 Supabase Database에 저장하는 중입니다...");
+        savedEvent = await createEventInSupabase(eventToSave);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "행사 데이터 저장에 실패했습니다. 캘린더에는 반영되지 않았습니다.", "error");
+        return;
+      }
+
+      savedEvents = [...savedEvents, savedEvent];
+      const [year, month] = selectedSaveDates[0].split("-").map(Number);
+      calendarDate = new Date(year, month - 1, 1);
+      renderCalendar();
+      setStatus(`"${pendingEvent.eventName}" 행사를 ${selectedSaveDates.length}개 날짜에 저장했습니다.`);
+    }
+
+    async function uploadOriginalFile(file) {
+      const storagePath = `event_${Date.now()}.xlsx`;
+      const originalFilename = file.name;
+      const encodedPath = encodeURIComponent(storagePath);
+      const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${supabaseConfig.bucket}/${encodedPath}`;
+
+      console.log("storagePath:", storagePath);
+      console.log("originalFilename:", originalFilename);
+      console.log("storage upload 시작:", storagePath);
+
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "x-upsert": "false",
+        },
+        body: file,
+      });
+
+      if (!response.ok) {
+        const error = await supabaseErrorFromResponse(response, "Storage upload failed");
+        console.error("storage upload 실패:", error);
+        throw error;
+        const errorBody = await response.text();
+        throw new Error(`Supabase Storage 업로드 실패: ${errorBody || response.statusText}`);
+      }
+
+      console.log("storage upload 성공:", storagePath);
+
+      return {
+        storagePath,
+        publicUrl: `${supabaseConfig.url}/storage/v1/object/public/${supabaseConfig.bucket}/${encodedPath}`,
+      };
+    }
+
+    function supabaseHeaders(extra = {}) {
+      return {
+        apikey: supabaseConfig.anonKey,
+        Authorization: `Bearer ${supabaseConfig.anonKey}`,
+        ...extra,
+      };
+    }
+
+    async function supabaseRequest(path, options = {}) {
+      const response = await fetch(`${supabaseConfig.url}/rest/v1/${path}`, {
+        ...options,
+        headers: supabaseHeaders(options.headers),
+      });
+      if (!response.ok) {
+        const error = await supabaseErrorFromResponse(response, "Supabase Database error");
+        console.error("Supabase Database request 실패:", error);
+        throw error;
+        const errorBody = await response.text();
+        throw new Error(`Supabase Database 오류: ${errorBody || response.statusText}`);
+      }
+      return parseSupabaseResponse(response);
+    }
+
+    async function parseSupabaseResponse(response) {
+      const text = await response.text();
+      if (!text.trim()) return null;
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        console.error("Supabase response JSON parse error:", error, text);
+        throw new Error(`Supabase 응답을 읽지 못했습니다: ${error.message}`);
+      }
+    }
+
+    async function supabaseErrorFromResponse(response, fallbackMessage) {
+      const body = await parseSupabaseResponse(response).catch(() => null);
+      const message = body?.message || body?.error_description || body?.error || response.statusText || fallbackMessage;
+      const error = new Error(message);
+      error.status = response.status;
+      error.details = body?.details || "";
+      error.hint = body?.hint || "";
+      error.code = body?.code || "";
+      error.supabaseBody = body;
+      return error;
+    }
+
+    async function loggedSupabaseRequest(stepName, path, options = {}) {
+      console.log(`${stepName} 시작`);
+      try {
+        const data = await supabaseRequest(path, options);
+        console.log(`${stepName} 성공`, data || "");
+        return data;
+      } catch (error) {
+        console.error(`${stepName} 실패:`, error);
+        throw error;
+      }
+    }
+
+    async function insertRowsWithLog(stepName, tableName, rows, prefer = "") {
+      if (!rows.length) {
+        console.log(`${stepName} 시작: 저장할 행 없음`);
+        console.log(`${stepName} 성공: 저장할 행 없음`);
+        return null;
+      }
+      const headers = { "Content-Type": "application/json" };
+      if (prefer) headers.Prefer = prefer;
+      return loggedSupabaseRequest(stepName, tableName, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(rows),
+      });
+    }
+
+    async function createEventInSupabase(eventItem) {
+      const orders = await loggedSupabaseRequest("event_orders insert", "event_orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({
+          event_name: eventItem.eventName,
+          company_name: eventItem.companyName,
+          event_datetime: eventItem.eventDateTime,
+          venue: eventItem.venue,
+          color: eventItem.color,
+          original_filename: eventItem.originalFilename,
+          storage_path: eventItem.storagePath,
+          internal_memo: eventItem.internalMemo || "",
+        }),
+      });
+      const eventOrder = orders?.[0];
+      if (!eventOrder?.id) throw new Error("행사 기본정보 ID를 받지 못했습니다.");
+
+      try {
+        await insertEventChildren(eventOrder.id, eventItem);
+      } catch (error) {
+        await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventOrder.id)}`, { method: "DELETE" });
+        throw error;
+      }
+      return { ...eventItem, id: eventOrder.id, originalFileObject: null };
+    }
+
+    async function insertEventChildren(eventOrderId, eventItem) {
+      const requests = [];
+      const calendarDates = (eventItem.calendarDates || []).map((date) => ({ event_order_id: eventOrderId, calendar_date: date }));
+      if (calendarDates.length) {
+        requests.push(loggedSupabaseRequest("event_calendar_dates insert", "event_calendar_dates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(calendarDates),
+        }));
+      }
+
+      const schedules = (eventItem.schedule || []).map((item) => ({
+        event_order_id: eventOrderId,
+        schedule_date: item.date || "",
+        schedule_time: item.time || "",
+        content: item.content || "",
+        venue: item.venue || "",
+        people: toNullableInteger(item.people),
+      }));
+      if (schedules.length) {
+        requests.push(loggedSupabaseRequest("event_schedules insert", "event_schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(schedules),
+        }));
+      }
+
+      const items = (eventItem.items || []).map((item) => ({
+        event_order_id: eventOrderId,
+        item_name: item.itemName || "",
+        unit_price: toNullableNumber(item.unitPrice),
+        quantity: toNullableNumber(item.quantity),
+        amount: toNullableNumber(item.amount),
+      }));
+      if (items.length) {
+        requests.push(loggedSupabaseRequest("event_items insert", "event_items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(items),
+        }));
+      }
+
+      const notes = [
+        ...(eventItem.layoutEqp || []).map((content) => ({ event_order_id: eventOrderId, note_type: "layout_eqp", content })),
+        ...(eventItem.others || []).map((content) => ({ event_order_id: eventOrderId, note_type: "others", content })),
+        ...(eventItem.internalMemo ? [{ event_order_id: eventOrderId, note_type: "internal_memo", content: eventItem.internalMemo }] : []),
+      ];
+      if (notes.length) {
+        requests.push(loggedSupabaseRequest("event_notes insert", "event_notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(notes),
+        }));
+      }
+
+      await Promise.all(requests);
+    }
+
+    async function replaceEventChildrenForUpdate(eventOrderId, eventItem) {
+      await Promise.all([
+        supabaseRequest(`event_calendar_dates?event_order_id=eq.${encodeURIComponent(eventOrderId)}`, { method: "DELETE" }),
+        supabaseRequest(`event_schedules?event_order_id=eq.${encodeURIComponent(eventOrderId)}`, { method: "DELETE" }),
+        supabaseRequest(`event_items?event_order_id=eq.${encodeURIComponent(eventOrderId)}`, { method: "DELETE" }),
+        supabaseRequest(`event_notes?event_order_id=eq.${encodeURIComponent(eventOrderId)}`, { method: "DELETE" }),
+      ]);
+      await insertEventChildren(eventOrderId, eventItem);
+    }
+
+    async function updateEventInSupabase(eventItem) {
+      await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventItem.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_name: eventItem.eventName,
+          company_name: eventItem.companyName,
+          event_datetime: eventItem.eventDateTime,
+          venue: eventItem.venue,
+          color: eventItem.color,
+          internal_memo: eventItem.internalMemo || "",
+        }),
+      });
+      await replaceEventChildrenForUpdate(eventItem.id, eventItem);
+    }
+
+    async function updateInternalMemoInSupabase(eventId, internalMemo) {
+      await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ internal_memo: internalMemo }),
+      });
+      await supabaseRequest(`event_notes?event_order_id=eq.${encodeURIComponent(eventId)}&note_type=eq.internal_memo`, { method: "DELETE" });
+      if (internalMemo) {
+        await supabaseRequest("event_notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_order_id: eventId, note_type: "internal_memo", content: internalMemo }),
+        });
+      }
+    }
+
+    async function loadEventsFromSupabase() {
+      try {
+        const rows = await fetchEventRowsFromSupabase();
+        savedEvents = rows.map(mapDatabaseEvent);
+        renderCalendar();
+      } catch (error) {
+        console.error(error);
+        setStatus("Supabase Database에서 행사 데이터를 불러오지 못했습니다.", "warn");
+      }
+    }
+
+    async function fetchEventRowsFromSupabase() {
+      console.log("event_orders select start");
+      const eventRows = await supabaseRequest("event_orders?select=*&order=created_at.desc");
+      console.log("event_orders select success", eventRows || []);
+
+      const eventIds = (eventRows || []).map((row) => row.id).filter(Boolean);
+      if (!eventIds.length) return [];
+
+      const idFilter = `in.(${eventIds.join(",")})`;
+      const [calendarRows, scheduleRows, itemRows, noteRows] = await Promise.all([
+        loggedSupabaseRequest(
+          "event_calendar_dates select",
+          `event_calendar_dates?select=*&event_order_id=${idFilter}&order=calendar_date.asc`
+        ),
+        loggedSupabaseRequest(
+          "event_schedules select",
+          `event_schedules?select=*&event_order_id=${idFilter}&order=created_at.asc`
+        ),
+        loggedSupabaseRequest(
+          "event_items select",
+          `event_items?select=*&event_order_id=${idFilter}&order=created_at.asc`
+        ),
+        loggedSupabaseRequest(
+          "event_notes select",
+          `event_notes?select=*&event_order_id=${idFilter}&order=created_at.asc`
+        ),
+      ]);
+
+      const calendarByEvent = groupByEventOrderId(calendarRows);
+      const schedulesByEvent = groupByEventOrderId(scheduleRows);
+      const itemsByEvent = groupByEventOrderId(itemRows);
+      const notesByEvent = groupByEventOrderId(noteRows);
+
+      return (eventRows || []).map((row) => ({
+        ...row,
+        event_calendar_dates: calendarByEvent[row.id] || [],
+        event_schedules: schedulesByEvent[row.id] || [],
+        event_items: itemsByEvent[row.id] || [],
+        event_notes: notesByEvent[row.id] || [],
+      }));
+    }
+
+    async function loadEvents() {
+      return loadEventsFromSupabase();
+    }
+
+    async function fetchEvents() {
+      return loadEventsFromSupabase();
+    }
+
+    function activateWorkspaceTab(tabName) {
+      const showAssets = tabName === "assets";
+      calendarPanel.hidden = showAssets;
+      assetPanel.hidden = !showAssets;
+      calendarTabButton.classList.toggle("active", !showAssets);
+      assetTabButton.classList.toggle("active", showAssets);
+      calendarTabButton.setAttribute("aria-selected", String(!showAssets));
+      assetTabButton.setAttribute("aria-selected", String(showAssets));
+    }
+
+    async function loadBanquetAssets() {
+      assetTableBody.innerHTML = '<tr><td colspan="5">등록된 자산을 불러오는 중입니다.</td></tr>';
+      try {
+        const rows = await loggedSupabaseRequest(
+          "banquet_assets select",
+          "banquet_assets?select=*&order=asset_name.asc"
+        );
+        banquetAssets = rows || [];
+        renderBanquetAssets();
+      } catch (error) {
+        console.error("banquet_assets load failed:", error);
+        assetTableBody.innerHTML = `<tr><td colspan="5">자산 목록을 불러오지 못했습니다. ${error.message || ""}</td></tr>`;
+        setStatus(error.message || "연회장 자산을 불러오지 못했습니다.", "warn");
+      }
+    }
+
+    function renderBanquetAssets() {
+      assetTableBody.innerHTML = "";
+      if (!banquetAssets.length) {
+        assetTableBody.innerHTML = '<tr><td colspan="5">등록된 자산이 없습니다.</td></tr>';
+        return;
+      }
+
+      banquetAssets.forEach((asset) => {
+        const row = document.createElement("tr");
+        [
+          asset.asset_name || "",
+          asset.floor || "",
+          asset.quantity ?? "",
+          asset.spec || "",
+        ].forEach((value, index) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          if (index === 2) cell.className = "number-cell";
+          row.append(cell);
+        });
+
+        const actionCell = document.createElement("td");
+        const actions = document.createElement("div");
+        actions.className = "asset-actions";
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.textContent = "수정";
+        editButton.addEventListener("click", () => startEditBanquetAsset(asset));
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "danger-button";
+        deleteButton.textContent = "삭제";
+        deleteButton.addEventListener("click", () => deleteBanquetAsset(asset));
+        actions.append(editButton, deleteButton);
+        actionCell.append(actions);
+        row.append(actionCell);
+        assetTableBody.append(row);
+      });
+    }
+
+    function startEditBanquetAsset(asset) {
+      editingAssetId = asset.id;
+      assetNameInput.value = asset.asset_name || "";
+      assetFloorInput.value = asset.floor || "";
+      assetQuantityInput.value = asset.quantity ?? "";
+      assetSpecInput.value = asset.spec || "";
+      assetSaveButton.textContent = "저장";
+      assetCancelButton.hidden = false;
+      assetNameInput.focus();
+    }
+
+    function resetAssetForm() {
+      editingAssetId = null;
+      assetForm.reset();
+      assetSaveButton.textContent = "등록";
+      assetCancelButton.hidden = true;
+    }
+
+    async function saveBanquetAsset(event) {
+      event.preventDefault();
+      const payload = {
+        asset_name: assetNameInput.value.trim(),
+        floor: assetFloorInput.value.trim(),
+        quantity: toNullableInteger(assetQuantityInput.value),
+        spec: assetSpecInput.value.trim(),
+      };
+      if (!payload.asset_name) return;
+
+      assetSaveButton.disabled = true;
+      try {
+        if (editingAssetId) {
+          await loggedSupabaseRequest(
+            "banquet_assets update",
+            `banquet_assets?id=eq.${encodeURIComponent(editingAssetId)}`,
+            {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            }
+          );
+          setStatus("연회장 자산을 수정했습니다.");
+        } else {
+          await loggedSupabaseRequest("banquet_assets insert", "banquet_assets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          setStatus("연회장 자산을 등록했습니다.");
+        }
+        resetAssetForm();
+        await loadBanquetAssets();
+      } catch (error) {
+        console.error("banquet_assets save failed:", error);
+        setStatus(error.message || "연회장 자산 저장에 실패했습니다.", "error");
+      } finally {
+        assetSaveButton.disabled = false;
+      }
+    }
+
+    async function deleteBanquetAsset(asset) {
+      if (!window.confirm(`"${asset.asset_name}" 자산을 삭제하시겠습니까?`)) return;
+      try {
+        await loggedSupabaseRequest(
+          "banquet_assets delete",
+          `banquet_assets?id=eq.${encodeURIComponent(asset.id)}`,
+          { method: "DELETE" }
+        );
+        setStatus("연회장 자산을 삭제했습니다.");
+        if (editingAssetId === asset.id) resetAssetForm();
+        await loadBanquetAssets();
+      } catch (error) {
+        console.error("banquet_assets delete failed:", error);
+        setStatus(error.message || "연회장 자산 삭제에 실패했습니다.", "error");
+      }
+    }
+
+    function groupByEventOrderId(rows) {
+      return (rows || []).reduce((groups, row) => {
+        const key = row.event_order_id;
+        if (!key) return groups;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(row);
+        return groups;
+      }, {});
+    }
+
+    function mapDatabaseEvent(row) {
+      const notes = row.event_notes || [];
+      return {
+        id: row.id,
+        eventName: row.event_name || "",
+        companyName: row.company_name || "",
+        eventDateTime: row.event_datetime || "",
+        venue: row.venue || "",
+        color: row.color || "green",
+        originalFilename: row.original_filename || "",
+        storagePath: row.storage_path || "",
+        originalFileUrl: row.storage_path ? buildPublicStorageUrl(row.storage_path) : "",
+        internalMemo: row.internal_memo || notes.find((note) => note.note_type === "internal_memo")?.content || "",
+        calendarDates: (row.event_calendar_dates || []).map((item) => item.calendar_date),
+        schedule: (row.event_schedules || []).map((item) => ({
+          date: item.schedule_date || "",
+          time: item.schedule_time || "",
+          content: item.content || "",
+          venue: item.venue || "",
+          people: item.people ?? "",
+        })),
+        items: (row.event_items || []).map((item) => ({
+          itemName: item.item_name || "",
+          unitPrice: item.unit_price ?? "",
+          quantity: item.quantity ?? "",
+          amount: item.amount ?? "",
+        })),
+        layoutEqp: notes.filter((note) => note.note_type === "layout_eqp").map((note) => note.content),
+        others: notes.filter((note) => note.note_type === "others").map((note) => note.content),
+        originalFileObject: null,
+      };
+    }
+
+    function toNullableNumber(value) {
+      const normalized = String(value ?? "").replace(/[^0-9.-]/g, "");
+      return normalized ? Number(normalized) : null;
+    }
+
+    function toNullableInteger(value) {
+      const normalized = String(value ?? "").replace(/[^0-9-]/g, "");
+      return normalized ? Number.parseInt(normalized, 10) : null;
+    }
+
+    function renderCalendar() {
+      const year = calendarDate.getFullYear();
+      const month = calendarDate.getMonth();
+      calendarTitle.textContent = `${year}년 ${month + 1}월`;
+      calendarGrid.innerHTML = "";
+
+      ["일", "월", "화", "수", "목", "금", "토"].forEach((weekday) => {
+        const cell = document.createElement("div");
+        cell.className = "weekday";
+        cell.textContent = weekday;
+        calendarGrid.append(cell);
+      });
+
+      const firstDay = new Date(year, month, 1);
+      const startDate = new Date(year, month, 1 - firstDay.getDay());
+
+      for (let index = 0; index < 42; index += 1) {
+        const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + index);
+        const dateKey = formatDateKey(date);
+        const dayEvents = savedEvents.filter((item) => item.calendarDates?.includes(dateKey));
+        const dayCell = document.createElement("div");
+        dayCell.className = `calendar-day${date.getMonth() === month ? "" : " outside"}`;
+
+        const dayNumber = document.createElement("div");
+        dayNumber.className = "day-number";
+        dayNumber.textContent = date.getDate();
+        dayCell.append(dayNumber);
+
+        dayEvents.forEach((eventItem) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "event-pill";
+          button.textContent = eventItem.eventName;
+          const color = eventColors[eventItem.color] || eventColors.green;
+          button.style.background = color.background;
+          button.style.borderColor = color.border;
+          button.style.color = color.text;
+          button.addEventListener("click", () => openEventModal(eventItem, dateKey));
+          dayCell.append(button);
+        });
+
+        calendarGrid.append(dayCell);
+      }
+    }
+
+    function openEventModal(eventItem, calendarDateKey = eventItem.calendarDates?.[0] || null) {
+      activeEventId = eventItem.id;
+      activeCalendarDate = calendarDateKey;
+      modalBody.innerHTML = "";
+
+      const detailGrid = document.createElement("div");
+      detailGrid.className = "detail-grid";
+      [
+        ["행사명", eventItem.eventName],
+        ["행사주최", eventItem.companyName],
+        ["행사일시", eventItem.eventDateTime],
+        ["장소", eventItem.venue],
+      ].forEach(([labelText, valueText]) => {
+        const card = document.createElement("article");
+        card.className = `info-card${valueText ? "" : " missing"}`;
+        const label = document.createElement("div");
+        label.className = "info-label";
+        label.textContent = labelText;
+        const value = document.createElement("div");
+        value.className = "info-value";
+        value.textContent = valueText || "추출 실패";
+        card.append(label, value);
+        detailGrid.append(card);
+      });
+
+      const fileCard = document.createElement("article");
+      fileCard.className = `info-card wide-card${eventItem.originalFilename ? "" : " missing"}`;
+      const fileLabel = document.createElement("div");
+      fileLabel.className = "info-label";
+      fileLabel.textContent = "원본 파일명";
+      const fileNameValue = document.createElement("div");
+      fileNameValue.className = "info-value";
+      fileNameValue.textContent = eventItem.originalFilename || "저장된 원본 파일이 없습니다.";
+      const fileButton = document.createElement("button");
+      fileButton.type = "button";
+      fileButton.className = "primary-button";
+      fileButton.textContent = "원본 엑셀 보기";
+      fileButton.disabled = !eventItem.storagePath;
+      if (eventItem.storagePath) {
+        fileButton.addEventListener("click", () => {
+          openStoredExcel(eventItem.storagePath);
+        });
+      }
+      const fileNote = document.createElement("p");
+      fileNote.className = "file-storage-note";
+      fileNote.textContent = eventItem.storagePath
+        ? `Storage 경로: ${eventItem.storagePath}`
+        : "Supabase Storage 연결 후 사용 가능";
+      fileCard.append(fileLabel, fileNameValue, fileButton, fileNote);
+
+      const scheduleCard = document.createElement("article");
+      scheduleCard.className = `info-card schedule-card${eventItem.schedule.length ? "" : " missing"}`;
+      const scheduleLabel = document.createElement("div");
+      scheduleLabel.className = "info-label";
+      scheduleLabel.textContent = "스케줄";
+      scheduleCard.append(scheduleLabel, createScheduleTable(eventItem.schedule));
+
+      const memoField = createFormField("내부 메모", "internalMemo", eventItem.internalMemo || "", true);
+      const memoSaveButton = document.createElement("button");
+      memoSaveButton.type = "button";
+      memoSaveButton.className = "secondary-button";
+      memoSaveButton.textContent = "메모 저장";
+      memoSaveButton.addEventListener("click", () => saveInternalMemo(memoField.querySelector("textarea").value));
+      memoField.append(memoSaveButton);
+
+      const actions = document.createElement("div");
+      actions.className = "modal-actions";
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "secondary-button";
+      editButton.textContent = "수정";
+      editButton.addEventListener("click", () => openEditModal(eventItem));
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.className = "danger-button";
+      deleteButton.textContent = "삭제";
+      deleteButton.addEventListener("click", () => requestDelete(eventItem));
+      actions.append(editButton, deleteButton);
+
+      modalBody.append(detailGrid, fileCard, scheduleCard, memoField, actions);
+      eventModal.classList.add("visible");
+    }
+
+    function closeEventModal() {
+      eventModal.classList.remove("visible");
+    }
+
+    function createFormField(labelText, fieldName, value = "", multiline = false) {
+      const field = document.createElement("div");
+      field.className = "form-field";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      const control = document.createElement(multiline ? "textarea" : "input");
+      control.dataset.editorField = fieldName;
+      control.value = value;
+      field.append(label, control);
+      return field;
+    }
+
+    function openEditModal(eventItem) {
+      modalBody.innerHTML = "";
+      const baseGrid = document.createElement("div");
+      baseGrid.className = "detail-grid";
+      baseGrid.append(
+        createFormField("행사명", "eventName", eventItem.eventName),
+        createFormField("행사주최", "companyName", eventItem.companyName),
+        createFormField("행사일시", "eventDateTime", eventItem.eventDateTime),
+        createFormField("장소", "venue", eventItem.venue)
+      );
+
+      const scheduleEditor = createEditableTable(
+        "Schedule",
+        "schedule",
+        ["날짜", "시간", "내용", "장소", "인원"],
+        ["date", "time", "content", "venue", "people"],
+        eventItem.schedule || []
+      );
+      const itemsEditor = createEditableTable(
+        "Items",
+        "items",
+        ["항목명", "단가", "수량", "금액"],
+        ["itemName", "unitPrice", "quantity", "amount"],
+        eventItem.items || []
+      );
+      const layoutField = createFormField("Lay out & EQP", "layoutEqp", (eventItem.layoutEqp || []).join("\n"), true);
+      const othersField = createFormField("Others", "others", (eventItem.others || []).join("\n"), true);
+      const memoField = createFormField("내부 메모", "internalMemo", eventItem.internalMemo || "", true);
+
+      const actions = document.createElement("div");
+      actions.className = "modal-actions";
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "secondary-button";
+      cancelButton.textContent = "취소";
+      cancelButton.addEventListener("click", () => openEventModal(eventItem, activeCalendarDate));
+      const saveButton = document.createElement("button");
+      saveButton.type = "button";
+      saveButton.className = "primary-button";
+      saveButton.textContent = "수정 저장";
+      saveButton.addEventListener("click", () => saveEditedEvent(eventItem.id));
+      actions.append(cancelButton, saveButton);
+
+      modalBody.append(baseGrid, scheduleEditor, itemsEditor, layoutField, othersField, memoField, actions);
+    }
+
+    function createEditableTable(title, collectionName, headers, keys, rows) {
+      const card = document.createElement("article");
+      card.className = "info-card wide-card";
+      const label = document.createElement("div");
+      label.className = "info-label";
+      label.textContent = title;
+      const wrap = document.createElement("div");
+      wrap.className = "schedule-table-wrap";
+      const table = document.createElement("table");
+      table.className = "schedule-table editable-table";
+      table.dataset.editorTable = collectionName;
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      headers.forEach((header) => {
+        const th = document.createElement("th");
+        th.textContent = header;
+        headRow.append(th);
+      });
+      const actionHeader = document.createElement("th");
+      actionHeader.textContent = "";
+      headRow.append(actionHeader);
+      thead.append(headRow);
+      const tbody = document.createElement("tbody");
+      table.append(thead, tbody);
+      (rows.length ? rows : [{}]).forEach((row) => appendEditableRow(tbody, keys, row));
+      wrap.append(table);
+
+      const addRowButton = document.createElement("button");
+      addRowButton.type = "button";
+      addRowButton.className = "secondary-button table-add-row";
+      addRowButton.textContent = "행 추가";
+      addRowButton.addEventListener("click", () => appendEditableRow(tbody, keys, {}));
+      card.append(label, wrap, addRowButton);
+      return card;
+    }
+
+    function appendEditableRow(tbody, keys, row) {
+      const tr = document.createElement("tr");
+      keys.forEach((key) => {
+        const td = document.createElement("td");
+        const input = document.createElement("input");
+        input.dataset.editorKey = key;
+        input.value = row[key] || "";
+        td.append(input);
+        tr.append(td);
+      });
+      const actionCell = document.createElement("td");
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "table-row-delete";
+      removeButton.textContent = "×";
+      removeButton.setAttribute("aria-label", "행 삭제");
+      removeButton.addEventListener("click", () => tr.remove());
+      actionCell.append(removeButton);
+      tr.append(actionCell);
+      tbody.append(tr);
+    }
+
+    function readEditableTable(collectionName, keys) {
+      const table = modalBody.querySelector(`[data-editor-table="${collectionName}"]`);
+      if (!table) return [];
+      return Array.from(table.querySelectorAll("tbody tr"))
+        .map((row) => {
+          const item = {};
+          keys.forEach((key) => {
+            item[key] = row.querySelector(`[data-editor-key="${key}"]`)?.value.trim() || "";
+          });
+          return item;
+        })
+        .filter((item) => Object.values(item).some(Boolean));
+    }
+
+    function getEditorValue(fieldName) {
+      return modalBody.querySelector(`[data-editor-field="${fieldName}"]`)?.value.trim() || "";
+    }
+
+    function splitEditorLines(value) {
+      return value.split("\n").map((item) => item.trim()).filter(Boolean);
+    }
+
+    async function saveEditedEvent(eventId) {
+      const eventIndex = savedEvents.findIndex((eventItem) => eventItem.id === eventId);
+      if (eventIndex < 0) return;
+
+      const updatedEvent = {
+        ...savedEvents[eventIndex],
+        eventName: getEditorValue("eventName"),
+        companyName: getEditorValue("companyName"),
+        eventDateTime: getEditorValue("eventDateTime"),
+        venue: getEditorValue("venue"),
+        schedule: readEditableTable("schedule", ["date", "time", "content", "venue", "people"]),
+        items: readEditableTable("items", ["itemName", "unitPrice", "quantity", "amount"]),
+        layoutEqp: splitEditorLines(getEditorValue("layoutEqp")),
+        others: splitEditorLines(getEditorValue("others")),
+        internalMemo: getEditorValue("internalMemo"),
+      };
+      try {
+        setStatus("수정한 행사 정보를 Supabase Database에 저장하는 중입니다...");
+        await updateEventInSupabase(updatedEvent);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "행사 정보 수정에 실패했습니다.", "error");
+        return;
+      }
+      await loadEventsFromSupabase();
+      const refreshedEvent = savedEvents.find((eventItem) => eventItem.id === eventId) || updatedEvent;
+      setStatus(`"${updatedEvent.eventName}" 행사 정보를 수정했습니다.`);
+      openEventModal(refreshedEvent, activeCalendarDate);
+    }
+
+    async function saveInternalMemo(memo) {
+      const eventIndex = savedEvents.findIndex((eventItem) => eventItem.id === activeEventId);
+      if (eventIndex < 0) return;
+      const updatedEvent = { ...savedEvents[eventIndex], internalMemo: memo.trim() };
+      try {
+        await updateInternalMemoInSupabase(updatedEvent.id, updatedEvent.internalMemo);
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "내부 메모 저장에 실패했습니다.", "error");
+        return;
+      }
+      savedEvents = savedEvents.map((eventItem, index) => index === eventIndex ? updatedEvent : eventItem);
+      setStatus("내부 메모를 저장했습니다.");
+      openEventModal(updatedEvent, activeCalendarDate);
+    }
+
+    function requestDelete(eventItem) {
+      const existingPanel = modalBody.querySelector(".delete-choice-panel");
+      if (existingPanel) existingPanel.remove();
+
+      if ((eventItem.calendarDates || []).length <= 1) {
+        if (window.confirm("정말 삭제하시겠습니까?")) deleteEvent(eventItem.id, "all");
+        return;
+      }
+
+      const panel = document.createElement("div");
+      panel.className = "delete-choice-panel";
+      const message = document.createElement("div");
+      message.className = "delete-choice-message";
+      message.textContent = "정말 삭제하시겠습니까? 현재 날짜의 일정만 삭제하거나 전체 행사를 삭제할 수 있습니다.";
+      const currentDateButton = document.createElement("button");
+      currentDateButton.type = "button";
+      currentDateButton.className = "secondary-button";
+      currentDateButton.textContent = "현재 날짜만 삭제";
+      currentDateButton.addEventListener("click", () => deleteEvent(eventItem.id, "current"));
+      const allButton = document.createElement("button");
+      allButton.type = "button";
+      allButton.className = "danger-button";
+      allButton.textContent = "전체 행사 삭제";
+      allButton.addEventListener("click", () => deleteEvent(eventItem.id, "all"));
+      const cancelButton = document.createElement("button");
+      cancelButton.type = "button";
+      cancelButton.className = "secondary-button";
+      cancelButton.textContent = "취소";
+      cancelButton.addEventListener("click", () => panel.remove());
+      panel.append(message, currentDateButton, allButton, cancelButton);
+      modalBody.append(panel);
+    }
+
+    async function deleteEvent(eventId, scope) {
+      const eventItem = savedEvents.find((item) => item.id === eventId);
+      if (!eventItem) return;
+
+      try {
+        if (scope === "current" && activeCalendarDate) {
+          await supabaseRequest(`event_calendar_dates?event_order_id=eq.${encodeURIComponent(eventId)}&calendar_date=eq.${activeCalendarDate}`, { method: "DELETE" });
+        } else {
+          await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" });
+        }
+      } catch (error) {
+        console.error(error);
+        setStatus(error.message || "행사 삭제에 실패했습니다.", "error");
+        return;
+      }
+
+      if (scope === "current" && activeCalendarDate) {
+        const remainingDates = (eventItem.calendarDates || []).filter((dateKey) => dateKey !== activeCalendarDate);
+        savedEvents = remainingDates.length
+          ? savedEvents.map((item) => item.id === eventId ? { ...item, calendarDates: remainingDates } : item)
+          : savedEvents.filter((item) => item.id !== eventId);
+      } else {
+        savedEvents = savedEvents.filter((item) => item.id !== eventId);
+      }
+
+      renderCalendar();
+      closeEventModal();
+      setStatus(scope === "current" ? "현재 날짜의 일정을 삭제했습니다." : "행사를 삭제했습니다.");
+    }
+
+    function openStoredExcel(storagePath) {
+      window.open(buildPublicStorageUrl(storagePath), "_blank", "noopener,noreferrer");
+    }
+
+    function buildPublicStorageUrl(storagePath) {
+      const encodedPath = encodeURIComponent(storagePath);
+      return `${supabaseConfig.url}/storage/v1/object/public/${supabaseConfig.bucket}/${encodedPath}`;
+    }
+
+    function parseEventDateKey(value) {
+      const text = cleanValue(value);
+      if (!text) return "";
+
+      const fullDate = text.match(/(20\d{2}|19\d{2})[.\-\/년\s]+(\d{1,2})[.\-\/월\s]+(\d{1,2})/);
+      if (fullDate) {
+        return `${fullDate[1]}-${pad2(fullDate[2])}-${pad2(fullDate[3])}`;
+      }
+
+      const shortDate = text.match(/(\d{1,2})\s*[.\/월]\s*(\d{1,2})/);
+      if (shortDate) {
+        return `${calendarDate.getFullYear()}-${pad2(shortDate[1])}-${pad2(shortDate[2])}`;
+      }
+
+      const dateObject = new Date(text);
+      if (!Number.isNaN(dateObject.getTime())) {
+        return formatDateKey(dateObject);
+      }
+      return "";
+    }
+
+    function extractDateRange(value) {
+      const text = cleanValue(value);
+      const firstDateKey = parseEventDateKey(text);
+      if (!firstDateKey) return [];
+
+      const [year, month, day] = firstDateKey.split("-").map(Number);
+      const startDate = new Date(year, month - 1, day);
+      let endDate = new Date(startDate);
+
+      const fullDates = [...text.matchAll(/(20\d{2}|19\d{2})[.\-\/년\s]+(\d{1,2})[.\-\/월\s]+(\d{1,2})/g)];
+      if (fullDates.length > 1) {
+        const last = fullDates[fullDates.length - 1];
+        endDate = new Date(Number(last[1]), Number(last[2]) - 1, Number(last[3]));
+      } else {
+        const rangeMatch = text.match(/~\s*(\d{1,2})\s*일/);
+        if (rangeMatch) {
+          const endDay = Number(rangeMatch[1]);
+          endDate = new Date(year, month - 1, endDay);
+          if (endDate < startDate) endDate = new Date(year, month, endDay);
+        }
+      }
+
+      const dates = [];
+      const cursor = new Date(startDate);
+      while (cursor <= endDate && dates.length < 31) {
+        dates.push(formatDateKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return dates;
+    }
+
+    function formatDateLabel(dateKey) {
+      const [year, month, day] = dateKey.split("-");
+      return `${year}.${month}.${day}`;
+    }
+
+    function formatDateKey(date) {
+      return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+    }
+
+    function pad2(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function findFieldValue(sheets, field) {
+      for (const sheet of sheets) {
+        for (let rowIndex = 0; rowIndex < sheet.rows.length; rowIndex += 1) {
+          const row = sheet.rows[rowIndex] || [];
+          for (let colIndex = 0; colIndex < row.length; colIndex += 1) {
+            const cellText = cleanValue(row[colIndex]);
+            if (!cellText) continue;
+
+            const match = matchAlias(cellText, field.aliases);
+            if (!match) continue;
+
+            const inline = getInlineValue(cellText, match.alias);
+            if (inline) return inline;
+
+            const nearby = findNearbyValue(sheet.rows, rowIndex, colIndex, field);
+            if (nearby) return nearby;
+          }
+        }
+      }
+      return "";
+    }
+
+    function extractScheduleRows(sheets) {
+      for (const sheet of sheets) {
+        const scheduleRows = readFixedScheduleRows(sheet.rows);
+        if (scheduleRows.length > 0) return scheduleRows;
+      }
+      return [];
+    }
+
+    function readFixedScheduleRows(rows) {
+      const scheduleRows = [];
+      let blankStreak = 0;
+      let currentDate = "";
+      const startRowIndex = 13;
+      const dateColIndex = 0;
+      const timeColIndex = 1;
+      const contentColIndex = 2;
+      const venueColIndex = 4;
+      const peopleColIndex = 6;
+
+      for (let rowIndex = startRowIndex; rowIndex < rows.length; rowIndex += 1) {
+        const row = rows[rowIndex] || [];
+        if (rowHasMarkerInColumns(row, "Items", 0, 9)) {
+          break;
+        }
+
+        const rowDate = cleanValue(row[dateColIndex]);
+        if (rowDate) currentDate = rowDate;
+
+        const item = {
+          date: currentDate,
+          time: cleanValue(row[timeColIndex]),
+          content: cleanValue(row[contentColIndex]),
+          venue: cleanValue(row[venueColIndex]),
+          people: cleanValue(row[peopleColIndex]),
+        };
+
+        if (isScheduleRowEmpty(item)) {
+          blankStreak += 1;
+          if (blankStreak >= 6 && scheduleRows.length > 0) break;
+          continue;
+        }
+
+        blankStreak = 0;
+        scheduleRows.push(item);
+      }
+
+      return scheduleRows;
+    }
+
+    function isScheduleRowEmpty(item) {
+      return !item.time && !item.content && !item.venue && !item.people;
+    }
+
+    function extractItems(sheets) {
+      for (const sheet of sheets) {
+        const startIndex = findRowIndex(sheet.rows, "Items");
+        if (startIndex < 0) continue;
+
+        const items = [];
+        for (let rowIndex = startIndex + 1; rowIndex < sheet.rows.length; rowIndex += 1) {
+          const row = sheet.rows[rowIndex] || [];
+          if (rowHasMarker(row, "예상 매출(Expected Revenue)")) break;
+
+          const item = {
+            itemName: cleanValue(row[0]) || cleanValue(row[2]),
+            unitPrice: cleanValue(row[3]),
+            quantity: cleanValue(row[5]),
+            amount: cleanValue(row[6]),
+          };
+          if (item.unitPrice || item.quantity || item.amount) items.push(item);
+        }
+        return items;
+      }
+      return [];
+    }
+
+    function extractSectionColumnValues(sheets, startMarker, endMarker) {
+      for (const sheet of sheets) {
+        const startIndex = findRowIndex(sheet.rows, startMarker);
+        if (startIndex < 0) continue;
+
+        const values = [];
+        for (let rowIndex = startIndex + 1; rowIndex < sheet.rows.length; rowIndex += 1) {
+          const row = sheet.rows[rowIndex] || [];
+          if (rowHasMarker(row, endMarker)) break;
+          const value = cleanValue(row[2]);
+          if (value) values.push(value);
+        }
+        return values;
+      }
+      return [];
+    }
+
+    function findRowIndex(rows, marker) {
+      return rows.findIndex((row) => rowHasMarker(row, marker));
+    }
+
+    function rowHasMarker(row, marker) {
+      const normalizedMarker = normalizeLabel(marker);
+      return (row || []).some((cell) => normalizeLabel(cell).includes(normalizedMarker));
+    }
+
+    function rowHasMarkerInColumns(row, marker, startColIndex, endColIndex) {
+      const normalizedMarker = normalizeLabel(marker);
+      return (row || [])
+        .slice(startColIndex, endColIndex + 1)
+        .some((cell) => normalizeLabel(cell).includes(normalizedMarker));
+    }
+
+    function findNearbyValue(rows, rowIndex, colIndex, field) {
+      const candidates = buildNearbyCandidates(rows, rowIndex, colIndex);
+
+      for (const candidate of candidates) {
+        const value = cleanValue(candidate.value);
+        if (isUsableValue(value, field)) {
+          return value;
+        }
+      }
+      return "";
+    }
+
+    function buildNearbyCandidates(rows, rowIndex, colIndex) {
+      const candidates = [];
+
+      for (let offset = 1; offset <= 3; offset += 1) {
+        candidates.push({
+          direction: "right",
+          offset,
+          value: rows[rowIndex]?.[colIndex + offset],
+        });
+      }
+
+      for (let offset = 1; offset <= 3; offset += 1) {
+        candidates.push({
+          direction: "down",
+          offset,
+          value: rows[rowIndex + offset]?.[colIndex],
+        });
+      }
+
+      return candidates;
+    }
+
+    function isUsableValue(value, field) {
+      if (!value || looksLikeAnyLabel(value) || matchAlias(value, field.aliases)) return false;
+      if (field.type === "number" || field.type === "money") return /\d/.test(value);
+      if (field.type === "time") return Boolean(extractTime(value));
+      if (field.type === "date") return /\d{1,4}/.test(value) || /오전|오후|월|일/i.test(value);
+      return true;
+    }
+
+    function getInlineValue(text, alias) {
+      const patterns = [
+        new RegExp(`${escapeRegExp(alias)}\\s*[:：]\\s*(.+)$`, "i"),
+        new RegExp(`${escapeRegExp(alias)}\\s+(.+)$`, "i"),
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        const value = cleanValue(match?.[1]);
+        if (value && !looksLikeAnyLabel(value)) return value;
+      }
+      return "";
+    }
+
+    function matchAlias(text, aliases) {
+      const normalized = normalizeLabel(text);
+      for (const alias of aliases) {
+        const normalizedAlias = normalizeLabel(alias);
+        if (normalized === normalizedAlias || normalized.includes(normalizedAlias)) {
+          return { alias };
+        }
+      }
+      return null;
+    }
+
+    function looksLikeAnyLabel(text) {
+      return fields.some((field) => matchAlias(text, field.aliases));
+    }
+
+    function extractTime(text) {
+      const match = String(text).match(/(?:오전|오후|AM|PM)?\s*\d{1,2}\s*[:시]\s*\d{0,2}\s*(?:분)?\s*(?:~|-|부터)?\s*(?:오전|오후|AM|PM)?\s*\d{0,2}\s*[:시]?\s*\d{0,2}\s*(?:분)?/i);
+      return cleanValue(match?.[0]);
+    }
+
+    function normalizeLabel(value) {
+      return String(value ?? "")
+        .toLowerCase()
+        .replace(/[\s*()[\]{}<>:：ㆍ·._\-\/\\|]/g, "");
+    }
+
+    function cleanValue(value) {
+      return String(value ?? "")
+        .replace(/\r/g, "")
+        .replace(/[ \t]+/g, " ")
+        .replace(/^[\s:：ㆍ·*\-]+|[\s:：ㆍ·*\-]+$/g, "")
+        .trim();
+    }
+
+    function escapeRegExp(value) {
+      return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    async function readXlsx(buffer) {
+      if (window.XLSX) {
+        const workbook = window.XLSX.read(buffer, {
+          type: "array",
+          cellDates: true,
+          cellNF: true,
+          cellText: true,
+        });
+
+        return workbook.SheetNames.map((name) => {
+          const sheet = workbook.Sheets[name];
+          const rows = window.XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: "",
+            raw: false,
+            blankrows: true,
+          });
+          return { name, rows };
+        });
+      }
+
+      const files = await unzip(buffer);
+      const workbook = parseXml(await getText(files, "xl/workbook.xml"));
+      const rels = parseWorkbookRelationships(await getText(files, "xl/_rels/workbook.xml.rels"));
+      const sharedStrings = files.has("xl/sharedStrings.xml")
+        ? parseSharedStrings(parseXml(await getText(files, "xl/sharedStrings.xml")))
+        : [];
+
+      const sheets = Array.from(workbook.getElementsByTagNameNS("*", "sheet"))
+        .map((sheetNode) => {
+          const relId = sheetNode.getAttribute("r:id");
+          const target = rels.get(relId);
+          return {
+            name: sheetNode.getAttribute("name") || "Sheet",
+            path: normalizePath("xl", target || ""),
+          };
+        })
+        .filter((sheet) => files.has(sheet.path));
+
+      const result = [];
+      for (const sheet of sheets) {
+        const xml = parseXml(await getText(files, sheet.path));
+        result.push({
+          name: sheet.name,
+          rows: parseSheetRows(xml, sharedStrings),
+        });
+      }
+      return result;
+    }
+
+    async function unzip(buffer) {
+      const bytes = new Uint8Array(buffer);
+      const entries = readCentralDirectory(bytes);
+      const files = new Map();
+
+      for (const entry of entries) {
+        const name = entry.name.replaceAll("\\", "/");
+        if (entry.method !== 0 && entry.method !== 8) continue;
+
+        const localNameLength = readUint16(bytes, entry.localOffset + 26);
+        const localExtraLength = readUint16(bytes, entry.localOffset + 28);
+        const dataStart = entry.localOffset + 30 + localNameLength + localExtraLength;
+        const compressed = bytes.slice(dataStart, dataStart + entry.compressedSize);
+        const content = entry.method === 0 ? compressed : await inflateRaw(compressed);
+        files.set(name, content);
+      }
+
+      return files;
+    }
+
+    function readCentralDirectory(bytes) {
+      let eocdOffset = -1;
+      for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 66000); i -= 1) {
+        if (readUint32(bytes, i) === 0x06054b50) {
+          eocdOffset = i;
+          break;
+        }
+      }
+      if (eocdOffset < 0) throw new Error("엑셀 압축 구조를 찾지 못했습니다.");
+
+      const count = readUint16(bytes, eocdOffset + 10);
+      let offset = readUint32(bytes, eocdOffset + 16);
+      const entries = [];
+
+      for (let i = 0; i < count; i += 1) {
+        if (readUint32(bytes, offset) !== 0x02014b50) {
+          throw new Error("엑셀 내부 파일 목록을 읽지 못했습니다.");
+        }
+
+        const method = readUint16(bytes, offset + 10);
+        const compressedSize = readUint32(bytes, offset + 20);
+        const fileNameLength = readUint16(bytes, offset + 28);
+        const extraLength = readUint16(bytes, offset + 30);
+        const commentLength = readUint16(bytes, offset + 32);
+        const localOffset = readUint32(bytes, offset + 42);
+        const nameBytes = bytes.slice(offset + 46, offset + 46 + fileNameLength);
+        const name = new TextDecoder().decode(nameBytes);
+
+        entries.push({ name, method, compressedSize, localOffset });
+        offset += 46 + fileNameLength + extraLength + commentLength;
+      }
+
+      return entries;
+    }
+
+    async function inflateRaw(bytes) {
+      if (!("DecompressionStream" in window)) {
+        throw new Error("현재 브라우저가 엑셀 압축 해제를 지원하지 않습니다. 최신 Chrome 또는 Edge에서 열어주세요.");
+      }
+
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+      const response = new Response(stream);
+      return new Uint8Array(await response.arrayBuffer());
+    }
+
+    async function getText(files, path) {
+      const content = files.get(path);
+      if (!content) throw new Error(`${path} 파일을 엑셀 안에서 찾지 못했습니다.`);
+      return new TextDecoder("utf-8").decode(content);
+    }
+
+    function parseXml(text) {
+      const xml = new DOMParser().parseFromString(text, "application/xml");
+      const error = xml.querySelector("parsererror");
+      if (error) throw new Error("엑셀 XML 내용을 해석하지 못했습니다.");
+      return xml;
+    }
+
+    function parseWorkbookRelationships(xmlText) {
+      const xml = parseXml(xmlText);
+      const rels = new Map();
+      Array.from(xml.getElementsByTagName("Relationship")).forEach((node) => {
+        rels.set(node.getAttribute("Id"), node.getAttribute("Target"));
+      });
+      return rels;
+    }
+
+    function parseSharedStrings(xml) {
+      return Array.from(xml.getElementsByTagNameNS("*", "si")).map((node) => {
+        return Array.from(node.getElementsByTagNameNS("*", "t"))
+          .map((textNode) => textNode.textContent || "")
+          .join("");
+      });
+    }
+
+    function parseSheetRows(xml, sharedStrings) {
+      const cells = Array.from(xml.getElementsByTagNameNS("*", "c"));
+      const rows = [];
+
+      for (const cell of cells) {
+        const ref = cell.getAttribute("r") || "";
+        const location = parseCellRef(ref);
+        if (!location) continue;
+
+        const value = readCellValue(cell, sharedStrings);
+        if (value === "") continue;
+
+        rows[location.row] ||= [];
+        rows[location.row][location.col] = value;
+      }
+
+      return rows.map((row) => row || []);
+    }
+
+    function readCellValue(cell, sharedStrings) {
+      const type = cell.getAttribute("t");
+
+      if (type === "inlineStr") {
+        return Array.from(cell.getElementsByTagNameNS("*", "t"))
+          .map((node) => node.textContent || "")
+          .join("");
+      }
+
+      const valueNode = cell.getElementsByTagNameNS("*", "v")[0];
+      if (!valueNode) return "";
+
+      const raw = valueNode.textContent || "";
+      if (type === "s") return sharedStrings[Number(raw)] ?? "";
+      if (type === "b") return raw === "1" ? "TRUE" : "FALSE";
+      if (type === "str") return raw;
+      return raw;
+    }
+
+    function parseCellRef(ref) {
+      const match = /^([A-Z]+)(\d+)$/i.exec(ref);
+      if (!match) return null;
+      return {
+        col: columnIndex(match[1].toUpperCase()),
+        row: Number(match[2]) - 1,
+      };
+    }
+
+    function columnIndex(label) {
+      let index = 0;
+      for (const char of label) {
+        index = index * 26 + char.charCodeAt(0) - 64;
+      }
+      return index - 1;
+    }
+
+    function columnLabel(index) {
+      let label = "";
+      let value = index + 1;
+      while (value > 0) {
+        const mod = (value - 1) % 26;
+        label = String.fromCharCode(65 + mod) + label;
+        value = Math.floor((value - mod) / 26);
+      }
+      return label;
+    }
+
+    function normalizePath(base, target) {
+      const parts = `${base}/${target}`.split("/");
+      const output = [];
+      for (const part of parts) {
+        if (!part || part === ".") continue;
+        if (part === "..") output.pop();
+        else output.push(part);
+      }
+      return output.join("/");
+    }
+
+    function readUint16(bytes, offset) {
+      return bytes[offset] | (bytes[offset + 1] << 8);
+    }
+
+    function readUint32(bytes, offset) {
+      return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+    }
+
+    window.eventOrderPreview = {
+      extractEventOrderInfo,
+      renderExtractedInfo,
+    };
+
+    function initializeEventOrderPreview() {
+      renderCalendar();
+      loadEventsFromSupabase();
+      loadBanquetAssets();
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initializeEventOrderPreview, { once: true });
+    } else {
+      initializeEventOrderPreview();
+    }
+  </script>
+</body>
+</html>
