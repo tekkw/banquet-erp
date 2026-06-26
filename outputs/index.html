@@ -663,9 +663,9 @@
     .ai-chat-panel {
       position: sticky;
       top: 18px;
-      display: grid;
-      grid-template-rows: auto minmax(360px, calc(100vh - 260px)) auto;
-      min-height: 640px;
+      display: flex;
+      flex-direction: column;
+      min-height: min(640px, calc(100vh - 36px));
       max-height: calc(100vh - 36px);
       background: var(--surface);
       border: 1px solid var(--line);
@@ -694,6 +694,8 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
+      flex: 1 1 auto;
+      min-height: 0;
       padding: 14px;
       overflow: auto;
       background: #fbfcfe;
@@ -722,9 +724,9 @@
     }
 
     .chat-message.user .chat-bubble {
-      border-color: #96cfc5;
-      background: #e7f4f1;
-      color: var(--brand-dark);
+      border-color: #0F2A43;
+      background: #0F2A43;
+      color: #FFFFFF;
     }
 
     .chat-message.error .chat-bubble {
@@ -737,7 +739,8 @@
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 8px;
-      padding: 12px;
+      flex: 0 0 auto;
+      padding: 12px 12px max(12px, env(safe-area-inset-bottom));
       border-top: 1px solid var(--line);
       background: var(--surface);
     }
@@ -1193,59 +1196,6 @@
       box-shadow: 0 8px 18px rgba(15, 42, 67, 0.1);
     }
 
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 16px;
-      margin: 20px 0 18px;
-    }
-
-    .kpi-card {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      min-height: 106px;
-      padding: 20px;
-      border: 1px solid rgba(15, 42, 67, 0.1);
-      border-radius: 16px;
-      background: #FFFFFF;
-      box-shadow: 0 16px 34px rgba(15, 42, 67, 0.08);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .kpi-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 22px 46px rgba(15, 42, 67, 0.14);
-    }
-
-    .kpi-icon {
-      width: 46px;
-      height: 46px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 auto;
-      border-radius: 14px;
-      color: #D4AF37;
-      background: #0F2A43;
-      font-size: 18px;
-      font-weight: 900;
-    }
-
-    .kpi-label {
-      color: #667085;
-      font-size: 13px;
-      font-weight: 800;
-    }
-
-    .kpi-value {
-      margin-top: 5px;
-      color: #0F2A43;
-      font-size: 28px;
-      font-weight: 900;
-      line-height: 1;
-    }
-
     .card-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 16px;
@@ -1403,9 +1353,13 @@
 
     .chat-message.user .chat-bubble {
       background: #0F2A43;
+      border-color: #0F2A43;
+      color: #FFFFFF;
     }
 
     .chat-form {
+      flex-shrink: 0;
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
       border-top: 1px solid rgba(15, 42, 67, 0.08);
       background: #FFFFFF;
     }
@@ -1644,10 +1598,10 @@
       }
 
       .chat-form {
-        position: sticky;
+        position: static;
         bottom: 0;
         z-index: 4;
-        padding: 10px;
+        padding: 10px 10px max(14px, env(safe-area-inset-bottom));
       }
 
       .chat-form textarea {
@@ -1701,7 +1655,6 @@
       .upload-panel,
       .status,
       .result-wrap,
-      .kpi-grid,
       .calendar-section,
       .asset-section,
       .ai-chat-panel {
@@ -1733,15 +1686,6 @@
 
       .file-name {
         grid-column: 1 / -1;
-      }
-
-      .kpi-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .kpi-card {
-        min-height: 96px;
-        padding: 16px;
       }
 
       .card-grid,
@@ -1840,37 +1784,6 @@
     <div id="status" class="status">.xlsx 파일을 선택해주세요.</div>
     <section id="resultWrap" class="result-wrap" aria-label="추출 결과">
       <div class="empty-state">업로드된 이벤트오더 정보가 여기에 표시됩니다.</div>
-    </section>
-
-    <section class="kpi-grid" aria-label="연회 KPI">
-      <article class="kpi-card">
-        <div class="kpi-icon" aria-hidden="true">●</div>
-        <div>
-          <div class="kpi-label">오늘 행사 수</div>
-          <div id="todayEventsKpi" class="kpi-value">0</div>
-        </div>
-      </article>
-      <article class="kpi-card">
-        <div class="kpi-icon" aria-hidden="true">◆</div>
-        <div>
-          <div class="kpi-label">이번주 행사 수</div>
-          <div id="weekEventsKpi" class="kpi-value">0</div>
-        </div>
-      </article>
-      <article class="kpi-card">
-        <div class="kpi-icon" aria-hidden="true">∑</div>
-        <div>
-          <div class="kpi-label">예정 인원</div>
-          <div id="expectedPeopleKpi" class="kpi-value">0</div>
-        </div>
-      </article>
-      <article class="kpi-card">
-        <div class="kpi-icon" aria-hidden="true">□</div>
-        <div>
-          <div class="kpi-label">사용 중인 연회장 수</div>
-          <div id="venuesKpi" class="kpi-value">0</div>
-        </div>
-      </article>
     </section>
 
     <div class="workspace-tabs" role="tablist" aria-label="ERP 메뉴">
@@ -1997,10 +1910,6 @@
     const chatInput = document.querySelector("#chatInput");
     const chatMessages = document.querySelector("#chatMessages");
     const chatSendButton = document.querySelector("#chatSendButton");
-    const todayEventsKpi = document.querySelector("#todayEventsKpi");
-    const weekEventsKpi = document.querySelector("#weekEventsKpi");
-    const expectedPeopleKpi = document.querySelector("#expectedPeopleKpi");
-    const venuesKpi = document.querySelector("#venuesKpi");
     const mobileNavButtons = document.querySelectorAll("[data-mobile-target]");
 
     const storageKey = "banquetErpEvents.v1";
@@ -2993,86 +2902,6 @@
       statusBox.scrollIntoView({ behavior: "smooth", block: "center" });
     }
 
-    function parsePeopleCount(value) {
-      if (value === null || value === undefined) return 0;
-      const parsed = Number.parseInt(String(value).replace(/[^0-9-]/g, ""), 10);
-      return Number.isFinite(parsed) ? parsed : 0;
-    }
-
-    function dateKeyToDate(dateKey) {
-      const [year, month, day] = String(dateKey || "").split("-").map(Number);
-      if (!year || !month || !day) return null;
-      return new Date(year, month - 1, day);
-    }
-
-    function isSameOrAfterDateKey(dateKey, baseDateKey) {
-      return String(dateKey || "") >= String(baseDateKey || "");
-    }
-
-    function isDateKeyInRange(dateKey, startDate, endDate) {
-      const date = dateKeyToDate(dateKey);
-      if (!date) return false;
-      return date >= startDate && date <= endDate;
-    }
-
-    function getEventDateKeys(eventItem) {
-      const dateKeys = new Set();
-      (eventItem.calendarDates || []).forEach((dateKey) => {
-        if (dateKey) dateKeys.add(dateKey);
-      });
-      extractDateRange(eventItem.eventDateTime).forEach((dateKey) => {
-        if (dateKey) dateKeys.add(dateKey);
-      });
-      return [...dateKeys];
-    }
-
-    function isDateKeyInDisplayedMonth(dateKey, year, month) {
-      const date = dateKeyToDate(dateKey);
-      return Boolean(date && date.getFullYear() === year && date.getMonth() === month);
-    }
-
-    function addVenueToSet(venues, value) {
-      const venue = cleanValue(value);
-      if (venue) venues.add(venue.replace(/\s+/g, " ").trim());
-    }
-
-    function updateKpiDashboard() {
-      if (!todayEventsKpi || !weekEventsKpi || !expectedPeopleKpi || !venuesKpi) return;
-
-      const today = new Date();
-      const todayKey = formatDateKey(today);
-      const dayOfWeek = today.getDay() || 7;
-      const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - dayOfWeek + 1);
-      const weekEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6, 23, 59, 59);
-      const displayYear = calendarDate.getFullYear();
-      const displayMonth = calendarDate.getMonth();
-
-      let expectedPeople = 0;
-      const monthVenues = new Set();
-      let todayCount = 0;
-      let weekCount = 0;
-
-      savedEvents.forEach((eventItem) => {
-        const eventDateKeys = getEventDateKeys(eventItem);
-        if (eventDateKeys.includes(todayKey)) todayCount += 1;
-        if (eventDateKeys.some((dateKey) => isDateKeyInRange(dateKey, weekStart, weekEnd))) weekCount += 1;
-
-        const isInDisplayedMonth = eventDateKeys.some((dateKey) => isDateKeyInDisplayedMonth(dateKey, displayYear, displayMonth));
-        if (!isInDisplayedMonth) return;
-
-        addVenueToSet(monthVenues, eventItem.venue);
-        (eventItem.schedule || []).forEach((scheduleItem) => {
-          expectedPeople += parsePeopleCount(scheduleItem.people);
-          addVenueToSet(monthVenues, scheduleItem.venue);
-        });
-      });
-
-      todayEventsKpi.textContent = todayCount.toLocaleString("ko-KR");
-      weekEventsKpi.textContent = weekCount.toLocaleString("ko-KR");
-      expectedPeopleKpi.textContent = expectedPeople.toLocaleString("ko-KR");
-      venuesKpi.textContent = monthVenues.size.toLocaleString("ko-KR");
-    }
-
     function renderCalendar() {
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
@@ -3120,7 +2949,6 @@
         calendarGrid.append(dayCell);
       }
 
-      updateKpiDashboard();
     }
 
     function openEventModal(eventItem, calendarDateKey = eventItem.calendarDates?.[0] || null) {
