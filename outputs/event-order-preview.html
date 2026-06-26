@@ -997,16 +997,30 @@
     }
 
     @media (max-width: 768px) {
+      :root {
+        --mobile-content-width: max(100vw, 700px);
+      }
+
       html,
       body {
-        width: 100%;
-        max-width: 100%;
         margin: 0;
-        overflow-x: hidden;
+      }
+
+      html {
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      body {
+        width: var(--mobile-content-width);
+        min-width: var(--mobile-content-width);
+        max-width: none;
+        overflow-x: visible;
       }
 
       main {
-        width: 100% !important;
+        width: var(--mobile-content-width) !important;
+        min-width: var(--mobile-content-width);
         max-width: none;
         padding: 12px 10px 18px;
         display: grid;
@@ -1097,6 +1111,7 @@
       .table-wrap {
         width: 100% !important;
         max-width: none;
+        min-width: 0;
         margin-top: 12px;
       }
 
@@ -1108,13 +1123,15 @@
       .info-card,
       .wide-card,
       .schedule-card {
-        width: 100%;
+        width: 100% !important;
+        max-width: none;
         grid-column: 1 / -1;
       }
 
       .calendar-section {
         width: 100% !important;
         max-width: none;
+        min-width: 0;
         overflow-x: visible;
       }
 
@@ -1128,8 +1145,8 @@
 
       .calendar-grid {
         width: 100% !important;
-        min-width: 0;
-        max-width: 100%;
+        min-width: 100%;
+        max-width: none;
         grid-template-columns: repeat(7, minmax(0, 1fr));
       }
 
@@ -1165,7 +1182,8 @@
       .table-wrap {
         width: 100%;
         max-width: 100%;
-        overflow-x: auto;
+        overflow-x: visible;
+        overflow-y: auto;
         -webkit-overflow-scrolling: touch;
       }
 
@@ -1174,7 +1192,7 @@
       .editable-table,
       .table-wrap table {
         min-width: 700px;
-        width: 700px;
+        width: 100%;
         max-width: none;
       }
 
