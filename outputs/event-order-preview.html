@@ -997,21 +997,28 @@
     }
 
     @media (max-width: 768px) {
+      html,
       body {
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
         overflow-x: hidden;
       }
 
       main {
-        width: 100%;
+        width: 100% !important;
+        max-width: none;
         padding: 12px 10px 18px;
         display: grid;
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr) !important;
         gap: 12px;
+        margin: 0;
       }
 
       .erp-workspace,
       .ai-chat-panel {
-        width: 100%;
+        width: 100% !important;
+        max-width: none;
         min-width: 0;
       }
 
@@ -1077,7 +1084,19 @@
       .result-wrap,
       .calendar-section,
       .asset-section,
+      .upload-panel,
+      .status,
+      .workspace-tabs,
+      .tab-panel,
+      .calendar-save-settings,
+      .card-grid,
+      .info-card,
+      .wide-card,
+      .schedule-card,
+      .ai-chat-panel,
       .table-wrap {
+        width: 100% !important;
+        max-width: none;
         margin-top: 12px;
       }
 
@@ -1094,7 +1113,8 @@
       }
 
       .calendar-section {
-        width: 100%;
+        width: 100% !important;
+        max-width: none;
         overflow-x: visible;
       }
 
@@ -1107,8 +1127,9 @@
       }
 
       .calendar-grid {
-        width: 100%;
-        min-width: 100%;
+        width: 100% !important;
+        min-width: 0;
+        max-width: 100%;
         grid-template-columns: repeat(7, minmax(0, 1fr));
       }
 
@@ -1153,6 +1174,8 @@
       .editable-table,
       .table-wrap table {
         min-width: 700px;
+        width: 700px;
+        max-width: none;
       }
 
       .schedule-table {
