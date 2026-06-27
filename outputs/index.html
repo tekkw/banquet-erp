@@ -994,10 +994,12 @@
 
     .calendar-event-bar {
       display: grid;
-      gap: 2px;
+      grid-template-columns: 5px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
       min-width: 0;
       min-height: 32px;
-      padding: 5px 10px;
+      padding: 4px 10px 4px 0;
       border: 1px solid #b9ddd5;
       border-radius: 999px;
       background: #e7f4f1;
@@ -1012,7 +1014,31 @@
       box-shadow: 0 5px 12px rgba(15, 42, 67, 0.08);
     }
 
+    .event-color-strip {
+      width: 5px;
+      height: calc(100% + 10px);
+      align-self: stretch;
+      margin: -5px 0 -5px -1px;
+      border-top-left-radius: 999px;
+      border-bottom-left-radius: 999px;
+      background: currentColor;
+    }
+
+    .event-title {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: 1.25;
+    }
+
     .calendar-event-bar.range-continues-left {
+      border-top-left-radius: 4px;
+      border-bottom-left-radius: 4px;
+    }
+
+    .calendar-event-bar.range-continues-left .event-color-strip {
       border-top-left-radius: 4px;
       border-bottom-left-radius: 4px;
     }
@@ -4106,17 +4132,14 @@
       button.className = `calendar-event-bar${segment.continuesLeft ? " range-continues-left" : ""}${segment.continuesRight ? " range-continues-right" : ""}`;
       button.style.gridColumn = `${segment.columnStart} / ${segment.columnEnd}`;
       button.style.gridRow = String(segment.laneIndex + 1);
-      if (segment.eventItem.eventType) {
-        const type = document.createElement("span");
-        type.className = "event-pill-type";
-        type.textContent = segment.eventItem.eventType;
-        button.append(type);
-      }
-      const name = document.createElement("span");
-      name.className = "event-pill-name";
-      name.textContent = segment.eventItem.eventName;
-      button.append(name);
       const color = eventColors[normalizeEventColorKey(segment.eventItem.color)] || eventColors.gray;
+      const strip = document.createElement("span");
+      strip.className = "event-color-strip";
+      strip.style.background = color.dot || color.border;
+      const title = document.createElement("span");
+      title.className = "event-title";
+      title.textContent = segment.eventItem.eventName;
+      button.append(strip, title);
       button.style.background = color.background;
       button.style.borderColor = color.border;
       button.style.color = color.text;
