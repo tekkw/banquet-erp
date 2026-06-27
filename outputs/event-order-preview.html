@@ -25,6 +25,10 @@
       box-sizing: border-box;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -267,7 +271,7 @@
 
     .asset-form {
       display: grid;
-      grid-template-columns: minmax(180px, 1.5fr) minmax(90px, 0.8fr) minmax(90px, 0.7fr) minmax(180px, 1.3fr) auto auto;
+      grid-template-columns: minmax(160px, 1.4fr) minmax(80px, 0.7fr) minmax(140px, 1fr) minmax(80px, 0.7fr) minmax(150px, 1.2fr) minmax(120px, 0.9fr) minmax(110px, 0.9fr) auto auto;
       gap: 8px;
       padding: 14px 16px;
       border-bottom: 1px solid var(--line);
@@ -283,6 +287,61 @@
       color: var(--text);
       font: inherit;
       font-size: 13px;
+    }
+
+    .asset-image-picker {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 6px;
+      color: #0F2A43;
+      background: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .asset-image-picker input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+    }
+
+    .asset-image-preview {
+      min-height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #667085;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .asset-image-preview img,
+    .asset-thumb {
+      width: 46px;
+      height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      object-fit: cover;
+      background: #f2f4f7;
+    }
+
+    .asset-thumb-button {
+      border: 0;
+      padding: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .asset-no-image {
+      color: #98a2b3;
+      font-size: 12px;
+      font-weight: 700;
     }
 
     .asset-table-wrap {
@@ -340,6 +399,24 @@
       border-color: #ee9b9b;
       background: #fff0f0;
       color: #9d2424;
+    }
+
+    .asset-section.readonly .asset-form,
+    .asset-section.readonly .admin-only,
+    .asset-section.readonly .admin-only-cell,
+    .asset-section.readonly .admin-only-col {
+      display: none;
+    }
+
+    .asset-permission-note {
+      margin: 10px 0 14px;
+      padding: 10px 12px;
+      border: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 12px;
+      color: #0F2A43;
+      background: rgba(212, 175, 55, 0.12);
+      font-size: 13px;
+      font-weight: 750;
     }
 
     .calendar-save-settings {
@@ -411,22 +488,58 @@
 
     .color-options {
       display: flex;
-      gap: 9px;
+      flex-wrap: wrap;
+      gap: 8px;
       align-items: center;
-      min-height: 38px;
+      min-height: 42px;
     }
 
     .color-option {
-      width: 28px;
-      height: 28px;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      min-height: 34px;
+      padding: 0;
       border: 2px solid transparent;
-      border-radius: 6px;
+      border-radius: 50%;
+      color: var(--text);
+      background: #fff;
       cursor: pointer;
+      font-size: 0;
+      box-shadow: inset 0 0 0 1px rgba(15, 42, 67, 0.1);
     }
 
     .color-option.selected {
       border-color: #1d2939;
-      box-shadow: 0 0 0 2px #fff;
+      box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(212, 175, 55, 0.34);
+    }
+
+    .color-option.selected::after {
+      content: "✓";
+      position: absolute;
+      right: -5px;
+      bottom: -5px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: #fff;
+      background: #0F2A43;
+      font-size: 11px;
+      font-weight: 900;
+    }
+
+    .color-dot {
+      width: 100%;
+      height: 100%;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      border: 1px solid rgba(15, 42, 67, 0.18);
     }
 
     .card-grid {
@@ -442,6 +555,53 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .export-panel {
+      display: grid;
+      grid-template-columns: 1.2fr repeat(4, minmax(120px, 1fr)) auto;
+      gap: 10px;
+      align-items: end;
+      margin: 14px 0 16px;
+      padding: 14px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      border-radius: 14px;
+      background: rgba(247, 245, 239, 0.72);
+    }
+
+    .export-field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .export-field label {
+      color: #475467;
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .export-field input,
+    .export-field select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      padding: 0 10px;
+    }
+
+    .export-panel.mode-all .export-year-field,
+    .export-panel.mode-all .export-month-field,
+    .export-panel.mode-all .export-range-field,
+    .export-panel.mode-year .export-month-field,
+    .export-panel.mode-year .export-range-field,
+    .export-panel.mode-month .export-range-field,
+    .export-panel.mode-range .export-year-field,
+    .export-panel.mode-range .export-month-field {
+      display: none;
     }
 
     .info-label {
@@ -493,6 +653,115 @@
       outline: none;
       border-color: #D4AF37;
       box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+    }
+
+    .similar-events-section {
+      margin-top: 16px;
+      padding: 18px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      border-radius: 16px;
+      background: #FFFFFF;
+      box-shadow: 0 12px 26px rgba(15, 42, 67, 0.07);
+    }
+
+    .similar-events-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .similar-events-header h2 {
+      margin: 0 0 4px;
+      color: #0F2A43;
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .similar-events-header p {
+      color: #667085;
+      font-size: 13px;
+    }
+
+    .similar-events-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .similar-event-card {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid rgba(15, 42, 67, 0.1);
+      border-radius: 14px;
+      background: linear-gradient(180deg, #FFFFFF, rgba(247, 245, 239, 0.52));
+    }
+
+    .similar-event-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .similar-event-title strong {
+      color: #0F2A43;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .similar-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .similar-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      color: #0F2A43;
+      background: rgba(212, 175, 55, 0.16);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .similar-event-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .similar-event-field {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .similar-event-field span {
+      color: #667085;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .similar-event-field b {
+      color: #202631;
+      font-size: 13px;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .similar-memo-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding-left: 18px;
+      color: #202631;
+      font-size: 13px;
+      line-height: 1.45;
     }
 
     .schedule-card {
@@ -673,7 +942,8 @@
     }
 
     .event-pill {
-      display: block;
+      display: grid;
+      gap: 2px;
       width: 100%;
       margin-top: 5px;
       padding: 6px 7px;
@@ -686,8 +956,23 @@
       text-align: left;
       cursor: pointer;
       overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .event-pill-type {
+      display: block;
+      font-size: 10px;
+      line-height: 1.1;
+      font-weight: 900;
+      opacity: 0.72;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .event-pill-name {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .ai-chat-panel {
@@ -1043,6 +1328,124 @@
       background: linear-gradient(135deg, #0F2A43 0%, #16395B 100%);
       border-bottom: 3px solid #D4AF37;
       box-shadow: 0 14px 34px rgba(15, 42, 67, 0.24);
+    }
+
+    .auth-screen {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background:
+        linear-gradient(135deg, rgba(15, 42, 67, 0.92), rgba(22, 57, 91, 0.86)),
+        #0F2A43;
+    }
+
+    .auth-card {
+      width: min(420px, 100%);
+      padding: 34px;
+      border: 1px solid rgba(212, 175, 55, 0.34);
+      border-radius: 18px;
+      background: #FFFFFF;
+      box-shadow: 0 26px 70px rgba(0, 0, 0, 0.28);
+    }
+
+    .auth-brand {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .auth-brand span {
+      color: #D4AF37;
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .auth-brand h1 {
+      margin: 0;
+      color: #0F2A43;
+      font-size: 28px;
+      font-weight: 900;
+    }
+
+    .auth-brand p {
+      color: #667085;
+      font-size: 14px;
+    }
+
+    .login-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    .login-field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .login-field label {
+      color: #344054;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .login-field input {
+      width: 100%;
+      min-height: 46px;
+      padding: 0 13px;
+      border: 1px solid #aeb7c5;
+      border-radius: 12px;
+      color: #202631;
+      font: inherit;
+    }
+
+    .login-field input:focus {
+      outline: none;
+      border-color: #D4AF37;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+    }
+
+    .login-error {
+      min-height: 20px;
+      color: #9d2424;
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .topbar-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 12px;
+      border: 1px solid rgba(212, 175, 55, 0.42);
+      border-radius: 999px;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+      font-weight: 750;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .logout-button {
+      min-height: 36px;
+      padding: 0 14px;
+      border: 1px solid rgba(212, 175, 55, 0.62);
+      border-radius: 999px;
+      color: #0F2A43;
+      background: #D4AF37;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .logout-button:hover {
+      filter: brightness(1.04);
     }
 
     .hotel-brand {
@@ -1723,6 +2126,24 @@
         grid-template-columns: 1fr;
       }
 
+      .similar-events-header,
+      .similar-event-title {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .similar-event-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .export-panel {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      #exportExcelButton {
+        grid-column: 1 / -1;
+      }
+
       .calendar-day {
         min-height: 116px;
       }
@@ -1777,7 +2198,29 @@
   </style>
 </head>
 <body>
-  <header class="hotel-topbar">
+  <section id="loginScreen" class="auth-screen" aria-label="로그인">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <span>Venezia Hotel &amp; Suite</span>
+        <h1>BANQUET ERP</h1>
+        <p>연회팀 내부 운영 시스템입니다. 아이디와 비밀번호로 로그인해주세요.</p>
+      </div>
+      <form id="loginForm" class="login-form">
+        <div class="login-field">
+          <label for="loginId">아이디</label>
+          <input id="loginId" type="text" autocomplete="username" required>
+        </div>
+        <div class="login-field">
+          <label for="loginPassword">비밀번호</label>
+          <input id="loginPassword" type="password" autocomplete="current-password" required>
+        </div>
+        <div id="loginError" class="login-error" aria-live="polite"></div>
+        <button class="primary-button" type="submit">로그인</button>
+      </form>
+    </div>
+  </section>
+
+  <header class="hotel-topbar" hidden>
     <div class="hotel-brand">
       <div class="brand-mark">VE</div>
       <div>
@@ -1785,10 +2228,13 @@
         <div class="brand-title">VENEZIA HOTEL &amp; SUITE</div>
       </div>
     </div>
-    <div class="brand-meta">Luxury Hotel Operations</div>
+    <div class="topbar-actions">
+      <div id="currentUserBadge" class="user-chip">로그인 필요</div>
+      <button id="logoutButton" class="logout-button" type="button">로그아웃</button>
+    </div>
   </header>
 
-  <main>
+  <main hidden>
     <div class="erp-workspace">
     <header class="page-intro" id="homeSection">
       <div>
@@ -1827,6 +2273,34 @@
         <h2 id="calendarTitle" class="calendar-title"></h2>
         <button id="nextMonth" class="icon-button" type="button" aria-label="다음 달">›</button>
       </div>
+      <div class="export-panel" aria-label="엑셀 다운로드">
+        <div class="export-field">
+          <label for="exportMode">다운로드 기준</label>
+          <select id="exportMode">
+            <option value="all">전체</option>
+            <option value="year">연도별</option>
+            <option value="month">월별</option>
+            <option value="range">기간 선택</option>
+          </select>
+        </div>
+        <div class="export-field export-year-field">
+          <label for="exportYear">연도</label>
+          <input id="exportYear" type="number" min="2000" max="2100" step="1">
+        </div>
+        <div class="export-field export-month-field">
+          <label for="exportMonth">월</label>
+          <input id="exportMonth" type="number" min="1" max="12" step="1">
+        </div>
+        <div class="export-field export-range-field">
+          <label for="exportStartDate">시작일</label>
+          <input id="exportStartDate" type="date">
+        </div>
+        <div class="export-field export-range-field">
+          <label for="exportEndDate">종료일</label>
+          <input id="exportEndDate" type="date">
+        </div>
+        <button id="exportExcelButton" class="primary-button" type="button">엑셀 다운로드</button>
+      </div>
       <div id="calendarGrid" class="calendar-grid"></div>
     </section>
 
@@ -1841,31 +2315,41 @@
       <form id="assetForm" class="asset-form">
         <input id="assetNameInput" type="text" placeholder="자산명" required>
         <input id="assetFloorInput" type="text" placeholder="층">
+        <input id="assetLocationInput" type="text" placeholder="위치">
         <input id="assetQuantityInput" type="number" min="0" step="1" placeholder="수량">
         <input id="assetSpecInput" type="text" placeholder="규격">
+        <label class="asset-image-picker">
+          <span>이미지 첨부</span>
+          <input id="assetImageInput" type="file" accept="image/*">
+        </label>
+        <div id="assetImagePreview" class="asset-image-preview">이미지 없음</div>
         <button id="assetSaveButton" class="primary-button" type="submit">등록</button>
         <button id="assetCancelButton" class="secondary-button" type="button" hidden>취소</button>
       </form>
       <div class="asset-table-wrap">
         <table class="asset-table">
           <colgroup>
-            <col style="width: 34%;">
-            <col style="width: 14%;">
             <col style="width: 12%;">
-            <col style="width: 28%;">
-            <col style="width: 12%;">
+            <col style="width: 24%;">
+            <col style="width: 10%;">
+            <col style="width: 16%;">
+            <col style="width: 10%;">
+            <col style="width: 18%;">
+            <col class="admin-only-col" style="width: 10%;">
           </colgroup>
           <thead>
             <tr>
+              <th>이미지</th>
               <th>자산명</th>
               <th>층</th>
+              <th>위치</th>
               <th class="number-cell">수량</th>
               <th>규격</th>
-              <th>관리</th>
+              <th class="admin-only">관리</th>
             </tr>
           </thead>
           <tbody id="assetTableBody">
-            <tr><td colspan="5">등록된 자산을 불러오는 중입니다.</td></tr>
+            <tr><td colspan="7">등록된 자산을 불러오는 중입니다.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1902,7 +2386,19 @@
     </div>
   </div>
 
-  <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴">
+  <div id="imageModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-label="자산 이미지 보기">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="imageModalTitle" class="modal-title">자산 이미지</h2>
+        <button id="closeImageModal" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="modal-body">
+        <img id="imageModalImg" alt="자산 이미지" style="width:100%;max-height:70vh;object-fit:contain;border-radius:12px;background:#f2f4f7;">
+      </div>
+    </div>
+  </div>
+
+  <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
     <button type="button" data-mobile-target="home"><span aria-hidden="true">⌂</span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span aria-hidden="true">□</span><strong>캘린더</strong></button>
     <button type="button" data-mobile-target="assets"><span aria-hidden="true">◇</span><strong>자산관리</strong></button>
@@ -1913,16 +2409,36 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
     const input = document.querySelector("#excelInput");
+    const loginScreen = document.querySelector("#loginScreen");
+    const loginForm = document.querySelector("#loginForm");
+    const loginIdInput = document.querySelector("#loginId");
+    const loginPasswordInput = document.querySelector("#loginPassword");
+    const loginError = document.querySelector("#loginError");
+    const currentUserBadge = document.querySelector("#currentUserBadge");
+    const logoutButton = document.querySelector("#logoutButton");
+    const hotelTopbar = document.querySelector(".hotel-topbar");
+    const appMain = document.querySelector("main");
+    const mobileBottomNav = document.querySelector(".mobile-bottom-nav");
     const fileName = document.querySelector("#fileName");
     const statusBox = document.querySelector("#status");
     const resultWrap = document.querySelector("#resultWrap");
     const calendarTitle = document.querySelector("#calendarTitle");
     const calendarGrid = document.querySelector("#calendarGrid");
+    const exportMode = document.querySelector("#exportMode");
+    const exportYear = document.querySelector("#exportYear");
+    const exportMonth = document.querySelector("#exportMonth");
+    const exportStartDate = document.querySelector("#exportStartDate");
+    const exportEndDate = document.querySelector("#exportEndDate");
+    const exportExcelButton = document.querySelector("#exportExcelButton");
     const prevMonthButton = document.querySelector("#prevMonth");
     const nextMonthButton = document.querySelector("#nextMonth");
     const eventModal = document.querySelector("#eventModal");
     const closeModalButton = document.querySelector("#closeModal");
     const modalBody = document.querySelector("#modalBody");
+    const imageModal = document.querySelector("#imageModal");
+    const closeImageModalButton = document.querySelector("#closeImageModal");
+    const imageModalTitle = document.querySelector("#imageModalTitle");
+    const imageModalImg = document.querySelector("#imageModalImg");
     const calendarTabButton = document.querySelector("#calendarTabButton");
     const assetTabButton = document.querySelector("#assetTabButton");
     const calendarPanel = document.querySelector("#calendarPanel");
@@ -1930,8 +2446,11 @@
     const assetForm = document.querySelector("#assetForm");
     const assetNameInput = document.querySelector("#assetNameInput");
     const assetFloorInput = document.querySelector("#assetFloorInput");
+    const assetLocationInput = document.querySelector("#assetLocationInput");
     const assetQuantityInput = document.querySelector("#assetQuantityInput");
     const assetSpecInput = document.querySelector("#assetSpecInput");
+    const assetImageInput = document.querySelector("#assetImageInput");
+    const assetImagePreview = document.querySelector("#assetImagePreview");
     const assetSaveButton = document.querySelector("#assetSaveButton");
     const assetCancelButton = document.querySelector("#assetCancelButton");
     const assetTableBody = document.querySelector("#assetTableBody");
@@ -1942,11 +2461,17 @@
     const chatSendButton = document.querySelector("#chatSendButton");
     const mobileNavButtons = document.querySelectorAll("[data-mobile-target]");
 
+    const authStorageKey = "banquetErpCurrentUser.v1";
     const storageKey = "banquetErpEvents.v1";
+    const loginAccounts = [
+      { id: "banquet123", password: "1303", role: "user", label: "일반 사용자" },
+      { id: "banquet1303", password: "1303", role: "admin", label: "관리자" },
+    ];
     const supabaseConfig = {
       url: "https://pnolttdubxxmxorufpyk.supabase.co",
       anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2x0dGR1Ynh4bXhvcnVmcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMDYxMTIsImV4cCI6MjA5NzU4MjExMn0.WhDRdoQUSQdQTfkcdEvzV2QT642vROHJxAE6k7hLqxA",
       bucket: "event-orders",
+      assetImageBucket: "asset-images",
       chatFunction: "event-order-ai-chat",
       functionUrl: "https://pnolttdubxxmxorufpyk.supabase.co/functions/v1/event-order-ai-chat",
     };
@@ -1954,23 +2479,50 @@
     let loadedSheets = [];
     let pendingEvent = null;
     let previewExtracted = null;
+    let similarEvents = [];
+    let similarEventsLoading = false;
     let uploadedOriginalFile = null;
     let savedEvents = [];
     let banquetAssets = [];
     let editingAssetId = null;
+    let editingAssetImageUrl = "";
+    let selectedAssetImageFile = null;
     let calendarDate = new Date();
     let selectedSaveDates = [];
-    let selectedEventColor = "green";
+    let selectedEventColor = "navy";
+    let selectedEventType = "";
     let activeEventId = null;
     let activeCalendarDate = null;
+    let currentUser = null;
 
     const eventColors = {
-      green: { label: "초록", background: "#d9f0ea", border: "#8fcdbf", text: "#15574e" },
-      blue: { label: "파랑", background: "#dceafa", border: "#9fc2eb", text: "#175a9c" },
-      yellow: { label: "노랑", background: "#fff1bd", border: "#e9c65d", text: "#7a5600" },
-      red: { label: "빨강", background: "#ffe1e1", border: "#eea1a1", text: "#9d2424" },
-      purple: { label: "보라", background: "#ece4ff", border: "#c1a9ef", text: "#5f3c99" },
-      gray: { label: "회색", background: "#e9edf2", border: "#b8c0cc", text: "#475467" },
+      navy: { label: "Navy", background: "#dbe7f2", border: "#0F2A43", text: "#0F2A43", dot: "#0F2A43" },
+      blue: { label: "Blue", background: "#dceafa", border: "#2563eb", text: "#1e3a8a", dot: "#2563eb" },
+      sky: { label: "Sky", background: "#dff7ff", border: "#2b9fc7", text: "#116078", dot: "#2b9fc7" },
+      teal: { label: "Teal", background: "#e2f7ef", border: "#2a9d8f", text: "#126b5f", dot: "#2a9d8f" },
+      green: { label: "Green", background: "#e4f2d8", border: "#73a942", text: "#3f6b1f", dot: "#73a942" },
+      gold: { label: "Gold", background: "#fff1bd", border: "#D4AF37", text: "#7a5600", dot: "#D4AF37" },
+      orange: { label: "Orange", background: "#ffe8d6", border: "#f4a261", text: "#7a3b00", dot: "#f4a261" },
+      red: { label: "Red", background: "#ffe4e6", border: "#e11d48", text: "#9f1239", dot: "#e11d48" },
+      pink: { label: "Pink", background: "#ffe1ef", border: "#d65a91", text: "#8b2858", dot: "#d65a91" },
+      purple: { label: "Purple", background: "#e7e0ff", border: "#7b61ff", text: "#4c35b0", dot: "#7b61ff" },
+      brown: { label: "Brown", background: "#f4e7d3", border: "#b7791f", text: "#7c4a03", dot: "#b7791f" },
+      gray: { label: "Gray", background: "#f2f4f7", border: "#98a2b3", text: "#475467", dot: "#98a2b3" },
+    };
+    const legacyColorMap = {
+      family: "orange",
+      seminar: "blue",
+      pharma: "teal",
+      public: "gray",
+      school: "gold",
+      corporate: "purple",
+      wedding: "pink",
+      lodging: "sky",
+      banquet: "brown",
+      exhibition: "green",
+      association: "navy",
+      other: "gray",
+      yellow: "gold",
     };
 
     const fields = [
@@ -1978,6 +2530,7 @@
       { key: "host", label: "행사주최", type: "text" },
       { key: "eventDate", label: "행사일시", type: "date" },
       { key: "place", label: "장소", type: "text" },
+      { key: "guestCount", label: "대표 행사 인원", type: "number" },
       { key: "schedule", label: "Schedule", type: "schedule" },
       { key: "items", label: "Items", type: "items" },
       { key: "layout", label: "Lay out & EQP", type: "list" },
@@ -1994,9 +2547,16 @@
       renderCalendar();
     });
 
+    exportMode.addEventListener("change", updateExportControls);
+    exportExcelButton.addEventListener("click", exportEventsToExcel);
+
     closeModalButton.addEventListener("click", closeEventModal);
     eventModal.addEventListener("click", (event) => {
       if (event.target === eventModal) closeEventModal();
+    });
+    closeImageModalButton.addEventListener("click", closeAssetImageModal);
+    imageModal.addEventListener("click", (event) => {
+      if (event.target === imageModal) closeAssetImageModal();
     });
 
     calendarTabButton.addEventListener("click", () => activateWorkspaceTab("calendar"));
@@ -2007,6 +2567,10 @@
     refreshAssetsButton.addEventListener("click", loadBanquetAssets);
     assetCancelButton.addEventListener("click", resetAssetForm);
     assetForm.addEventListener("submit", saveBanquetAsset);
+    assetImageInput.addEventListener("change", handleAssetImageSelection);
+
+    loginForm.addEventListener("submit", handleLogin);
+    logoutButton.addEventListener("click", handleLogout);
 
     mobileNavButtons.forEach((button) => {
       button.addEventListener("click", () => handleMobileNavigation(button.dataset.mobileTarget));
@@ -2059,11 +2623,16 @@
         }
 
         const extracted = extractEventOrderInfo(loadedSheets);
+        extracted.guestCount = inferRepresentativeGuestCount(extracted.schedule);
         previewExtracted = extracted;
         pendingEvent = normalizeEventForSave(extracted);
         selectedSaveDates = extractDateRange(extracted.eventDate);
-        selectedEventColor = "green";
+        selectedEventColor = "navy";
+        selectedEventType = "";
+        similarEvents = [];
+        similarEventsLoading = true;
         renderExtractedInfo(extracted);
+        loadSimilarEventsForPreview();
         const totalRows = loadedSheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
         const foundCount = fields.filter((field) => {
           const value = extracted[field.key];
@@ -2143,6 +2712,7 @@
       });
 
       const settings = createCalendarSaveSettings();
+      const similarSection = createSimilarEventsSection();
 
       const actions = document.createElement("div");
       actions.className = "preview-actions";
@@ -2155,7 +2725,7 @@
       saveButton.addEventListener("click", savePendingEvent);
       actions.append(saveButton);
 
-      resultWrap.replaceChildren(grid, settings, actions);
+      resultWrap.replaceChildren(grid, settings, similarSection, actions);
     }
 
     function createPreviewField(field, value, multiline) {
@@ -2163,6 +2733,11 @@
       control.className = multiline ? "preview-textarea" : "preview-input";
       control.dataset.previewField = field.key;
       if (!multiline) control.type = "text";
+      if (field.key === "guestCount") {
+        control.type = "number";
+        control.min = "0";
+        control.step = "1";
+      }
       control.value = Array.isArray(value) ? value.join("\n") : cleanValue(value);
       control.placeholder = getPreviewPlaceholder(field);
       if (["eventDate", "place"].includes(field.key)) {
@@ -2178,6 +2753,7 @@
         host: "행사주최를 입력하세요",
         eventDate: "행사일시를 입력하세요",
         place: "장소를 입력하세요",
+        guestCount: "대표 행사 인원을 입력하세요",
         layout: "Lay out & EQP 내용을 줄 단위로 입력하세요",
         others: "Others 내용을 줄 단위로 입력하세요",
       };
@@ -2202,9 +2778,222 @@
         host: "companyName",
         eventDate: "eventDateTime",
         place: "venue",
+        guestCount: "guestCount",
       };
       const pendingKey = pendingKeys[field.key];
       if (pendingKey) pendingEvent[pendingKey] = value;
+    }
+
+    function createSimilarEventsSection() {
+      const section = document.createElement("section");
+      section.className = "similar-events-section";
+
+      const header = document.createElement("div");
+      header.className = "similar-events-header";
+      const titleWrap = document.createElement("div");
+      const title = document.createElement("h2");
+      title.textContent = "과거 유사 행사";
+      const description = document.createElement("p");
+      description.textContent = "행사명과 주최/주관을 기준으로 저장된 이벤오더를 비교합니다.";
+      titleWrap.append(title, description);
+      header.append(titleWrap);
+
+      const list = document.createElement("div");
+      list.className = "similar-events-list";
+
+      if (similarEventsLoading) {
+        const loading = document.createElement("div");
+        loading.className = "empty-state";
+        loading.textContent = "과거 유사 행사를 조회하는 중입니다.";
+        list.append(loading);
+      } else if (!similarEvents.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty-state";
+        empty.textContent = "유사한 과거 행사가 없습니다.";
+        list.append(empty);
+      } else {
+        similarEvents.forEach((eventItem) => list.append(createSimilarEventCard(eventItem)));
+      }
+
+      section.append(header, list);
+      return section;
+    }
+
+    function createSimilarEventCard(eventItem) {
+      const card = document.createElement("article");
+      card.className = "similar-event-card";
+
+      const titleRow = document.createElement("div");
+      titleRow.className = "similar-event-title";
+      const title = document.createElement("strong");
+      title.textContent = eventItem.eventName || "이름 없는 행사";
+      const badges = document.createElement("div");
+      badges.className = "similar-badges";
+      (eventItem.matchReasons || []).forEach((reason) => {
+        const badge = document.createElement("span");
+        badge.className = "similar-badge";
+        badge.textContent = reason;
+        badges.append(badge);
+      });
+      titleRow.append(title, badges);
+
+      const grid = document.createElement("div");
+      grid.className = "similar-event-grid";
+      [
+        ["주최/주관", eventItem.companyName || "미입력"],
+        ["행사일", eventItem.eventDateTime || formatDateLabel(eventItem.calendarDates?.[0]) || "미입력"],
+        ["장소", eventItem.venue || "미입력"],
+        ["인원", formatPeopleSummary(eventItem)],
+        ["세팅 정보", formatSettingSummary(eventItem)],
+        ["금액 정보", formatAmountSummary(eventItem)],
+      ].forEach(([labelText, valueText]) => {
+        const field = document.createElement("div");
+        field.className = "similar-event-field";
+        const label = document.createElement("span");
+        label.textContent = labelText;
+        const value = document.createElement("b");
+        value.textContent = valueText || "미입력";
+        field.append(label, value);
+        grid.append(field);
+      });
+
+      const memoField = document.createElement("div");
+      memoField.className = "similar-event-field";
+      const memoLabel = document.createElement("span");
+      memoLabel.textContent = "내부메모";
+      memoField.append(memoLabel);
+      const memos = eventItem.internalMemoNotes || [];
+      if (memos.length) {
+        const memoList = document.createElement("ul");
+        memoList.className = "similar-memo-list";
+        memos.forEach((memo) => {
+          const item = document.createElement("li");
+          item.textContent = memo.content;
+          memoList.append(item);
+        });
+        memoField.append(memoList);
+      } else {
+        const emptyMemo = document.createElement("b");
+        emptyMemo.textContent = "내부메모 없음";
+        memoField.append(emptyMemo);
+      }
+
+      card.append(titleRow, grid, memoField);
+      return card;
+    }
+
+    async function loadSimilarEventsForPreview() {
+      if (!pendingEvent) return;
+      try {
+        const rows = await fetchEventRowsFromSupabase();
+        const events = rows.map(mapDatabaseEvent);
+        similarEvents = findSimilarEvents(pendingEvent, events).slice(0, 6);
+      } catch (error) {
+        console.error("similar events load failed:", error);
+        similarEvents = [];
+      } finally {
+        similarEventsLoading = false;
+        if (previewExtracted) renderExtractedInfo(previewExtracted);
+      }
+    }
+
+    function findSimilarEvents(sourceEvent, events) {
+      const sourceName = normalizeSearchText(sourceEvent.eventName);
+      const sourceCompany = normalizeSearchText(sourceEvent.companyName);
+      const sourceDate = getEventPrimaryDate(sourceEvent);
+
+      return (events || [])
+        .map((eventItem) => {
+          const targetName = normalizeSearchText(eventItem.eventName);
+          const targetCompany = normalizeSearchText(eventItem.companyName);
+          const targetDate = getEventPrimaryDate(eventItem);
+          let score = 0;
+          const reasons = [];
+
+          if (sourceName && targetName && (targetName.includes(sourceName) || sourceName.includes(targetName))) {
+            score += 45;
+            reasons.push("행사명 유사");
+          } else {
+            const overlap = tokenOverlapScore(sourceName, targetName);
+            if (overlap > 0) {
+              score += overlap * 28;
+              reasons.push("행사명 일부 일치");
+            }
+          }
+
+          if (sourceCompany && targetCompany && (targetCompany.includes(sourceCompany) || sourceCompany.includes(targetCompany))) {
+            score += 50;
+            reasons.push("같은 주최/주관");
+          } else {
+            const overlap = tokenOverlapScore(sourceCompany, targetCompany);
+            if (overlap > 0) {
+              score += overlap * 32;
+              reasons.push("주최/주관 일부 일치");
+            }
+          }
+
+          if (sourceDate && targetDate) {
+            if (targetDate.getFullYear() === sourceDate.getFullYear() - 1 && targetDate.getMonth() === sourceDate.getMonth()) {
+              score += 22;
+              reasons.push("작년 같은 달");
+            }
+            const previousMonth = new Date(sourceDate.getFullYear(), sourceDate.getMonth() - 1, 1);
+            if (targetDate.getFullYear() === previousMonth.getFullYear() && targetDate.getMonth() === previousMonth.getMonth()) {
+              score += 18;
+              reasons.push("전월 행사");
+            }
+          }
+
+          return { ...eventItem, matchScore: score, matchReasons: [...new Set(reasons)], primaryDate: targetDate };
+        })
+        .filter((eventItem) => eventItem.matchScore > 0)
+        .sort((a, b) => {
+          if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+          return (b.primaryDate?.getTime() || 0) - (a.primaryDate?.getTime() || 0);
+        });
+    }
+
+    function normalizeSearchText(value) {
+      return cleanValue(value).toLowerCase().replace(/\s+/g, "");
+    }
+
+    function tokenOverlapScore(source, target) {
+      const sourceTokens = getSearchTokens(source);
+      const targetTokens = new Set(getSearchTokens(target));
+      if (!sourceTokens.length || !targetTokens.size) return 0;
+      const matches = sourceTokens.filter((token) => targetTokens.has(token)).length;
+      return matches / sourceTokens.length;
+    }
+
+    function getSearchTokens(value) {
+      const compact = normalizeSearchText(value);
+      if (!compact) return [];
+      const chunks = cleanValue(value).toLowerCase().split(/[^0-9a-z가-힣]+/).filter((token) => token.length >= 2);
+      return [...new Set([...chunks, compact].filter(Boolean))];
+    }
+
+    function getEventPrimaryDate(eventItem) {
+      const dateKey = eventItem.calendarDates?.[0] || extractDateRange(eventItem.eventDateTime)[0] || parseEventDateKey(eventItem.eventDateTime);
+      if (!dateKey) return null;
+      const [year, month, day] = dateKey.split("-").map(Number);
+      return year && month && day ? new Date(year, month - 1, day) : null;
+    }
+
+    function formatPeopleSummary(eventItem) {
+      const guestCount = toNullableInteger(eventItem.guestCount);
+      return guestCount !== null ? `${guestCount.toLocaleString("ko-KR")}명` : "미입력";
+    }
+
+    function formatSettingSummary(eventItem) {
+      const values = [...(eventItem.layoutEqp || []), ...(eventItem.others || [])].map(cleanValue).filter(Boolean);
+      return values.length ? values.slice(0, 3).join(" / ") : "미입력";
+    }
+
+    function formatAmountSummary(eventItem) {
+      const total = (eventItem.items || []).reduce((sum, item) => sum + (toNullableNumber(item.amount) || 0), 0);
+      if (total) return `${total.toLocaleString("ko-KR")}원`;
+      const itemNames = (eventItem.items || []).map((item) => cleanValue(item.itemName)).filter(Boolean);
+      return itemNames.length ? itemNames.slice(0, 3).join(" / ") : "미입력";
     }
 
     function createCalendarSaveSettings() {
@@ -2253,29 +3042,66 @@
       });
       dateGroup.append(dateAdder, chips);
 
+      const typeGroup = document.createElement("div");
+      const typeLabel = document.createElement("label");
+      typeLabel.className = "setting-label";
+      typeLabel.textContent = "행사 유형";
+      const typeInput = document.createElement("input");
+      typeInput.type = "text";
+      typeInput.className = "preview-input";
+      typeInput.placeholder = "예: 가족행사, 세미나, 제약회사";
+      typeInput.value = selectedEventType;
+      typeInput.addEventListener("input", () => {
+        selectedEventType = typeInput.value.trim();
+        if (pendingEvent) {
+          pendingEvent.eventType = selectedEventType;
+        }
+      });
+      typeGroup.append(typeLabel, typeInput);
+
       const colorGroup = document.createElement("div");
       const colorLabel = document.createElement("div");
       colorLabel.className = "setting-label";
-      colorLabel.textContent = "캘린더 일정 색상";
+      colorLabel.textContent = "캘린더 색상";
+      const options = createEventTypeColorOptions(selectedEventColor, (key) => {
+        selectedEventColor = key;
+        if (pendingEvent) {
+          pendingEvent.color = key;
+        }
+        renderExtractedInfo(previewExtracted);
+      });
+      colorGroup.append(colorLabel, options);
+
+      settings.append(dateGroup, typeGroup, colorGroup);
+      return settings;
+    }
+
+    function createEventTypeColorOptions(selectedColor, onSelect) {
+      const normalizedSelectedColor = normalizeEventColorKey(selectedColor);
       const options = document.createElement("div");
       options.className = "color-options";
       Object.entries(eventColors).forEach(([key, color]) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `color-option${selectedEventColor === key ? " selected" : ""}`;
+        button.className = `color-option${normalizedSelectedColor === key ? " selected" : ""}`;
         button.title = color.label;
-        button.setAttribute("aria-label", color.label);
+        button.setAttribute("aria-label", `${color.label} 색상`);
         button.style.background = color.background;
-        button.addEventListener("click", () => {
-          selectedEventColor = key;
-          renderExtractedInfo(previewExtracted);
-        });
+        button.style.borderColor = normalizedSelectedColor === key ? color.border : "transparent";
+
+        const dot = document.createElement("span");
+        dot.className = "color-dot";
+        dot.style.background = color.dot || color.border;
+        button.append(dot);
+        button.addEventListener("click", () => onSelect(key));
         options.append(button);
       });
-      colorGroup.append(colorLabel, options);
+      return options;
+    }
 
-      settings.append(dateGroup, colorGroup);
-      return settings;
+    function normalizeEventColorKey(colorKey) {
+      if (eventColors[colorKey]) return colorKey;
+      return legacyColorMap[colorKey] || "gray";
     }
 
     function createScheduleTable(scheduleRows) {
@@ -2399,12 +3225,14 @@
         companyName: cleanValue(extracted.host),
         eventDateTime: cleanValue(extracted.eventDate),
         venue: cleanValue(extracted.place),
+        guestCount: cleanValue(extracted.guestCount || inferRepresentativeGuestCount(extracted.schedule)),
         schedule: Array.isArray(extracted.schedule) ? extracted.schedule : [],
         items: Array.isArray(extracted.items) ? extracted.items : [],
         layoutEqp: Array.isArray(extracted.layout) ? extracted.layout : [],
         others: Array.isArray(extracted.others) ? extracted.others : [],
         calendarDates: [],
         color: selectedEventColor,
+        eventType: selectedEventType,
         originalFilename: uploadedOriginalFile?.name || "",
         storagePath: "",
         internalMemo: "",
@@ -2412,8 +3240,21 @@
       };
     }
 
+    function inferRepresentativeGuestCount(scheduleRows) {
+      const firstPeople = (scheduleRows || [])
+        .map((item) => cleanValue(item.people))
+        .find((value) => toNullableInteger(value) !== null);
+      return firstPeople || "";
+    }
+
     async function savePendingEvent() {
       if (!pendingEvent || selectedSaveDates.length === 0) return;
+
+      if (toNullableInteger(pendingEvent.guestCount) === null) {
+        setStatus("대표 행사 인원을 입력해주세요.", "warn");
+        resultWrap.querySelector('[data-preview-field="guestCount"]')?.focus();
+        return;
+      }
 
       if (!pendingEvent.originalFileObject) {
         setStatus("원본 엑셀 파일을 찾지 못했습니다. 파일을 다시 업로드해주세요.", "error");
@@ -2435,6 +3276,7 @@
         ...pendingEvent,
         calendarDates: [...selectedSaveDates],
         color: selectedEventColor,
+        eventType: selectedEventType,
         storagePath: uploadedFile.storagePath,
         originalFileUrl: uploadedFile.publicUrl,
       };
@@ -2574,7 +3416,9 @@
           company_name: eventItem.companyName,
           event_datetime: eventItem.eventDateTime,
           venue: eventItem.venue,
-          color: eventItem.color,
+          guest_count: toNullableInteger(eventItem.guestCount),
+          color: normalizeEventColorKey(eventItem.color),
+          event_type: cleanValue(eventItem.eventType),
           original_filename: eventItem.originalFilename,
           storage_path: eventItem.storagePath,
           internal_memo: eventItem.internalMemo || "",
@@ -2669,7 +3513,9 @@
           company_name: eventItem.companyName,
           event_datetime: eventItem.eventDateTime,
           venue: eventItem.venue,
-          color: eventItem.color,
+          guest_count: toNullableInteger(eventItem.guestCount),
+          color: normalizeEventColorKey(eventItem.color),
+          event_type: cleanValue(eventItem.eventType),
           internal_memo: eventItem.internalMemo || "",
         }),
       });
@@ -2764,7 +3610,7 @@
     }
 
     async function loadBanquetAssets() {
-      assetTableBody.innerHTML = '<tr><td colspan="5">등록된 자산을 불러오는 중입니다.</td></tr>';
+      assetTableBody.innerHTML = '<tr><td colspan="7">등록된 자산을 불러오는 중입니다.</td></tr>';
       try {
         const rows = await loggedSupabaseRequest(
           "banquet_assets select",
@@ -2774,33 +3620,75 @@
         renderBanquetAssets();
       } catch (error) {
         console.error("banquet_assets load failed:", error);
-        assetTableBody.innerHTML = `<tr><td colspan="5">자산 목록을 불러오지 못했습니다. ${error.message || ""}</td></tr>`;
+        assetTableBody.innerHTML = `<tr><td colspan="7">자산 목록을 불러오지 못했습니다. ${error.message || ""}</td></tr>`;
         setStatus(error.message || "연회장 자산을 불러오지 못했습니다.", "warn");
       }
     }
 
+    function isAdminUser() {
+      return currentUser?.role === "admin";
+    }
+
+    function applyAssetPermissionState() {
+      assetPanel.classList.toggle("readonly", !isAdminUser());
+      let note = assetPanel.querySelector(".asset-permission-note");
+      if (!isAdminUser()) {
+        if (!note) {
+          note = document.createElement("div");
+          note.className = "asset-permission-note";
+          note.textContent = "일반 사용자는 자산 목록 조회만 가능합니다. 추가, 수정, 삭제는 관리자만 사용할 수 있습니다.";
+          assetForm.insertAdjacentElement("beforebegin", note);
+        }
+        resetAssetForm();
+      } else if (note) {
+        note.remove();
+      }
+    }
+
     function renderBanquetAssets() {
+      applyAssetPermissionState();
       assetTableBody.innerHTML = "";
       if (!banquetAssets.length) {
-        assetTableBody.innerHTML = '<tr><td colspan="5">등록된 자산이 없습니다.</td></tr>';
+        assetTableBody.innerHTML = '<tr><td colspan="7">등록된 자산이 없습니다.</td></tr>';
         return;
       }
 
       banquetAssets.forEach((asset) => {
         const row = document.createElement("tr");
+        const imageCell = document.createElement("td");
+        if (asset.image_url) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "asset-thumb-button";
+          button.addEventListener("click", () => openAssetImageModal(asset));
+          const image = document.createElement("img");
+          image.className = "asset-thumb";
+          image.src = asset.image_url;
+          image.alt = `${asset.asset_name || "자산"} 이미지`;
+          button.append(image);
+          imageCell.append(button);
+        } else {
+          const empty = document.createElement("span");
+          empty.className = "asset-no-image";
+          empty.textContent = "없음";
+          imageCell.append(empty);
+        }
+        row.append(imageCell);
         [
           asset.asset_name || "",
           asset.floor || "",
+          asset.location || "",
           asset.quantity ?? "",
           asset.spec || "",
         ].forEach((value, index) => {
           const cell = document.createElement("td");
           cell.textContent = value;
-          if (index === 2) cell.className = "number-cell";
+          if (index === 3) cell.className = "number-cell";
           row.append(cell);
         });
 
         const actionCell = document.createElement("td");
+        actionCell.className = "admin-only-cell";
         const actions = document.createElement("div");
         actions.className = "asset-actions";
         const editButton = document.createElement("button");
@@ -2820,11 +3708,20 @@
     }
 
     function startEditBanquetAsset(asset) {
+      if (!isAdminUser()) {
+        setStatus("자산 수정은 관리자만 사용할 수 있습니다.", "warn");
+        return;
+      }
       editingAssetId = asset.id;
+      editingAssetImageUrl = asset.image_url || "";
+      selectedAssetImageFile = null;
       assetNameInput.value = asset.asset_name || "";
       assetFloorInput.value = asset.floor || "";
+      assetLocationInput.value = asset.location || "";
       assetQuantityInput.value = asset.quantity ?? "";
       assetSpecInput.value = asset.spec || "";
+      assetImageInput.value = "";
+      renderAssetImagePreview(editingAssetImageUrl);
       assetSaveButton.textContent = "저장";
       assetCancelButton.hidden = false;
       assetNameInput.focus();
@@ -2832,24 +3729,95 @@
 
     function resetAssetForm() {
       editingAssetId = null;
+      editingAssetImageUrl = "";
+      selectedAssetImageFile = null;
       assetForm.reset();
+      renderAssetImagePreview("");
       assetSaveButton.textContent = "등록";
       assetCancelButton.hidden = true;
     }
 
+    function handleAssetImageSelection(event) {
+      const file = event.target.files?.[0] || null;
+      selectedAssetImageFile = file;
+      if (!file) {
+        renderAssetImagePreview(editingAssetImageUrl);
+        return;
+      }
+      const previewUrl = URL.createObjectURL(file);
+      renderAssetImagePreview(previewUrl, file.name);
+    }
+
+    function renderAssetImagePreview(imageUrl, labelText = "") {
+      assetImagePreview.innerHTML = "";
+      if (!imageUrl) {
+        assetImagePreview.textContent = "이미지 없음";
+        return;
+      }
+      const image = document.createElement("img");
+      image.src = imageUrl;
+      image.alt = "자산 이미지 미리보기";
+      const label = document.createElement("span");
+      label.textContent = labelText || "기존 이미지";
+      assetImagePreview.append(image, label);
+    }
+
+    function openAssetImageModal(asset) {
+      if (!asset.image_url) return;
+      imageModalTitle.textContent = asset.asset_name || "자산 이미지";
+      imageModalImg.src = asset.image_url;
+      imageModal.classList.add("visible");
+    }
+
+    function closeAssetImageModal() {
+      imageModal.classList.remove("visible");
+      imageModalImg.removeAttribute("src");
+    }
+
+    async function uploadAssetImage(file, assetId) {
+      const extension = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+      const storagePath = `assets/${assetId || "asset"}_${Date.now()}.${extension}`;
+      const encodedPath = encodeURIComponent(storagePath);
+      const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${supabaseConfig.assetImageBucket}/${encodedPath}`;
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: {
+          apikey: supabaseConfig.anonKey,
+          Authorization: `Bearer ${supabaseConfig.anonKey}`,
+          "Content-Type": file.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        body: file,
+      });
+      const body = await parseSupabaseResponse(response).catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message || body?.error || "자산 이미지 업로드에 실패했습니다. asset-images 버킷이 있는지 확인해주세요.");
+      }
+      return `${supabaseConfig.url}/storage/v1/object/public/${supabaseConfig.assetImageBucket}/${encodedPath}`;
+    }
+
     async function saveBanquetAsset(event) {
       event.preventDefault();
+      if (!isAdminUser()) {
+        setStatus("자산 등록/수정은 관리자만 사용할 수 있습니다.", "warn");
+        return;
+      }
       const payload = {
         asset_name: assetNameInput.value.trim(),
         floor: assetFloorInput.value.trim(),
+        location: assetLocationInput.value.trim(),
         quantity: toNullableInteger(assetQuantityInput.value),
         spec: assetSpecInput.value.trim(),
+        image_url: editingAssetImageUrl || null,
       };
       if (!payload.asset_name) return;
 
       assetSaveButton.disabled = true;
       try {
         if (editingAssetId) {
+          if (selectedAssetImageFile) {
+            payload.image_url = await uploadAssetImage(selectedAssetImageFile, editingAssetId);
+          }
           await loggedSupabaseRequest(
             "banquet_assets update",
             `banquet_assets?id=eq.${encodeURIComponent(editingAssetId)}`,
@@ -2861,11 +3829,24 @@
           );
           setStatus("연회장 자산을 수정했습니다.");
         } else {
-          await loggedSupabaseRequest("banquet_assets insert", "banquet_assets", {
+          const insertedRows = await loggedSupabaseRequest("banquet_assets insert", "banquet_assets", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Prefer: "return=representation" },
             body: JSON.stringify(payload),
           });
+          const insertedAsset = insertedRows?.[0];
+          if (selectedAssetImageFile && insertedAsset?.id) {
+            const imageUrl = await uploadAssetImage(selectedAssetImageFile, insertedAsset.id);
+            await loggedSupabaseRequest(
+              "banquet_assets image update",
+              `banquet_assets?id=eq.${encodeURIComponent(insertedAsset.id)}`,
+              {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image_url: imageUrl }),
+              }
+            );
+          }
           setStatus("연회장 자산을 등록했습니다.");
         }
         resetAssetForm();
@@ -2879,6 +3860,10 @@
     }
 
     async function deleteBanquetAsset(asset) {
+      if (!isAdminUser()) {
+        setStatus("자산 삭제는 관리자만 사용할 수 있습니다.", "warn");
+        return;
+      }
       if (!window.confirm(`"${asset.asset_name}" 자산을 삭제하시겠습니까?`)) return;
       try {
         await loggedSupabaseRequest(
@@ -2907,17 +3892,23 @@
 
     function mapDatabaseEvent(row) {
       const notes = row.event_notes || [];
+      const internalMemoNotes = notes
+        .filter((note) => note.note_type === "internal_memo" && cleanValue(note.content))
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       return {
         id: row.id,
         eventName: row.event_name || "",
         companyName: row.company_name || "",
         eventDateTime: row.event_datetime || "",
         venue: row.venue || "",
-        color: row.color || "green",
+        guestCount: row.guest_count ?? "",
+        color: normalizeEventColorKey(row.color || "gray"),
+        eventType: row.event_type || "",
         originalFilename: row.original_filename || "",
         storagePath: row.storage_path || "",
         originalFileUrl: row.storage_path ? buildPublicStorageUrl(row.storage_path) : "",
-        internalMemo: row.internal_memo || notes.find((note) => note.note_type === "internal_memo")?.content || "",
+        internalMemo: row.internal_memo || internalMemoNotes[0]?.content || "",
+        internalMemoNotes,
         calendarDates: (row.event_calendar_dates || []).map((item) => item.calendar_date),
         schedule: (row.event_schedules || []).map((item) => ({
           date: item.schedule_date || "",
@@ -2980,6 +3971,7 @@
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
       calendarTitle.textContent = `${year}년 ${month + 1}월`;
+      syncExportDefaults();
       calendarGrid.innerHTML = "";
       const todayKey = formatDateKey(new Date());
 
@@ -3011,8 +4003,17 @@
           const button = document.createElement("button");
           button.type = "button";
           button.className = "event-pill";
-          button.textContent = eventItem.eventName;
-          const color = eventColors[eventItem.color] || eventColors.green;
+          if (eventItem.eventType) {
+            const type = document.createElement("span");
+            type.className = "event-pill-type";
+            type.textContent = eventItem.eventType;
+            button.append(type);
+          }
+          const name = document.createElement("span");
+          name.className = "event-pill-name";
+          name.textContent = eventItem.eventName;
+          button.append(name);
+          const color = eventColors[normalizeEventColorKey(eventItem.color)] || eventColors.gray;
           button.style.background = color.background;
           button.style.borderColor = color.border;
           button.style.color = color.text;
@@ -3023,6 +4024,238 @@
         calendarGrid.append(dayCell);
       }
 
+    }
+
+    function syncExportDefaults() {
+      if (!exportYear.value) exportYear.value = String(calendarDate.getFullYear());
+      if (!exportMonth.value) exportMonth.value = String(calendarDate.getMonth() + 1);
+      updateExportControls();
+    }
+
+    function updateExportControls() {
+      const panel = document.querySelector(".export-panel");
+      if (!panel) return;
+      panel.classList.remove("mode-all", "mode-year", "mode-month", "mode-range");
+      panel.classList.add(`mode-${exportMode.value}`);
+    }
+
+    async function exportEventsToExcel() {
+      if (!window.XLSX) {
+        setStatus("엑셀 생성 라이브러리를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.", "error");
+        return;
+      }
+
+      try {
+        setStatus("Supabase에서 행사 데이터를 불러와 엑셀 파일을 생성하는 중입니다...");
+        const rows = await fetchEventRowsFromSupabase();
+        const events = rows.map(mapDatabaseEvent);
+        const exportRows = buildExportRows(events).filter(isExportRowInSelectedRange);
+        if (!exportRows.length) {
+          setStatus("선택한 기준에 해당하는 행사 데이터가 없습니다.", "warn");
+          return;
+        }
+        exportRows.sort(compareExportRows);
+        const workbook = createEventExportWorkbook(exportRows);
+        window.XLSX.writeFile(workbook, buildExportFileName());
+        setStatus(`${exportRows.length.toLocaleString("ko-KR")}개 행사 행을 엑셀로 다운로드했습니다.`);
+      } catch (error) {
+        console.error("excel export failed:", error);
+        setStatus(error.message || "엑셀 다운로드에 실패했습니다.", "error");
+      }
+    }
+
+    function buildExportRows(events) {
+      return (events || []).flatMap((eventItem) => {
+        const dateKeys = getExportDateKeys(eventItem);
+        return dateKeys.map((dateKey) => {
+          const date = dateKeyToLocalDate(dateKey);
+          return {
+            dateKey,
+            date,
+            year: date?.getFullYear() || "",
+            month: date ? date.getMonth() + 1 : "",
+            day: date?.getDate() || "",
+            weekday: date ? ["일", "월", "화", "수", "목", "금", "토"][date.getDay()] : "",
+            eventName: eventItem.eventName || "",
+            companyName: eventItem.companyName || "",
+            venue: eventItem.venue || "",
+            guestCount: toNullableInteger(eventItem.guestCount),
+            schedule: formatScheduleForExport(eventItem.schedule),
+            foodItems: formatFoodItemsForExport(eventItem.items),
+            amount: sumItemAmounts(eventItem.items),
+            layoutEqp: (eventItem.layoutEqp || []).filter(Boolean).join("\n"),
+            others: (eventItem.others || []).filter(Boolean).join("\n"),
+            internalMemo: getInternalMemoForExport(eventItem),
+            eventDateTime: eventItem.eventDateTime || "",
+          };
+        });
+      });
+    }
+
+    function getExportDateKeys(eventItem) {
+      const keys = new Set();
+      (eventItem.calendarDates || []).forEach((dateKey) => {
+        if (dateKey) keys.add(dateKey);
+      });
+      extractDateRange(eventItem.eventDateTime).forEach((dateKey) => {
+        if (dateKey) keys.add(dateKey);
+      });
+      const parsed = parseEventDateKey(eventItem.eventDateTime);
+      if (!keys.size && parsed) keys.add(parsed);
+      return [...keys];
+    }
+
+    function isExportRowInSelectedRange(row) {
+      const mode = exportMode.value;
+      if (mode === "all") return true;
+      if (!row.date) return false;
+
+      const year = Number(exportYear.value || calendarDate.getFullYear());
+      const month = Number(exportMonth.value || calendarDate.getMonth() + 1);
+      if (mode === "year") return row.year === year;
+      if (mode === "month") return row.year === year && row.month === month;
+      if (mode === "range") {
+        const start = exportStartDate.value ? dateKeyToLocalDate(exportStartDate.value) : null;
+        const end = exportEndDate.value ? dateKeyToLocalDate(exportEndDate.value) : null;
+        if (start && row.date < start) return false;
+        if (end && row.date > end) return false;
+      }
+      return true;
+    }
+
+    function compareExportRows(a, b) {
+      return (a.year || 0) - (b.year || 0)
+        || (a.month || 0) - (b.month || 0)
+        || (a.day || 0) - (b.day || 0)
+        || String(a.eventDateTime).localeCompare(String(b.eventDateTime), "ko-KR");
+    }
+
+    function createEventExportWorkbook(rows) {
+      const headers = ["연도", "월", "일자", "요일", "행사명", "주최/주관", "장소", "대표 행사 인원", "스케줄", "식음 항목", "금액", "세팅/EQP", "기타사항", "내부메모"];
+      const aoa = [headers];
+      let currentYear = null;
+      let currentMonth = null;
+
+      rows.forEach((row) => {
+        if (row.year !== currentYear) {
+          currentYear = row.year;
+          currentMonth = null;
+          aoa.push([`${row.year}년`]);
+        }
+        if (row.month !== currentMonth) {
+          currentMonth = row.month;
+          aoa.push(["", `${row.month}월`]);
+        }
+        aoa.push([
+          row.year,
+          row.month,
+          row.day,
+          row.weekday,
+          row.eventName,
+          row.companyName,
+          row.venue,
+          row.guestCount ?? "",
+          row.schedule,
+          row.foodItems,
+          row.amount || "",
+          row.layoutEqp,
+          row.others,
+          row.internalMemo,
+        ]);
+      });
+
+      const sheet = window.XLSX.utils.aoa_to_sheet(aoa);
+      sheet["!cols"] = headers.map((header, index) => ({ wch: getExportColumnWidth(index) }));
+      sheet["!rows"] = aoa.map((row, index) => ({ hpt: index === 0 ? 24 : Math.max(22, estimateRowHeight(row)) }));
+      applyExportSheetStyles(sheet, headers.length);
+
+      const workbook = window.XLSX.utils.book_new();
+      window.XLSX.utils.book_append_sheet(workbook, sheet, "연회 행사 계획");
+      return workbook;
+    }
+
+    function applyExportSheetStyles(sheet, colCount) {
+      const range = window.XLSX.utils.decode_range(sheet["!ref"]);
+      for (let rowIndex = range.s.r; rowIndex <= range.e.r; rowIndex += 1) {
+        for (let colIndex = range.s.c; colIndex <= range.e.c; colIndex += 1) {
+          const cellRef = window.XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+          const cell = sheet[cellRef];
+          if (!cell) continue;
+          cell.s = {
+            font: { bold: rowIndex === 0 || (colIndex === 0 && typeof cell.v === "string" && cell.v.endsWith("년")) },
+            alignment: { vertical: "top", wrapText: true },
+          };
+          if (rowIndex === 0) {
+            cell.s.fill = { fgColor: { rgb: "0F2A43" } };
+            cell.s.font = { bold: true, color: { rgb: "FFFFFF" } };
+          }
+          if (colIndex === 10 && typeof cell.v === "number") {
+            cell.z = '#,##0"원"';
+          }
+        }
+      }
+      sheet["!autofilter"] = { ref: window.XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } }) };
+    }
+
+    function getExportColumnWidth(index) {
+      return [8, 6, 6, 6, 32, 24, 22, 14, 42, 34, 14, 32, 32, 36][index] || 16;
+    }
+
+    function estimateRowHeight(row) {
+      const longestLineCount = Math.max(...row.map((value) => String(value ?? "").split("\n").length));
+      return 20 + Math.min(longestLineCount, 6) * 8;
+    }
+
+    function formatScheduleForExport(schedule) {
+      return (schedule || [])
+        .map((item) => [item.date, item.time, item.content, item.venue].map(cleanValue).filter(Boolean).join(" | "))
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    function formatFoodItemsForExport(items) {
+      return (items || [])
+        .map((item) => {
+          const parts = [item.itemName, item.quantity ? `수량 ${item.quantity}` : "", item.unitPrice ? `단가 ${formatCurrencyValue(item.unitPrice)}` : ""].filter(Boolean);
+          return parts.join(" / ");
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    function sumItemAmounts(items) {
+      return (items || []).reduce((sum, item) => sum + (toNullableNumber(item.amount) || 0), 0);
+    }
+
+    function formatCurrencyValue(value) {
+      const amount = toNullableNumber(value);
+      return amount ? `${amount.toLocaleString("ko-KR")}원` : cleanValue(value);
+    }
+
+    function getInternalMemoForExport(eventItem) {
+      const notes = eventItem.internalMemoNotes?.length
+        ? eventItem.internalMemoNotes.map((note) => cleanValue(note.content)).filter(Boolean)
+        : [cleanValue(eventItem.internalMemo)].filter(Boolean);
+      return notes.length ? notes.join("\n") : "";
+    }
+
+    function buildExportFileName() {
+      const mode = exportMode.value;
+      const year = Number(exportYear.value || calendarDate.getFullYear());
+      const month = pad2(Number(exportMonth.value || calendarDate.getMonth() + 1));
+      if (mode === "year") return `banquet_events_${year}.xlsx`;
+      if (mode === "month") return `banquet_events_${year}_${month}.xlsx`;
+      if (mode === "range") {
+        const start = (exportStartDate.value || "all").replaceAll("-", "_");
+        const end = (exportEndDate.value || "all").replaceAll("-", "_");
+        return `banquet_events_${start}_to_${end}.xlsx`;
+      }
+      return "banquet_events_all.xlsx";
+    }
+
+    function dateKeyToLocalDate(dateKey) {
+      const [year, month, day] = String(dateKey || "").split("-").map(Number);
+      return year && month && day ? new Date(year, month - 1, day) : null;
     }
 
     function openEventModal(eventItem, calendarDateKey = eventItem.calendarDates?.[0] || null) {
@@ -3037,6 +4270,8 @@
         ["행사주최", eventItem.companyName],
         ["행사일시", eventItem.eventDateTime],
         ["장소", eventItem.venue],
+        ["대표 행사 인원", formatPeopleSummary(eventItem)],
+        ["행사 유형", eventItem.eventType || "미입력"],
       ].forEach(([labelText, valueText]) => {
         const card = document.createElement("article");
         card.className = `info-card${valueText ? "" : " missing"}`;
@@ -3119,9 +4354,49 @@
       label.textContent = labelText;
       const control = document.createElement(multiline ? "textarea" : "input");
       control.dataset.editorField = fieldName;
+      if (!multiline && fieldName === "guestCount") {
+        control.type = "number";
+        control.min = "0";
+        control.step = "1";
+      }
       control.value = value;
       field.append(label, control);
       return field;
+    }
+
+    function createEventTypeEditor(eventItem) {
+      const card = document.createElement("article");
+      card.className = "info-card wide-card";
+      const label = document.createElement("div");
+      label.className = "info-label";
+      label.textContent = "행사 유형";
+
+      const typeInput = document.createElement("input");
+      typeInput.type = "text";
+      typeInput.className = "preview-input";
+      typeInput.dataset.editorField = "eventType";
+      typeInput.placeholder = "예: 가족행사, 세미나, 제약회사";
+      typeInput.value = eventItem.eventType || "";
+
+      const colorInput = document.createElement("input");
+      colorInput.type = "hidden";
+      colorInput.dataset.editorField = "color";
+      colorInput.value = normalizeEventColorKey(eventItem.color || "gray");
+
+      const colorLabel = document.createElement("div");
+      colorLabel.className = "info-label";
+      colorLabel.textContent = "캘린더 색상";
+      const holder = document.createElement("div");
+      const renderOptions = () => {
+        holder.replaceChildren(createEventTypeColorOptions(colorInput.value, (key) => {
+          colorInput.value = key;
+          renderOptions();
+        }));
+      };
+      renderOptions();
+
+      card.append(label, typeInput, colorLabel, holder, colorInput);
+      return card;
     }
 
     function openEditModal(eventItem) {
@@ -3132,7 +4407,8 @@
         createFormField("행사명", "eventName", eventItem.eventName),
         createFormField("행사주최", "companyName", eventItem.companyName),
         createFormField("행사일시", "eventDateTime", eventItem.eventDateTime),
-        createFormField("장소", "venue", eventItem.venue)
+        createFormField("장소", "venue", eventItem.venue),
+        createFormField("대표 행사 인원", "guestCount", eventItem.guestCount)
       );
 
       const scheduleEditor = createEditableTable(
@@ -3152,6 +4428,7 @@
       const layoutField = createFormField("Lay out & EQP", "layoutEqp", (eventItem.layoutEqp || []).join("\n"), true);
       const othersField = createFormField("Others", "others", (eventItem.others || []).join("\n"), true);
       const memoField = createFormField("내부 메모", "internalMemo", eventItem.internalMemo || "", true);
+      const eventTypeEditor = createEventTypeEditor(eventItem);
 
       const actions = document.createElement("div");
       actions.className = "modal-actions";
@@ -3167,7 +4444,7 @@
       saveButton.addEventListener("click", () => saveEditedEvent(eventItem.id));
       actions.append(cancelButton, saveButton);
 
-      modalBody.append(baseGrid, scheduleEditor, itemsEditor, layoutField, othersField, memoField, actions);
+      modalBody.append(baseGrid, eventTypeEditor, scheduleEditor, itemsEditor, layoutField, othersField, memoField, actions);
     }
 
     function createEditableTable(title, collectionName, headers, keys, rows) {
@@ -3260,12 +4537,20 @@
         companyName: getEditorValue("companyName"),
         eventDateTime: getEditorValue("eventDateTime"),
         venue: getEditorValue("venue"),
+        guestCount: getEditorValue("guestCount"),
+        color: getEditorValue("color") || savedEvents[eventIndex].color,
+        eventType: getEditorValue("eventType"),
         schedule: readEditableTable("schedule", ["date", "time", "content", "venue", "people"]),
         items: readEditableTable("items", ["itemName", "unitPrice", "quantity", "amount"]),
         layoutEqp: splitEditorLines(getEditorValue("layoutEqp")),
         others: splitEditorLines(getEditorValue("others")),
         internalMemo: getEditorValue("internalMemo"),
       };
+      if (toNullableInteger(updatedEvent.guestCount) === null) {
+        setStatus("대표 행사 인원을 입력해주세요.", "warn");
+        modalBody.querySelector('[data-editor-field="guestCount"]')?.focus();
+        return;
+      }
       try {
         setStatus("수정한 행사 정보를 Supabase Database에 저장하는 중입니다...");
         await updateEventInSupabase(updatedEvent);
@@ -3421,7 +4706,9 @@
     }
 
     function formatDateLabel(dateKey) {
+      if (!dateKey) return "";
       const [year, month, day] = dateKey.split("-");
+      if (!year || !month || !day) return "";
       return `${year}.${month}.${day}`;
     }
 
@@ -3893,10 +5180,87 @@
       renderExtractedInfo,
     };
 
-    function initializeEventOrderPreview() {
+    let appInitialized = false;
+
+    function readStoredUser() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(authStorageKey) || "null");
+        if (!stored?.id || !stored?.role) return null;
+        const account = loginAccounts.find((item) => item.id === stored.id && item.role === stored.role);
+        return account ? { id: account.id, role: account.role, label: account.label } : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function persistCurrentUser(user) {
+      localStorage.setItem(authStorageKey, JSON.stringify({ id: user.id, role: user.role, label: user.label }));
+    }
+
+    function setAppVisibility(isLoggedIn) {
+      loginScreen.hidden = isLoggedIn;
+      hotelTopbar.hidden = !isLoggedIn;
+      appMain.hidden = !isLoggedIn;
+      mobileBottomNav.hidden = !isLoggedIn;
+    }
+
+    function updateCurrentUserBadge() {
+      if (!currentUser) {
+        currentUserBadge.textContent = "로그인 필요";
+        return;
+      }
+      currentUserBadge.textContent = `${currentUser.label} · ${currentUser.id}`;
+    }
+
+    function startAuthenticatedApp() {
+      setAppVisibility(true);
+      updateCurrentUserBadge();
+      applyAssetPermissionState();
+      if (appInitialized) {
+        renderBanquetAssets();
+        return;
+      }
+      appInitialized = true;
       renderCalendar();
       loadEventsFromSupabase();
       loadBanquetAssets();
+    }
+
+    function handleLogin(event) {
+      event.preventDefault();
+      const id = loginIdInput.value.trim();
+      const password = loginPasswordInput.value;
+      const account = loginAccounts.find((item) => item.id === id && item.password === password);
+      if (!account) {
+        loginError.textContent = "아이디 또는 비밀번호가 올바르지 않습니다.";
+        return;
+      }
+      currentUser = { id: account.id, role: account.role, label: account.label };
+      persistCurrentUser(currentUser);
+      loginError.textContent = "";
+      loginForm.reset();
+      startAuthenticatedApp();
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      localStorage.removeItem(authStorageKey);
+      appInitialized = false;
+      setAppVisibility(false);
+      updateCurrentUserBadge();
+      resetAssetForm();
+      loginIdInput.focus();
+    }
+
+    function initializeEventOrderPreview() {
+      currentUser = readStoredUser();
+      if (!currentUser) {
+        setAppVisibility(false);
+        updateCurrentUserBadge();
+        loginIdInput.focus();
+        return;
+      }
+      startAuthenticatedApp();
     }
 
     if (document.readyState === "loading") {
