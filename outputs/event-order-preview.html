@@ -1192,6 +1192,15 @@
       box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
     }
 
+    .excel-viewer-dialog {
+      width: 90vw;
+      height: 90vh;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
     .modal-header {
       display: flex;
       align-items: center;
@@ -1209,6 +1218,20 @@
 
     .modal-body {
       padding: 18px;
+    }
+
+    .excel-viewer-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      padding: 0;
+      background: #f8fafc;
+    }
+
+    .excel-viewer-frame {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: #fff;
     }
 
     .detail-grid {
@@ -2145,6 +2168,17 @@
         max-height: calc(100vh - 16px);
       }
 
+      .excel-viewer-dialog {
+        width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+      }
+
+      .excel-viewer-backdrop {
+        padding: 0;
+      }
+
       .detail-grid {
         grid-template-columns: 1fr;
       }
@@ -2487,6 +2521,18 @@
     </div>
   </div>
 
+  <div id="excelViewerModal" class="modal-backdrop excel-viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="excelViewerTitle">
+    <div class="modal excel-viewer-dialog">
+      <div class="modal-header">
+        <h2 id="excelViewerTitle" class="modal-title">원본 엑셀 보기</h2>
+        <button id="closeExcelViewerModal" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="modal-body excel-viewer-body">
+        <iframe id="excelViewerFrame" class="excel-viewer-frame" title="원본 엑셀 미리보기"></iframe>
+      </div>
+    </div>
+  </div>
+
   <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
     <button type="button" data-mobile-target="home"><span aria-hidden="true">⌂</span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span aria-hidden="true">□</span><strong>캘린더</strong></button>
@@ -2528,6 +2574,10 @@
     const closeImageModalButton = document.querySelector("#closeImageModal");
     const imageModalTitle = document.querySelector("#imageModalTitle");
     const imageModalImg = document.querySelector("#imageModalImg");
+    const excelViewerModal = document.querySelector("#excelViewerModal");
+    const closeExcelViewerModalButton = document.querySelector("#closeExcelViewerModal");
+    const excelViewerTitle = document.querySelector("#excelViewerTitle");
+    const excelViewerFrame = document.querySelector("#excelViewerFrame");
     const calendarTabButton = document.querySelector("#calendarTabButton");
     const assetTabButton = document.querySelector("#assetTabButton");
     const calendarPanel = document.querySelector("#calendarPanel");
@@ -2646,6 +2696,10 @@
     closeImageModalButton.addEventListener("click", closeAssetImageModal);
     imageModal.addEventListener("click", (event) => {
       if (event.target === imageModal) closeAssetImageModal();
+    });
+    closeExcelViewerModalButton.addEventListener("click", closeExcelViewerModal);
+    excelViewerModal.addEventListener("click", (event) => {
+      if (event.target === excelViewerModal) closeExcelViewerModal();
     });
 
     calendarTabButton.addEventListener("click", () => activateWorkspaceTab("calendar"));
@@ -4480,6 +4534,8 @@
       const fileNameValue = document.createElement("div");
       fileNameValue.className = "info-value";
       fileNameValue.textContent = eventItem.originalFilename || "저장된 원본 파일이 없습니다.";
+      const fileActions = document.createElement("div");
+      fileActions.className = "modal-actions";
       const fileButton = document.createElement("button");
       fileButton.type = "button";
       fileButton.className = "primary-button";
@@ -4490,12 +4546,23 @@
           openStoredExcel(eventItem.storagePath);
         });
       }
+      const downloadButton = document.createElement("button");
+      downloadButton.type = "button";
+      downloadButton.className = "secondary-button";
+      downloadButton.textContent = "원본 다운로드";
+      downloadButton.disabled = !eventItem.storagePath;
+      if (eventItem.storagePath) {
+        downloadButton.addEventListener("click", () => {
+          downloadStoredExcel(eventItem.storagePath, eventItem.originalFilename);
+        });
+      }
+      fileActions.append(fileButton, downloadButton);
       const fileNote = document.createElement("p");
       fileNote.className = "file-storage-note";
       fileNote.textContent = eventItem.storagePath
         ? `Storage 경로: ${eventItem.storagePath}`
         : "Supabase Storage 연결 후 사용 가능";
-      fileCard.append(fileLabel, fileNameValue, fileButton, fileNote);
+      fileCard.append(fileLabel, fileNameValue, fileActions, fileNote);
 
       const scheduleCard = document.createElement("article");
       scheduleCard.className = `info-card schedule-card${eventItem.schedule.length ? "" : " missing"}`;
@@ -4845,7 +4912,26 @@
     }
 
     function openStoredExcel(storagePath) {
-      window.open(buildPublicStorageUrl(storagePath), "_blank", "noopener,noreferrer");
+      const fileUrl = buildPublicStorageUrl(storagePath);
+      excelViewerTitle.textContent = "원본 엑셀 보기";
+      excelViewerFrame.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+      excelViewerModal.classList.add("visible");
+    }
+
+    function closeExcelViewerModal() {
+      excelViewerModal.classList.remove("visible");
+      excelViewerFrame.removeAttribute("src");
+    }
+
+    function downloadStoredExcel(storagePath, filename = "") {
+      const link = document.createElement("a");
+      link.href = buildPublicStorageUrl(storagePath);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      if (filename) link.download = filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
     }
 
     function buildPublicStorageUrl(storagePath) {
