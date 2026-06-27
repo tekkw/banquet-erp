@@ -903,6 +903,7 @@
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
       align-items: stretch;
+      overflow: visible;
     }
 
     .weekday,
@@ -927,6 +928,7 @@
 
     .calendar-day {
       min-height: 118px;
+      position: relative;
       padding: 8px;
       background: #fff;
     }
@@ -960,48 +962,64 @@
       white-space: nowrap;
     }
 
-    .calendar-event-slot {
-      min-height: 32px;
-      margin-top: 5px;
+    .calendar-week {
+      grid-column: 1 / -1;
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 6px;
+      min-height: 132px;
+      overflow: visible;
     }
 
-    .calendar-event-placeholder {
+    .calendar-week .calendar-day {
+      min-height: 100%;
+    }
+
+    .calendar-week .calendar-day:hover {
+      transform: none;
+    }
+
+    .calendar-event-layer {
+      position: absolute;
+      inset: 38px 0 8px;
+      z-index: 4;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-auto-rows: 32px;
+      gap: 5px 6px;
       pointer-events: none;
+      overflow: visible;
     }
 
-    .event-pill.range-event {
+    .calendar-event-bar {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
       min-height: 32px;
-      margin-left: -8px;
-      margin-right: -8px;
-      border-left-width: 0;
-      border-right-width: 0;
-      border-radius: 0;
-      box-shadow: none;
+      padding: 5px 10px;
+      border: 1px solid #b9ddd5;
+      border-radius: 999px;
+      background: #e7f4f1;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 800;
+      text-align: left;
+      cursor: pointer;
+      overflow: hidden;
+      white-space: nowrap;
+      pointer-events: auto;
+      box-shadow: 0 5px 12px rgba(15, 42, 67, 0.08);
     }
 
-    .event-pill.range-start,
-    .event-pill.range-week-start,
-    .calendar-day:nth-child(7n + 1) .event-pill.range-event {
-      margin-left: 0;
-      padding-left: 8px;
-      border-left-width: 1px;
-      border-top-left-radius: 999px;
-      border-bottom-left-radius: 999px;
+    .calendar-event-bar.range-continues-left {
+      border-top-left-radius: 4px;
+      border-bottom-left-radius: 4px;
     }
 
-    .event-pill.range-end,
-    .event-pill.range-week-end,
-    .calendar-day:nth-child(7n) .event-pill.range-event {
-      margin-right: 0;
-      padding-right: 8px;
-      border-right-width: 1px;
-      border-top-right-radius: 999px;
-      border-bottom-right-radius: 999px;
-    }
-
-    .event-pill.range-event:not(.range-start):not(.range-week-start) .event-pill-type,
-    .event-pill.range-event:not(.range-start):not(.range-week-start) .event-pill-name {
-      visibility: hidden;
+    .calendar-event-bar.range-continues-right {
+      border-top-right-radius: 4px;
+      border-bottom-right-radius: 4px;
     }
 
     .event-pill-type {
@@ -4046,40 +4064,48 @@
           isOutside: date.getMonth() !== month,
         };
       });
-      const segmentsByDate = buildCalendarSegments(calendarCells);
+      const eventRanges = getVisibleCalendarEventRanges(calendarCells);
 
-      calendarCells.forEach(({ date, dateKey, isOutside }) => {
-        const daySegments = segmentsByDate[dateKey] || [];
-        const dayCell = document.createElement("div");
-        dayCell.className = `calendar-day${isOutside ? " outside" : ""}`;
-        if (dateKey === todayKey) dayCell.classList.add("today");
-        if (daySegments.some(Boolean)) dayCell.classList.add("has-events");
+      for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+        const weekCells = calendarCells.slice(weekIndex * 7, weekIndex * 7 + 7);
+        const weekSegments = buildCalendarWeekSegments(weekCells, eventRanges);
+        const weekRow = document.createElement("div");
+        weekRow.className = "calendar-week";
+        const laneCount = weekSegments.reduce((max, segment) => Math.max(max, segment.laneIndex + 1), 0);
+        weekRow.style.minHeight = `${Math.max(132, 52 + laneCount * 37)}px`;
 
-        const dayNumber = document.createElement("div");
-        dayNumber.className = "day-number";
-        dayNumber.textContent = date.getDate();
-        dayCell.append(dayNumber);
+        weekCells.forEach(({ date, dateKey, isOutside }) => {
+          const dayCell = document.createElement("div");
+          dayCell.className = `calendar-day${isOutside ? " outside" : ""}`;
+          if (dateKey === todayKey) dayCell.classList.add("today");
+          if (weekSegments.some((segment) => isDateWithinRange(date, segment.segmentStart, segment.segmentEnd))) {
+            dayCell.classList.add("has-events");
+          }
 
-        daySegments.forEach((segment) => {
-          dayCell.append(createCalendarEventSlot(segment, dateKey));
+          const dayNumber = document.createElement("div");
+          dayNumber.className = "day-number";
+          dayNumber.textContent = date.getDate();
+          dayCell.append(dayNumber);
+          weekRow.append(dayCell);
         });
 
-        calendarGrid.append(dayCell);
-      });
+        const eventLayer = document.createElement("div");
+        eventLayer.className = "calendar-event-layer";
+        weekSegments.forEach((segment) => {
+          eventLayer.append(createCalendarEventBar(segment));
+        });
+        weekRow.append(eventLayer);
+        calendarGrid.append(weekRow);
+      }
 
     }
 
-    function createCalendarEventSlot(segment, dateKey) {
-      const slot = document.createElement("div");
-      slot.className = "calendar-event-slot";
-      if (!segment) {
-        slot.classList.add("calendar-event-placeholder");
-        return slot;
-      }
-
+    function createCalendarEventBar(segment) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = `event-pill ${segment.isRange ? "range-event" : ""} ${segment.positionClasses.join(" ")}`.trim();
+      button.className = `calendar-event-bar${segment.continuesLeft ? " range-continues-left" : ""}${segment.continuesRight ? " range-continues-right" : ""}`;
+      button.style.gridColumn = `${segment.columnStart} / ${segment.columnEnd}`;
+      button.style.gridRow = String(segment.laneIndex + 1);
       if (segment.eventItem.eventType) {
         const type = document.createElement("span");
         type.className = "event-pill-type";
@@ -4094,59 +4120,50 @@
       button.style.background = color.background;
       button.style.borderColor = color.border;
       button.style.color = color.text;
-      button.addEventListener("click", () => openEventModal(segment.eventItem, dateKey));
-      slot.append(button);
-      return slot;
+      button.addEventListener("click", () => openEventModal(segment.eventItem, segment.clickDateKey));
+      return button;
     }
 
-    function buildCalendarSegments(calendarCells) {
-      const segmentsByDate = Object.fromEntries(calendarCells.map((cell) => [cell.dateKey, []]));
+    function getVisibleCalendarEventRanges(calendarCells) {
       const calendarStart = calendarCells[0].date;
       const calendarEnd = calendarCells[calendarCells.length - 1].date;
-      const eventRanges = savedEvents
+      return savedEvents
         .map((eventItem) => ({ eventItem, ...getEventRenderRange(eventItem) }))
         .filter((item) => item.startDate && item.endDate && item.endDate >= calendarStart && item.startDate <= calendarEnd)
         .sort(compareCalendarEventRanges);
+    }
 
-      for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
-        const weekCells = calendarCells.slice(weekIndex * 7, weekIndex * 7 + 7);
-        const weekStart = weekCells[0].date;
-        const weekEnd = weekCells[6].date;
-        const weekRanges = eventRanges.filter((range) => range.endDate >= weekStart && range.startDate <= weekEnd);
-        const laneEnds = [];
+    function buildCalendarWeekSegments(weekCells, eventRanges) {
+      const weekStart = weekCells[0].date;
+      const weekEnd = weekCells[6].date;
+      const weekRanges = eventRanges.filter((range) => range.endDate >= weekStart && range.startDate <= weekEnd);
+      const laneEnds = [];
 
-        weekRanges.forEach((range) => {
-          const segmentStart = range.startDate > weekStart ? range.startDate : weekStart;
-          const segmentEnd = range.endDate < weekEnd ? range.endDate : weekEnd;
-          let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd < segmentStart);
-          if (laneIndex < 0) {
-            laneIndex = laneEnds.length;
-            laneEnds.push(segmentEnd);
-          } else {
-            laneEnds[laneIndex] = segmentEnd;
-          }
+      return weekRanges.map((range) => {
+        const segmentStart = range.startDate > weekStart ? range.startDate : weekStart;
+        const segmentEnd = range.endDate < weekEnd ? range.endDate : weekEnd;
+        let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd < segmentStart);
+        if (laneIndex < 0) {
+          laneIndex = laneEnds.length;
+          laneEnds.push(segmentEnd);
+        } else {
+          laneEnds[laneIndex] = segmentEnd;
+        }
 
-          for (const cell of weekCells) {
-            if (cell.date < segmentStart || cell.date > segmentEnd) continue;
-            while (segmentsByDate[cell.dateKey].length < laneIndex) {
-              segmentsByDate[cell.dateKey].push(null);
-            }
-            segmentsByDate[cell.dateKey][laneIndex] = {
-              eventItem: range.eventItem,
-              isRange: range.startKey !== range.endKey,
-              positionClasses: getRangePositionClasses(cell.date, range.startDate, range.endDate, weekStart, weekEnd),
-            };
-          }
-        });
-
-        weekCells.forEach((cell) => {
-          while (segmentsByDate[cell.dateKey].length < laneEnds.length) {
-            segmentsByDate[cell.dateKey].push(null);
-          }
-        });
-      }
-
-      return segmentsByDate;
+        const columnStart = daysBetween(weekStart, segmentStart) + 1;
+        const columnEnd = daysBetween(weekStart, segmentEnd) + 2;
+        return {
+          eventItem: range.eventItem,
+          segmentStart,
+          segmentEnd,
+          columnStart,
+          columnEnd,
+          laneIndex,
+          continuesLeft: segmentStart > range.startDate,
+          continuesRight: segmentEnd < range.endDate,
+          clickDateKey: formatDateKey(segmentStart),
+        };
+      });
     }
 
     function compareCalendarEventRanges(a, b) {
@@ -4155,15 +4172,14 @@
         || String(a.eventItem.eventName).localeCompare(String(b.eventItem.eventName), "ko-KR");
     }
 
-    function getRangePositionClasses(date, startDate, endDate, weekStart, weekEnd) {
-      const classes = [];
-      if (sameDate(date, startDate)) classes.push("range-start");
-      if (sameDate(date, endDate)) classes.push("range-end");
-      if (date > startDate && date < endDate) classes.push("range-middle");
-      if (sameDate(date, weekStart) && date > startDate) classes.push("range-week-start");
-      if (sameDate(date, weekEnd) && date < endDate) classes.push("range-week-end");
-      if (sameDate(startDate, endDate)) classes.push("range-single");
-      return classes;
+    function isDateWithinRange(date, startDate, endDate) {
+      return date >= startDate && date <= endDate;
+    }
+
+    function daysBetween(startDate, endDate) {
+      const start = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+      const end = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+      return Math.round((end - start) / 86400000);
     }
 
     function syncExportDefaults() {
