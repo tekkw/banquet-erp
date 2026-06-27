@@ -6,6 +6,8 @@ create table if not exists public.event_orders (
   company_name text,
   event_datetime text,
   venue text,
+  guest_count integer,
+  event_type text,
   color text not null default 'green',
   original_filename text,
   storage_path text,
@@ -13,6 +15,12 @@ create table if not exists public.event_orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.event_orders
+add column if not exists guest_count integer;
+
+alter table public.event_orders
+add column if not exists event_type text;
 
 create table if not exists public.event_calendar_dates (
   id uuid primary key default gen_random_uuid(),
@@ -55,11 +63,23 @@ create table if not exists public.banquet_assets (
   id uuid primary key default gen_random_uuid(),
   asset_name text not null,
   floor text,
+  location text,
   quantity integer,
   spec text,
+  image_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.banquet_assets
+add column if not exists location text;
+
+alter table public.banquet_assets
+add column if not exists image_url text;
+
+insert into storage.buckets (id, name, public)
+values ('asset-images', 'asset-images', true)
+on conflict (id) do nothing;
 
 create or replace function public.set_event_orders_updated_at()
 returns trigger
