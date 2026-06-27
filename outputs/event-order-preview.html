@@ -2620,6 +2620,7 @@
     let previewExtracted = null;
     let similarEvents = [];
     let similarEventsLoading = false;
+    let similarEventsExpanded = false;
     let uploadedOriginalFile = null;
     let savedEvents = [];
     let banquetAssets = [];
@@ -2774,6 +2775,7 @@
         selectedEventType = "";
         similarEvents = [];
         similarEventsLoading = true;
+        similarEventsExpanded = false;
         renderExtractedInfo(extracted);
         loadSimilarEventsForPreview();
         const totalRows = loadedSheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
@@ -2941,24 +2943,41 @@
       titleWrap.append(title, description);
       header.append(titleWrap);
 
-      const list = document.createElement("div");
-      list.className = "similar-events-list";
-
       if (similarEventsLoading) {
+        const list = document.createElement("div");
+        list.className = "similar-events-list";
         const loading = document.createElement("div");
         loading.className = "empty-state";
         loading.textContent = "과거 유사 행사를 조회하는 중입니다.";
         list.append(loading);
+        section.append(header, list);
       } else if (!similarEvents.length) {
+        const list = document.createElement("div");
+        list.className = "similar-events-list";
         const empty = document.createElement("div");
         empty.className = "empty-state";
         empty.textContent = "유사한 과거 행사가 없습니다.";
         list.append(empty);
+        section.append(header, list);
       } else {
-        similarEvents.forEach((eventItem) => list.append(createSimilarEventCard(eventItem)));
+        const toggleButton = document.createElement("button");
+        toggleButton.type = "button";
+        toggleButton.className = "secondary-button";
+        toggleButton.textContent = `${similarEventsExpanded ? "유사 행사 접기" : "유사 행사 보기"} (${similarEvents.length}건)`;
+        toggleButton.addEventListener("click", () => {
+          similarEventsExpanded = !similarEventsExpanded;
+          renderExtractedInfo(previewExtracted);
+        });
+        header.append(toggleButton);
+        section.append(header);
+        if (similarEventsExpanded) {
+          const list = document.createElement("div");
+          list.className = "similar-events-list";
+          similarEvents.forEach((eventItem) => list.append(createSimilarEventCard(eventItem)));
+          section.append(list);
+        }
       }
 
-      section.append(header, list);
       return section;
     }
 
@@ -3030,7 +3049,7 @@
       try {
         const rows = await fetchEventRowsFromSupabase();
         const events = rows.map(mapDatabaseEvent);
-        similarEvents = findSimilarEvents(pendingEvent, events).slice(0, 6);
+        similarEvents = findSimilarEvents(pendingEvent, events).slice(0, 5);
       } catch (error) {
         console.error("similar events load failed:", error);
         similarEvents = [];
@@ -3041,56 +3060,59 @@
     }
 
     function findSimilarEvents(sourceEvent, events) {
-      const sourceName = normalizeSearchText(sourceEvent.eventName);
-      const sourceCompany = normalizeSearchText(sourceEvent.companyName);
+      const sourceNameTokens = getCoreSearchTokens(sourceEvent.eventName);
+      const sourceCompanyTokens = getCompanySearchTokens(sourceEvent.companyName);
       const sourceDate = getEventPrimaryDate(sourceEvent);
 
       return (events || [])
         .map((eventItem) => {
-          const targetName = normalizeSearchText(eventItem.eventName);
-          const targetCompany = normalizeSearchText(eventItem.companyName);
+          const targetNameTokens = getCoreSearchTokens(eventItem.eventName);
+          const targetCompanyTokens = getCompanySearchTokens(eventItem.companyName);
           const targetDate = getEventPrimaryDate(eventItem);
           let score = 0;
+          let priority = 99;
           const reasons = [];
+          const companyScore = tokenOverlapRatio(sourceCompanyTokens, targetCompanyTokens);
+          const nameScore = tokenOverlapRatio(sourceNameTokens, targetNameTokens);
+          const sameCompany = companyScore >= 0.66 || hasTokenSubsetMatch(sourceCompanyTokens, targetCompanyTokens);
+          const similarCompany = companyScore >= 0.4 && sharedTokenCount(sourceCompanyTokens, targetCompanyTokens) >= 1;
+          const similarName = nameScore >= 0.5 && sharedTokenCount(sourceNameTokens, targetNameTokens) >= 1;
 
-          if (sourceName && targetName && (targetName.includes(sourceName) || sourceName.includes(targetName))) {
-            score += 45;
-            reasons.push("행사명 유사");
-          } else {
-            const overlap = tokenOverlapScore(sourceName, targetName);
-            if (overlap > 0) {
-              score += overlap * 28;
-              reasons.push("행사명 일부 일치");
-            }
-          }
-
-          if (sourceCompany && targetCompany && (targetCompany.includes(sourceCompany) || sourceCompany.includes(targetCompany))) {
-            score += 50;
+          if (sameCompany) {
+            priority = Math.min(priority, 1);
+            score += 100 + companyScore * 30;
             reasons.push("같은 주최/주관");
-          } else {
-            const overlap = tokenOverlapScore(sourceCompany, targetCompany);
-            if (overlap > 0) {
-              score += overlap * 32;
-              reasons.push("주최/주관 일부 일치");
-            }
+          } else if (similarCompany) {
+            priority = Math.min(priority, 1);
+            score += 82 + companyScore * 24;
+            reasons.push("주최/주관 유사");
           }
 
-          if (sourceDate && targetDate) {
+          if (similarName) {
+            priority = Math.min(priority, 2);
+            score += 56 + nameScore * 28;
+            reasons.push("행사명 핵심 단어 일치");
+          }
+
+          if ((sameCompany || similarCompany) && sourceDate && targetDate) {
             if (targetDate.getFullYear() === sourceDate.getFullYear() - 1 && targetDate.getMonth() === sourceDate.getMonth()) {
-              score += 22;
+              priority = Math.min(priority, 3);
+              score += 24;
               reasons.push("작년 같은 달");
             }
             const previousMonth = new Date(sourceDate.getFullYear(), sourceDate.getMonth() - 1, 1);
             if (targetDate.getFullYear() === previousMonth.getFullYear() && targetDate.getMonth() === previousMonth.getMonth()) {
+              priority = Math.min(priority, 4);
               score += 18;
-              reasons.push("전월 행사");
+              reasons.push("전월 같은 주최/주관");
             }
           }
 
-          return { ...eventItem, matchScore: score, matchReasons: [...new Set(reasons)], primaryDate: targetDate };
+          return { ...eventItem, matchScore: score, matchPriority: priority, matchReasons: [...new Set(reasons)], primaryDate: targetDate };
         })
-        .filter((eventItem) => eventItem.matchScore > 0)
+        .filter((eventItem) => eventItem.matchScore > 0 && eventItem.matchPriority < 99)
         .sort((a, b) => {
+          if (a.matchPriority !== b.matchPriority) return a.matchPriority - b.matchPriority;
           if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
           return (b.primaryDate?.getTime() || 0) - (a.primaryDate?.getTime() || 0);
         });
@@ -3100,19 +3122,60 @@
       return cleanValue(value).toLowerCase().replace(/\s+/g, "");
     }
 
-    function tokenOverlapScore(source, target) {
-      const sourceTokens = getSearchTokens(source);
-      const targetTokens = new Set(getSearchTokens(target));
-      if (!sourceTokens.length || !targetTokens.size) return 0;
-      const matches = sourceTokens.filter((token) => targetTokens.has(token)).length;
-      return matches / sourceTokens.length;
+    const genericEventKeywords = new Set([
+      "세미나",
+      "워크숍",
+      "워크샵",
+      "학회",
+      "교육",
+      "연수",
+      "간담회",
+      "회의",
+      "행사",
+      "포럼",
+      "컨퍼런스",
+    ]);
+
+    function tokenOverlapRatio(sourceTokens, targetTokens) {
+      if (!sourceTokens.length || !targetTokens.length) return 0;
+      const sourceSet = new Set(sourceTokens);
+      const targetSet = new Set(targetTokens);
+      const matches = [...sourceSet].filter((token) => targetSet.has(token)).length;
+      return matches / Math.min(sourceSet.size, targetSet.size);
+    }
+
+    function sharedTokenCount(sourceTokens, targetTokens) {
+      const targetSet = new Set(targetTokens);
+      return [...new Set(sourceTokens)].filter((token) => targetSet.has(token)).length;
+    }
+
+    function hasTokenSubsetMatch(sourceTokens, targetTokens) {
+      const sourceSet = new Set(sourceTokens);
+      const targetSet = new Set(targetTokens);
+      return sourceSet.size > 0 && targetSet.size > 0 && (
+        [...sourceSet].every((token) => targetSet.has(token)) ||
+        [...targetSet].every((token) => sourceSet.has(token))
+      );
+    }
+
+    function getCoreSearchTokens(value) {
+      return getSearchTokens(value).filter((token) => !genericEventKeywords.has(token));
+    }
+
+    function getCompanySearchTokens(value) {
+      return getSearchTokens(value).filter((token) => !["주식회사", "사단법인", "재단법인", "유한회사", "협회"].includes(token));
     }
 
     function getSearchTokens(value) {
       const compact = normalizeSearchText(value);
       if (!compact) return [];
-      const chunks = cleanValue(value).toLowerCase().split(/[^0-9a-z가-힣]+/).filter((token) => token.length >= 2);
-      return [...new Set([...chunks, compact].filter(Boolean))];
+      const chunks = cleanValue(value)
+        .toLowerCase()
+        .split(/[^0-9a-z가-힣]+/)
+        .map((token) => token.trim())
+        .filter((token) => token.length >= 2);
+      const compactToken = compact.length >= 2 ? compact : "";
+      return [...new Set([...chunks, compactToken].filter(Boolean))];
     }
 
     function getEventPrimaryDate(eventItem) {
