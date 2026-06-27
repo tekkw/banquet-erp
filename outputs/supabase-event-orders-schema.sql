@@ -5,6 +5,8 @@ create table if not exists public.event_orders (
   event_name text not null,
   company_name text,
   event_datetime text,
+  start_date date,
+  end_date date,
   venue text,
   guest_count integer,
   event_type text,
@@ -21,6 +23,12 @@ add column if not exists guest_count integer;
 
 alter table public.event_orders
 add column if not exists event_type text;
+
+alter table public.event_orders
+add column if not exists start_date date;
+
+alter table public.event_orders
+add column if not exists end_date date;
 
 create table if not exists public.event_calendar_dates (
   id uuid primary key default gen_random_uuid(),

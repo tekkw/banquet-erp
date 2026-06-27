@@ -902,6 +902,7 @@
     .calendar-grid {
       display: grid;
       grid-template-columns: repeat(7, minmax(0, 1fr));
+      align-items: stretch;
     }
 
     .weekday,
@@ -957,6 +958,50 @@
       cursor: pointer;
       overflow: hidden;
       white-space: nowrap;
+    }
+
+    .calendar-event-slot {
+      min-height: 32px;
+      margin-top: 5px;
+    }
+
+    .calendar-event-placeholder {
+      pointer-events: none;
+    }
+
+    .event-pill.range-event {
+      min-height: 32px;
+      margin-left: -8px;
+      margin-right: -8px;
+      border-left-width: 0;
+      border-right-width: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .event-pill.range-start,
+    .event-pill.range-week-start,
+    .calendar-day:nth-child(7n + 1) .event-pill.range-event {
+      margin-left: 0;
+      padding-left: 8px;
+      border-left-width: 1px;
+      border-top-left-radius: 999px;
+      border-bottom-left-radius: 999px;
+    }
+
+    .event-pill.range-end,
+    .event-pill.range-week-end,
+    .calendar-day:nth-child(7n) .event-pill.range-event {
+      margin-right: 0;
+      padding-right: 8px;
+      border-right-width: 1px;
+      border-top-right-radius: 999px;
+      border-bottom-right-radius: 999px;
+    }
+
+    .event-pill.range-event:not(.range-start):not(.range-week-start) .event-pill-type,
+    .event-pill.range-event:not(.range-start):not(.range-week-start) .event-pill-name {
+      visibility: hidden;
     }
 
     .event-pill-type {
@@ -3231,6 +3276,8 @@
         layoutEqp: Array.isArray(extracted.layout) ? extracted.layout : [],
         others: Array.isArray(extracted.others) ? extracted.others : [],
         calendarDates: [],
+        startDate: "",
+        endDate: "",
         color: selectedEventColor,
         eventType: selectedEventType,
         originalFilename: uploadedOriginalFile?.name || "",
@@ -3275,6 +3322,7 @@
       const eventToSave = {
         ...pendingEvent,
         calendarDates: [...selectedSaveDates],
+        ...getEventDateFieldsForStorage({ ...pendingEvent, calendarDates: selectedSaveDates }),
         color: selectedEventColor,
         eventType: selectedEventType,
         storagePath: uploadedFile.storagePath,
@@ -3415,6 +3463,8 @@
           event_name: eventItem.eventName,
           company_name: eventItem.companyName,
           event_datetime: eventItem.eventDateTime,
+          start_date: getEventDateFieldsForStorage(eventItem).startDate,
+          end_date: getEventDateFieldsForStorage(eventItem).endDate,
           venue: eventItem.venue,
           guest_count: toNullableInteger(eventItem.guestCount),
           color: normalizeEventColorKey(eventItem.color),
@@ -3512,6 +3562,8 @@
           event_name: eventItem.eventName,
           company_name: eventItem.companyName,
           event_datetime: eventItem.eventDateTime,
+          start_date: getEventDateFieldsForStorage(eventItem).startDate,
+          end_date: getEventDateFieldsForStorage(eventItem).endDate,
           venue: eventItem.venue,
           guest_count: toNullableInteger(eventItem.guestCount),
           color: normalizeEventColorKey(eventItem.color),
@@ -3900,6 +3952,8 @@
         eventName: row.event_name || "",
         companyName: row.company_name || "",
         eventDateTime: row.event_datetime || "",
+        startDate: row.start_date || "",
+        endDate: row.end_date || "",
         venue: row.venue || "",
         guestCount: row.guest_count ?? "",
         color: normalizeEventColorKey(row.color || "gray"),
@@ -3984,46 +4038,132 @@
 
       const firstDay = new Date(year, month, 1);
       const startDate = new Date(year, month, 1 - firstDay.getDay());
-
-      for (let index = 0; index < 42; index += 1) {
+      const calendarCells = Array.from({ length: 42 }, (_, index) => {
         const date = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + index);
-        const dateKey = formatDateKey(date);
-        const dayEvents = savedEvents.filter((item) => item.calendarDates?.includes(dateKey));
+        return {
+          date,
+          dateKey: formatDateKey(date),
+          isOutside: date.getMonth() !== month,
+        };
+      });
+      const segmentsByDate = buildCalendarSegments(calendarCells);
+
+      calendarCells.forEach(({ date, dateKey, isOutside }) => {
+        const daySegments = segmentsByDate[dateKey] || [];
         const dayCell = document.createElement("div");
-        dayCell.className = `calendar-day${date.getMonth() === month ? "" : " outside"}`;
+        dayCell.className = `calendar-day${isOutside ? " outside" : ""}`;
         if (dateKey === todayKey) dayCell.classList.add("today");
-        if (dayEvents.length > 0) dayCell.classList.add("has-events");
+        if (daySegments.some(Boolean)) dayCell.classList.add("has-events");
 
         const dayNumber = document.createElement("div");
         dayNumber.className = "day-number";
         dayNumber.textContent = date.getDate();
         dayCell.append(dayNumber);
 
-        dayEvents.forEach((eventItem) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "event-pill";
-          if (eventItem.eventType) {
-            const type = document.createElement("span");
-            type.className = "event-pill-type";
-            type.textContent = eventItem.eventType;
-            button.append(type);
-          }
-          const name = document.createElement("span");
-          name.className = "event-pill-name";
-          name.textContent = eventItem.eventName;
-          button.append(name);
-          const color = eventColors[normalizeEventColorKey(eventItem.color)] || eventColors.gray;
-          button.style.background = color.background;
-          button.style.borderColor = color.border;
-          button.style.color = color.text;
-          button.addEventListener("click", () => openEventModal(eventItem, dateKey));
-          dayCell.append(button);
+        daySegments.forEach((segment) => {
+          dayCell.append(createCalendarEventSlot(segment, dateKey));
         });
 
         calendarGrid.append(dayCell);
+      });
+
+    }
+
+    function createCalendarEventSlot(segment, dateKey) {
+      const slot = document.createElement("div");
+      slot.className = "calendar-event-slot";
+      if (!segment) {
+        slot.classList.add("calendar-event-placeholder");
+        return slot;
       }
 
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `event-pill ${segment.isRange ? "range-event" : ""} ${segment.positionClasses.join(" ")}`.trim();
+      if (segment.eventItem.eventType) {
+        const type = document.createElement("span");
+        type.className = "event-pill-type";
+        type.textContent = segment.eventItem.eventType;
+        button.append(type);
+      }
+      const name = document.createElement("span");
+      name.className = "event-pill-name";
+      name.textContent = segment.eventItem.eventName;
+      button.append(name);
+      const color = eventColors[normalizeEventColorKey(segment.eventItem.color)] || eventColors.gray;
+      button.style.background = color.background;
+      button.style.borderColor = color.border;
+      button.style.color = color.text;
+      button.addEventListener("click", () => openEventModal(segment.eventItem, dateKey));
+      slot.append(button);
+      return slot;
+    }
+
+    function buildCalendarSegments(calendarCells) {
+      const segmentsByDate = Object.fromEntries(calendarCells.map((cell) => [cell.dateKey, []]));
+      const calendarStart = calendarCells[0].date;
+      const calendarEnd = calendarCells[calendarCells.length - 1].date;
+      const eventRanges = savedEvents
+        .map((eventItem) => ({ eventItem, ...getEventRenderRange(eventItem) }))
+        .filter((item) => item.startDate && item.endDate && item.endDate >= calendarStart && item.startDate <= calendarEnd)
+        .sort(compareCalendarEventRanges);
+
+      for (let weekIndex = 0; weekIndex < 6; weekIndex += 1) {
+        const weekCells = calendarCells.slice(weekIndex * 7, weekIndex * 7 + 7);
+        const weekStart = weekCells[0].date;
+        const weekEnd = weekCells[6].date;
+        const weekRanges = eventRanges.filter((range) => range.endDate >= weekStart && range.startDate <= weekEnd);
+        const laneEnds = [];
+
+        weekRanges.forEach((range) => {
+          const segmentStart = range.startDate > weekStart ? range.startDate : weekStart;
+          const segmentEnd = range.endDate < weekEnd ? range.endDate : weekEnd;
+          let laneIndex = laneEnds.findIndex((laneEnd) => laneEnd < segmentStart);
+          if (laneIndex < 0) {
+            laneIndex = laneEnds.length;
+            laneEnds.push(segmentEnd);
+          } else {
+            laneEnds[laneIndex] = segmentEnd;
+          }
+
+          for (const cell of weekCells) {
+            if (cell.date < segmentStart || cell.date > segmentEnd) continue;
+            while (segmentsByDate[cell.dateKey].length < laneIndex) {
+              segmentsByDate[cell.dateKey].push(null);
+            }
+            segmentsByDate[cell.dateKey][laneIndex] = {
+              eventItem: range.eventItem,
+              isRange: range.startKey !== range.endKey,
+              positionClasses: getRangePositionClasses(cell.date, range.startDate, range.endDate, weekStart, weekEnd),
+            };
+          }
+        });
+
+        weekCells.forEach((cell) => {
+          while (segmentsByDate[cell.dateKey].length < laneEnds.length) {
+            segmentsByDate[cell.dateKey].push(null);
+          }
+        });
+      }
+
+      return segmentsByDate;
+    }
+
+    function compareCalendarEventRanges(a, b) {
+      return a.startDate - b.startDate
+        || b.endDate - a.endDate
+        || String(a.eventItem.eventName).localeCompare(String(b.eventItem.eventName), "ko-KR");
+    }
+
+    function getRangePositionClasses(date, startDate, endDate, weekStart, weekEnd) {
+      const classes = [];
+      if (sameDate(date, startDate)) classes.push("range-start");
+      if (sameDate(date, endDate)) classes.push("range-end");
+      if (date > startDate && date < endDate) classes.push("range-middle");
+      if (sameDate(date, weekStart) && date > startDate) classes.push("range-week-start");
+      if (sameDate(date, weekEnd) && date < endDate) classes.push("range-week-end");
+      if (sameDate(startDate, endDate)) classes.push("range-single");
+      return classes;
     }
 
     function syncExportDefaults() {
@@ -4094,6 +4234,14 @@
 
     function getExportDateKeys(eventItem) {
       const keys = new Set();
+      const range = getEventRenderRange(eventItem);
+      if (range.startDate && range.endDate) {
+        const cursor = new Date(range.startDate);
+        while (cursor <= range.endDate && keys.size < 366) {
+          keys.add(formatDateKey(cursor));
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      }
       (eventItem.calendarDates || []).forEach((dateKey) => {
         if (dateKey) keys.add(dateKey);
       });
@@ -4620,7 +4768,20 @@
 
       try {
         if (scope === "current" && activeCalendarDate) {
+          const remainingDates = (eventItem.calendarDates || []).filter((dateKey) => dateKey !== activeCalendarDate).sort();
           await supabaseRequest(`event_calendar_dates?event_order_id=eq.${encodeURIComponent(eventId)}&calendar_date=eq.${activeCalendarDate}`, { method: "DELETE" });
+          if (remainingDates.length) {
+            await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventId)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                start_date: remainingDates[0],
+                end_date: remainingDates[remainingDates.length - 1],
+              }),
+            });
+          } else {
+            await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" });
+          }
         } else {
           await supabaseRequest(`event_orders?id=eq.${encodeURIComponent(eventId)}`, { method: "DELETE" });
         }
@@ -4631,9 +4792,9 @@
       }
 
       if (scope === "current" && activeCalendarDate) {
-        const remainingDates = (eventItem.calendarDates || []).filter((dateKey) => dateKey !== activeCalendarDate);
+        const remainingDates = (eventItem.calendarDates || []).filter((dateKey) => dateKey !== activeCalendarDate).sort();
         savedEvents = remainingDates.length
-          ? savedEvents.map((item) => item.id === eventId ? { ...item, calendarDates: remainingDates } : item)
+          ? savedEvents.map((item) => item.id === eventId ? { ...item, calendarDates: remainingDates, startDate: remainingDates[0], endDate: remainingDates[remainingDates.length - 1] } : item)
           : savedEvents.filter((item) => item.id !== eventId);
       } else {
         savedEvents = savedEvents.filter((item) => item.id !== eventId);
@@ -4672,6 +4833,61 @@
         return formatDateKey(dateObject);
       }
       return "";
+    }
+
+    function getEventDateFieldsForStorage(eventItem) {
+      const range = getEventRenderRange(eventItem);
+      return {
+        startDate: range.startKey || null,
+        endDate: range.endKey || range.startKey || null,
+      };
+    }
+
+    function getEventRenderRange(eventItem) {
+      const startKey = normalizeDateKey(eventItem.startDate)
+        || getDateRangeFromText(eventItem.eventDateTime)[0]
+        || getSortedCalendarDateKeys(eventItem)[0]
+        || parseEventDateKey(eventItem.eventDateTime);
+      const fallbackEndKey = startKey;
+      const endKey = normalizeDateKey(eventItem.endDate)
+        || getDateRangeFromText(eventItem.eventDateTime).slice(-1)[0]
+        || getSortedCalendarDateKeys(eventItem).slice(-1)[0]
+        || fallbackEndKey;
+
+      if (!startKey) {
+        return { startKey: "", endKey: "", startDate: null, endDate: null };
+      }
+
+      let startDate = dateKeyToLocalDate(startKey);
+      let endDate = dateKeyToLocalDate(endKey || startKey);
+      if (!startDate || !endDate) {
+        return { startKey: "", endKey: "", startDate: null, endDate: null };
+      }
+      if (endDate < startDate) {
+        [startDate, endDate] = [endDate, startDate];
+      }
+      return {
+        startKey: formatDateKey(startDate),
+        endKey: formatDateKey(endDate),
+        startDate,
+        endDate,
+      };
+    }
+
+    function getDateRangeFromText(value) {
+      return extractDateRange(value).map(normalizeDateKey).filter(Boolean);
+    }
+
+    function getSortedCalendarDateKeys(eventItem) {
+      return (eventItem.calendarDates || []).map(normalizeDateKey).filter(Boolean).sort();
+    }
+
+    function normalizeDateKey(value) {
+      const text = cleanValue(value);
+      if (!text) return "";
+      const iso = text.match(/^(20\d{2}|19\d{2})-(\d{1,2})-(\d{1,2})$/);
+      if (iso) return `${iso[1]}-${pad2(iso[2])}-${pad2(iso[3])}`;
+      return parseEventDateKey(text);
     }
 
     function extractDateRange(value) {
@@ -4714,6 +4930,10 @@
 
     function formatDateKey(date) {
       return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+    }
+
+    function sameDate(a, b) {
+      return a && b && formatDateKey(a) === formatDateKey(b);
     }
 
     function pad2(value) {
