@@ -3796,6 +3796,24 @@ table {
   font-size: 16px;
 }
 
+.lucide-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.widget-icon .lucide-icon {
+  color: var(--theme-gold, #D4AF37);
+}
+
+.widget-code {
+  display: none;
+}
+
 /*
  * 모바일 전용 사용성 보정
  * - PC 대시보드 구조는 유지하고, 768px 이하에서만 하단 탭바 고정/상단 메뉴 숨김/홈 화면 단순화를 적용한다.
@@ -3869,30 +3887,48 @@ table {
 
   .dashboard-widget-grid {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(220px, 78vw);
-    grid-template-columns: none !important;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 12px;
     width: 100%;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
-    padding: 2px 2px 10px;
-    scroll-snap-type: x proximity;
-    -webkit-overflow-scrolling: touch;
+    padding: 2px 0 10px;
+    scroll-snap-type: none;
   }
 
   .dashboard-widget {
-    min-height: 132px;
-    padding: 18px;
-    scroll-snap-align: start;
+    min-width: 0;
+    min-height: 156px;
+    padding: 16px;
+    scroll-snap-align: none;
+  }
+
+  .dashboard-widget .widget-icon {
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+
+  .dashboard-widget .widget-icon .lucide-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dashboard-widget .widget-code {
+    display: none;
   }
 
   .dashboard-widget strong {
-    font-size: 20px;
+    font-size: 18px;
+    line-height: 1.25;
   }
 
   .dashboard-widget small {
-    font-size: 16px;
+    font-size: 15px;
   }
 
   .dashboard-operations-row {
@@ -3930,10 +3966,22 @@ table {
     font-size: 16px;
   }
 
-  .erp-shell[data-active-page="home"] .weekly-events-grid,
-  .erp-shell[data-active-page="home"] .dashboard-ai-summary-card,
-  .erp-shell[data-active-page="home"] .ai-chat-panel {
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .weekly-events-grid,
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .dashboard-ai-summary-card,
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .ai-chat-panel {
     display: none !important;
+  }
+
+  .erp-shell[data-active-target="ai"] .dashboard-widget-grid,
+  .erp-shell[data-active-target="ai"] .dashboard-operations-row,
+  .erp-shell[data-active-target="ai"] .weekly-events-grid,
+  .erp-shell[data-active-target="ai"] .dashboard-ai-summary-card {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-target="ai"] .ai-chat-panel {
+    display: grid !important;
+    min-height: calc(100vh - 130px);
   }
 
   .calendar-grid,
@@ -3950,8 +3998,8 @@ table {
     z-index: 1000;
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    min-height: 72px;
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    min-height: 84px;
+    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(212, 175, 55, 0.6);
     background: rgba(6, 27, 53, 0.98);
     box-shadow: 0 -14px 34px rgba(6, 27, 53, 0.26);
@@ -3966,12 +4014,12 @@ table {
   }
 
   .mobile-bottom-nav button {
-    min-height: 56px;
+    min-height: 66px;
     display: grid;
     place-items: center;
-    gap: 4px;
+    gap: 5px;
     border: 0;
-    border-radius: 14px;
+    border-radius: 0;
     color: #FFFFFF;
     background: transparent;
     font: inherit;
@@ -3979,19 +4027,46 @@ table {
   }
 
   .mobile-bottom-nav button span {
-    color: #D4AF37;
-    font-size: 18px;
+    color: #FFFFFF;
+    font-size: 22px;
     line-height: 1;
+  }
+
+  .mobile-bottom-nav .lucide-icon {
+    width: 28px;
+    height: 28px;
   }
 
   .mobile-bottom-nav button strong {
     color: #FFFFFF;
-    font-size: 15px;
+    font-size: 16px;
     line-height: 1.1;
   }
 
   .mobile-bottom-nav button:active,
   .mobile-bottom-nav button:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background: transparent;
+  }
+
+  .mobile-bottom-nav button.active {
+    color: #D4AF37;
+    background: transparent;
+  }
+
+  .mobile-bottom-nav button.active span,
+  .mobile-bottom-nav button.active strong {
+    color: #D4AF37;
+  }
+
+  .mobile-bottom-nav button.active::after {
+    content: "";
+    width: 28px;
+    height: 3px;
+    border-radius: 999px;
+    background: #D4AF37;
+  }
+
+  .mobile-bottom-nav button.active .lucide-icon {
+    stroke: #D4AF37;
   }
 }
