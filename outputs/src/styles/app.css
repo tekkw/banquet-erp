@@ -3814,6 +3814,10 @@ table {
   display: none;
 }
 
+.calendar-overflow-count {
+  display: none;
+}
+
 /*
  * 모바일 전용 사용성 보정
  * - PC 대시보드 구조는 유지하고, 768px 이하에서만 하단 탭바 고정/상단 메뉴 숨김/홈 화면 단순화를 적용한다.
@@ -3988,6 +3992,154 @@ table {
   .calendar-week,
   .calendar-event-layer {
     max-width: 100%;
+  }
+
+  .erp-shell[data-active-page="calendar"] {
+    padding-top: 8px !important;
+  }
+
+  .erp-shell[data-active-page="calendar"] .workspace-tabs,
+  .erp-shell[data-active-page="calendar"] .export-panel {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-section {
+    margin-top: 0;
+    padding: 10px;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-header {
+    padding: 4px 2px 10px;
+    gap: 8px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-title {
+    font-size: 22px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-nav {
+    gap: 6px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-nav .icon-button {
+    width: 36px;
+    min-height: 36px;
+    border-radius: 12px;
+    font-size: 18px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-grid {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .weekday {
+    min-height: 24px;
+    padding: 3px 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748B;
+    font-size: 13px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-week {
+    min-height: 72px !important;
+    height: clamp(58px, 11.8vh, 82px);
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day {
+    min-height: 0;
+    height: 100%;
+    padding: 5px 3px;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .day-number {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day.today .day-number {
+    min-width: 24px;
+    height: 24px;
+    margin: 0 auto;
+    padding: 0 6px;
+    font-size: 13px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day.has-events .day-number::after {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-layer {
+    inset: 28px 0 4px;
+    grid-auto-rows: 12px;
+    gap: 2px 4px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar {
+    min-height: 12px;
+    height: 12px;
+    grid-template-columns: 3px minmax(0, 1fr);
+    gap: 3px;
+    padding: 0 3px 0 0;
+    border-radius: 4px;
+    border-width: 1px;
+    font-size: 9px;
+    font-weight: 900;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .event-color-strip {
+    width: 3px;
+    height: calc(100% + 2px);
+    margin: -1px 0 -1px -1px;
+    border-radius: 4px 0 0 4px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .event-title {
+    line-height: 1;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 4"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 5"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 6"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 7"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 8"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 9"] {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-overflow-count {
+    position: absolute;
+    right: 4px;
+    bottom: 3px;
+    display: inline-flex;
+    min-width: 18px;
+    height: 14px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: #102B55;
+    background: rgba(212, 175, 55, 0.88);
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1;
+    z-index: 6;
   }
 
   .mobile-bottom-nav {

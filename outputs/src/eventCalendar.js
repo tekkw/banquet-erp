@@ -74,6 +74,11 @@
         const weekRow = document.createElement("div");
         weekRow.className = "calendar-week";
         const laneCount = weekSegments.reduce((max, segment) => Math.max(max, segment.laneIndex + 1), 0);
+        const mobileOverflowByDate = new Map();
+        weekCells.forEach(({ date, dateKey }) => {
+          const hiddenCount = weekSegments.filter((segment) => segment.laneIndex >= 3 && isDateWithinRange(date, segment.segmentStart, segment.segmentEnd)).length;
+          if (hiddenCount > 0) mobileOverflowByDate.set(dateKey, hiddenCount);
+        });
         weekRow.style.minHeight = `${Math.max(132, 52 + laneCount * 37)}px`;
 
         weekCells.forEach(({ date, dateKey, isOutside }) => {
@@ -88,6 +93,12 @@
           dayNumber.className = "day-number";
           dayNumber.textContent = date.getDate();
           dayCell.append(dayNumber);
+          if (mobileOverflowByDate.has(dateKey)) {
+            const overflow = document.createElement("span");
+            overflow.className = "calendar-overflow-count";
+            overflow.textContent = `+${mobileOverflowByDate.get(dateKey)}`;
+            dayCell.append(overflow);
+          }
           weekRow.append(dayCell);
         });
 
