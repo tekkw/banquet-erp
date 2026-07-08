@@ -84,6 +84,7 @@
         weekCells.forEach(({ date, dateKey, isOutside }) => {
           const dayCell = document.createElement("div");
           dayCell.className = `calendar-day${isOutside ? " outside" : ""}`;
+          dayCell.dataset.dateKey = dateKey;
           if (dateKey === todayKey) dayCell.classList.add("today");
           if (weekSegments.some((segment) => isDateWithinRange(date, segment.segmentStart, segment.segmentEnd))) {
             dayCell.classList.add("has-events");
