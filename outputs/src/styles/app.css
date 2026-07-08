@@ -2911,12 +2911,23 @@ body {
   display: grid;
   grid-template-columns: 76px minmax(0, 1fr);
   gap: 16px;
+  width: 100%;
   padding: 14px 0;
+  border: 0;
   border-bottom: 1px solid var(--theme-border);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 
 .operation-row:last-child {
   border-bottom: 0;
+}
+
+.operation-row:hover {
+  background: rgba(16, 43, 85, 0.03);
 }
 
 .operation-row time {
@@ -2938,6 +2949,11 @@ body {
   color: var(--theme-muted);
   font-size: 15px;
   font-weight: 650;
+}
+
+.operation-venue-code,
+.operation-card-time {
+  display: none;
 }
 
 .operation-summary {
@@ -3955,6 +3971,74 @@ table {
   .operation-row {
     grid-template-columns: 76px minmax(0, 1fr);
     gap: 12px;
+  }
+
+  .today-operations-card .operation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    border: 0;
+  }
+
+  .today-operations-card .operation-row {
+    min-height: 112px;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(16, 43, 85, 0.1);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
+    box-shadow: 0 10px 24px rgba(6, 27, 53, 0.08);
+  }
+
+  .today-operations-card .operation-row:active {
+    transform: scale(0.98);
+    background: #FFF8E1;
+  }
+
+  .today-operations-card .operation-time,
+  .today-operations-card .operation-venue-name {
+    display: none;
+  }
+
+  .today-operations-card .operation-venue-code {
+    width: fit-content;
+    min-width: 48px;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: 1px solid rgba(212, 175, 55, 0.55);
+    border-radius: 999px;
+    color: #102B55;
+    background: rgba(212, 175, 55, 0.2);
+    font-size: 18px;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .today-operations-card .operation-info {
+    min-width: 0;
+  }
+
+  .today-operations-card .operation-row strong {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #102B55;
+    font-size: 16px;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .today-operations-card .operation-card-time {
+    display: block;
+    margin-top: 7px;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 800;
   }
 
   .mini-calendar-grid {
