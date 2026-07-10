@@ -3954,6 +3954,90 @@ table {
   background: linear-gradient(180deg, rgba(212, 175, 55, 0.16), #FFFFFF 45%);
 }
 
+/*
+ * 월간 캘린더 밀도별 이벤트 바 크기
+ * - 날짜 셀/주 높이는 늘리지 않고 하루 행사 수가 많아질수록 바 높이와 폰트를 줄인다.
+ * - 멀티데이 바는 기존 grid-column span 구조를 유지하며 같은 밀도 규칙만 적용한다.
+ */
+@media (min-width: 769px) {
+  .calendar-week {
+    min-height: 164px !important;
+    overflow: hidden;
+  }
+
+  .calendar-event-layer {
+    overflow: hidden;
+  }
+
+  .calendar-week.calendar-density-1 .calendar-event-layer {
+    grid-auto-rows: 24px;
+    gap: 4px 8px;
+  }
+
+  .calendar-week.calendar-density-3 .calendar-event-layer {
+    grid-auto-rows: 20px;
+    gap: 3px 8px;
+  }
+
+  .calendar-week.calendar-density-5 .calendar-event-layer {
+    grid-auto-rows: 17px;
+    gap: 2px 8px;
+  }
+
+  .calendar-week.calendar-density-7 .calendar-event-layer {
+    grid-auto-rows: 15px;
+    gap: 1px 8px;
+  }
+
+  .calendar-event-bar.calendar-density-1 {
+    min-height: 24px;
+    height: 24px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    font-size: 14px;
+  }
+
+  .calendar-event-bar.calendar-density-3 {
+    min-height: 20px;
+    height: 20px;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    font-size: 13px;
+  }
+
+  .calendar-event-bar.calendar-density-5 {
+    min-height: 17px;
+    height: 17px;
+    gap: 6px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 12px;
+  }
+
+  .calendar-event-bar.calendar-density-7 {
+    min-height: 15px;
+    height: 15px;
+    gap: 5px;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: 11px;
+  }
+
+  .calendar-event-bar.calendar-density-5 .event-color-strip,
+  .calendar-event-bar.calendar-density-7 .event-color-strip {
+    height: calc(100% + 2px);
+    margin-top: -1px;
+    margin-bottom: -1px;
+  }
+
+  .calendar-event-bar .event-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
 .lucide-icon {
   width: 24px;
   height: 24px;

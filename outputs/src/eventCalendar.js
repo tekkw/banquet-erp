@@ -73,13 +73,23 @@
         const weekSegments = buildCalendarWeekSegments(weekCells, eventRanges);
         const weekRow = document.createElement("div");
         weekRow.className = "calendar-week";
-        const laneCount = weekSegments.reduce((max, segment) => Math.max(max, segment.laneIndex + 1), 0);
+        const dailyEventCounts = new Map();
+        weekCells.forEach(({ date, dateKey }) => {
+          const count = weekSegments.filter((segment) => isDateWithinRange(date, segment.segmentStart, segment.segmentEnd)).length;
+          dailyEventCounts.set(dateKey, count);
+        });
+        const maxDailyEventCount = Math.max(0, ...dailyEventCounts.values());
+        weekRow.classList.add(getCalendarDensityClass(maxDailyEventCount));
         const mobileOverflowByDate = new Map();
         weekCells.forEach(({ date, dateKey }) => {
           const hiddenCount = weekSegments.filter((segment) => segment.laneIndex >= 3 && isDateWithinRange(date, segment.segmentStart, segment.segmentEnd)).length;
           if (hiddenCount > 0) mobileOverflowByDate.set(dateKey, hiddenCount);
         });
-        weekRow.style.minHeight = `${Math.max(132, 52 + laneCount * 37)}px`;
+        weekSegments.forEach((segment) => {
+          const segmentDates = weekCells.filter(({ date }) => isDateWithinRange(date, segment.segmentStart, segment.segmentEnd));
+          const segmentMaxCount = Math.max(0, ...segmentDates.map(({ dateKey }) => dailyEventCounts.get(dateKey) || 0));
+          segment.densityClass = getCalendarDensityClass(segmentMaxCount);
+        });
 
         weekCells.forEach(({ date, dateKey, isOutside }) => {
           const dayCell = document.createElement("div");
@@ -127,6 +137,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.className = `calendar-event-bar${segment.continuesLeft ? " range-continues-left" : ""}${segment.continuesRight ? " range-continues-right" : ""}`;
+      if (segment.densityClass) button.classList.add(segment.densityClass);
       button.style.gridColumn = `${segment.columnStart} / ${segment.columnEnd}`;
       button.style.gridRow = String(segment.laneIndex + 1);
       const color = eventColors[normalizeEventColorKey(segment.eventItem.color)] || eventColors.gray;
@@ -142,6 +153,13 @@
       button.style.color = color.text;
       button.addEventListener("click", () => openEventModal?.(segment.eventItem, segment.clickDateKey));
       return button;
+    }
+
+    function getCalendarDensityClass(count) {
+      if (count >= 7) return "calendar-density-7";
+      if (count >= 5) return "calendar-density-5";
+      if (count >= 3) return "calendar-density-3";
+      return "calendar-density-1";
     }
 
     /*
