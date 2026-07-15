@@ -827,6 +827,7 @@
       button.addEventListener("click", () => initializeAiAssistantPage(button.dataset.aiMode || "chat"));
     });
     loginForm.addEventListener("submit", authController.handleLogin);
+    logoutButton.addEventListener("click", () => localStorage.removeItem("banquet_ai_active_conversation_id"));
     logoutButton.addEventListener("click", authController.handleLogout);
     mobileNavButtons.forEach((button) => {
       button.addEventListener("click", () => handleMobileNavigation(button.dataset.mobileTarget));

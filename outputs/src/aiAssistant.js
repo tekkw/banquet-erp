@@ -84,6 +84,9 @@
     let aiReferenceLoading = false;
     let aiReferenceData = null;
     let aiPendingAttachments = [];
+    let aiMessagesLoading = false;
+    let aiConversationPersistenceAvailable = true;
+    const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -148,10 +151,10 @@
       }
     }
 
-    function initializeAiAssistantPage(mode = aiPageMode) {
+    async function initializeAiAssistantPage(mode = aiPageMode) {
       if (!aiPageInitialized) {
-        startNewAiConversation();
         aiPageInitialized = true;
+        await loadAiConversationsFromSupabase();
       }
       setAiPageMode(mode);
       renderConversationList();
@@ -171,22 +174,39 @@
       aiDirectTeachModePanel?.classList.toggle("active", aiPageMode === "teach");
     }
 
-    function startNewAiConversation() {
-      const id = `ai-conv-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      aiConversations = [
-        {
-          id,
-          title: "새 대화",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          messages: [{
-            type: "assistant",
-            text: "안녕하세요. 저장된 행사, 자산, 공간 정보와 공식 지식을 기준으로 답변합니다.",
-          }],
-        },
-        ...aiConversations,
-      ];
+    async function startNewAiConversation() {
+      const id = createUuid();
+      const conversation = {
+        id,
+        title: "새 대화",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+      };
+      aiConversations = [conversation, ...aiConversations];
       activeConversationId = id;
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, id);
+      renderAiPageMessages();
+      renderConversationList();
+      try {
+        if (aiConversationPersistenceAvailable) {
+          await supabaseRequest("ai_conversations", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+            body: JSON.stringify({
+              id,
+              session_key: getAiSessionKey(),
+              title: "새 대화",
+              is_hidden: false,
+            }),
+          });
+        }
+        await createInitialAssistantMessage(conversation, { persist: aiConversationPersistenceAvailable });
+      } catch (error) {
+        aiConversationPersistenceAvailable = false;
+        console.warn("AI conversation persistence unavailable, using local state:", error);
+        await createInitialAssistantMessage(conversation, { persist: false });
+      }
       renderAiPageMessages();
       renderConversationList();
     }
@@ -199,6 +219,13 @@
       if (!aiPageMessages) return;
       const conversation = getActiveConversation();
       aiPageMessages.innerHTML = "";
+      if (aiMessagesLoading) {
+        const loading = document.createElement("div");
+        loading.className = "ai-page-loading";
+        loading.textContent = "이전 대화를 불러오는 중...";
+        aiPageMessages.append(loading);
+        return;
+      }
       (conversation?.messages || []).forEach((message) => {
         aiPageMessages.append(createAiPageMessage(message.type, message.text, message.meta));
       });
@@ -344,15 +371,19 @@
             </span>
             <button class="ai-conversation-hide" type="button" aria-label="대화 숨기기">⋯</button>
           `;
-          item.addEventListener("click", () => {
+          item.addEventListener("click", async () => {
             activeConversationId = conversation.id;
+            localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversation.id);
+            await loadAiMessagesForConversation(conversation.id);
             renderAiPageMessages();
             renderConversationList();
           });
-          item.addEventListener("keydown", (event) => {
+          item.addEventListener("keydown", async (event) => {
             if (event.key !== "Enter" && event.key !== " ") return;
             event.preventDefault();
             activeConversationId = conversation.id;
+            localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversation.id);
+            await loadAiMessagesForConversation(conversation.id);
             renderAiPageMessages();
             renderConversationList();
           });
@@ -367,14 +398,30 @@
       if (aiConversationMoreButton) aiConversationMoreButton.hidden = visibleConversations.length <= 8;
     }
 
-    function hideConversation(conversationId) {
+    async function hideConversation(conversationId) {
       if (!window.confirm("이 대화를 목록에서 숨기시겠습니까?")) return;
       const conversation = aiConversations.find((item) => item.id === conversationId);
       if (!conversation) return;
       conversation.isHidden = true;
+      try {
+        if (aiConversationPersistenceAvailable) {
+          await supabaseRequest(`ai_conversations?id=eq.${encodeURIComponent(conversationId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ is_hidden: true, updated_at: new Date().toISOString() }),
+          });
+        }
+      } catch (error) {
+        console.warn("AI conversation hide update skipped:", error);
+      }
       if (activeConversationId === conversationId) {
         activeConversationId = aiConversations.find((item) => !item.isHidden)?.id || "";
-        if (!activeConversationId) startNewAiConversation();
+        if (activeConversationId) {
+          localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+          await loadAiMessagesForConversation(activeConversationId);
+        } else {
+          await startNewAiConversation();
+        }
       }
       renderAiPageMessages();
       renderConversationList();
@@ -390,6 +437,147 @@
         groups[key].push(conversation);
         return groups;
       }, {});
+    }
+
+    async function loadAiConversationsFromSupabase() {
+      if (!supabaseRequest) {
+        await startNewAiConversation();
+        return;
+      }
+      try {
+        const sessionKey = getAiSessionKey();
+        const rows = await supabaseRequest(
+          `ai_conversations?select=*&session_key=eq.${encodeURIComponent(sessionKey)}&is_hidden=eq.false&order=updated_at.desc&limit=30`
+        );
+        aiConversationPersistenceAvailable = true;
+        aiConversations = (rows || []).map((row) => ({
+          id: row.id,
+          title: row.title || "새 대화",
+          createdAt: row.created_at || row.createdAt || new Date().toISOString(),
+          updatedAt: row.updated_at || row.updatedAt || row.created_at || new Date().toISOString(),
+          isHidden: Boolean(row.is_hidden),
+          messages: [],
+        }));
+        const savedActiveId = localStorage.getItem(ACTIVE_CONVERSATION_KEY);
+        const firstConversationId = aiConversations[0]?.id || "";
+        activeConversationId = aiConversations.some((item) => item.id === savedActiveId) ? savedActiveId : firstConversationId;
+        if (activeConversationId) {
+          localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
+          await loadAiMessagesForConversation(activeConversationId);
+        } else {
+          await startNewAiConversation();
+        }
+      } catch (error) {
+        aiConversationPersistenceAvailable = false;
+        console.warn("AI conversations load skipped:", error);
+        if (!aiConversations.length) await startNewAiConversation();
+      }
+    }
+
+    async function loadAiMessagesForConversation(conversationId) {
+      const conversation = aiConversations.find((item) => item.id === conversationId);
+      if (!conversation) return;
+      if (!aiConversationPersistenceAvailable) {
+        if (!conversation.messages?.length) await createInitialAssistantMessage(conversation, { persist: false });
+        return;
+      }
+      aiMessagesLoading = true;
+      renderAiPageMessages();
+      try {
+        const rows = await supabaseRequest(
+          `ai_messages?select=*&conversation_id=eq.${encodeURIComponent(conversationId)}&order=created_at.asc`
+        );
+        conversation.messages = (rows || []).map((row) => ({
+          id: row.id,
+          type: row.role === "assistant" ? "assistant" : (row.role === "system" ? "assistant" : "user"),
+          text: row.content || "",
+          meta: { attachments: Array.isArray(row.attachments) ? row.attachments : [] },
+          createdAt: row.created_at,
+        }));
+        if (!conversation.messages.length) await createInitialAssistantMessage(conversation, { persist: true });
+      } catch (error) {
+        aiConversationPersistenceAvailable = false;
+        console.warn("AI messages load skipped:", error);
+        if (!conversation.messages?.length) await createInitialAssistantMessage(conversation, { persist: false });
+      } finally {
+        aiMessagesLoading = false;
+      }
+    }
+
+    async function createInitialAssistantMessage(conversation, { persist = true } = {}) {
+      if (!conversation || conversation.messages?.length) return;
+      const message = {
+        type: "assistant",
+        text: "안녕하세요. 저장된 행사, 자산, 공간 정보와 공식 지식을 기준으로 답변합니다.",
+      };
+      conversation.messages = [message];
+      if (persist) await persistAiMessage(conversation.id, "assistant", message.text, []);
+    }
+
+    async function persistAiMessage(conversationId, role, content, attachments = []) {
+      if (!conversationId || !aiConversationPersistenceAvailable || !supabaseRequest) return null;
+      try {
+        const rows = await supabaseRequest("ai_messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            role,
+            content: content || "",
+            attachments: sanitizeAiAttachmentsForStorage(attachments),
+          }),
+        });
+        return Array.isArray(rows) ? rows[0] : rows;
+      } catch (error) {
+        console.warn("AI message save failed:", error);
+        return null;
+      }
+    }
+
+    async function updateAiConversationMeta(conversation) {
+      if (!conversation || !aiConversationPersistenceAvailable || !supabaseRequest) return;
+      try {
+        await supabaseRequest(`ai_conversations?id=eq.${encodeURIComponent(conversation.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: conversation.title || "새 대화",
+            updated_at: conversation.updatedAt || new Date().toISOString(),
+          }),
+        });
+      } catch (error) {
+        console.warn("AI conversation update skipped:", error);
+      }
+    }
+
+    function getAiSessionKey() {
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("banquetErpCurrentUser.v1") || "null");
+        return cleanValue(storedUser?.id || storedUser?.username || storedUser?.role) || "anonymous";
+      } catch {
+        return "anonymous";
+      }
+    }
+
+    function sanitizeAiAttachmentsForStorage(attachments = []) {
+      return (attachments || []).map((attachment) => ({
+        id: attachment.id,
+        name: attachment.name || attachment.originalFilename || "첨부 파일",
+        originalFilename: attachment.originalFilename || attachment.name || "첨부 파일",
+        mimeType: attachment.mimeType || "",
+        size: attachment.size || 0,
+        type: attachment.type || "file",
+        storageBucket: attachment.storageBucket || "",
+        storagePath: attachment.storagePath || "",
+        publicUrl: attachment.publicUrl || "",
+        textContent: attachment.type === "text" ? (attachment.textContent || "") : "",
+      }));
+    }
+
+    function createUuid() {
+      return crypto?.randomUUID?.() || "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (char) =>
+        (Number(char) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(char) / 4).toString(16)
+      );
     }
 
     function formatConversationTime(value) {
@@ -444,7 +632,7 @@
       const attachmentsToSend = [...aiPendingAttachments];
       const question = rawQuestion || (attachmentsToSend.length ? "이 이미지와 첨부 자료의 내용을 자세히 확인하고, 보이는 정보와 판단 가능한 내용을 설명해주세요." : "");
       if (!question) return;
-      if (!getActiveConversation()) startNewAiConversation();
+      if (!getActiveConversation()) await startNewAiConversation();
       const conversation = getActiveConversation();
       const userMessage = {
         type: "user",
@@ -456,6 +644,7 @@
         conversation.title = generateConversationTitle(question);
       }
       conversation.updatedAt = new Date().toISOString();
+      localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversation.id);
       aiPageChatInput.value = "";
       aiPendingAttachments = [];
       renderAiAttachmentPreview();
@@ -468,6 +657,8 @@
           ? await uploadAiAttachments(conversation.id, attachmentsToSend)
           : [];
         userMessage.meta.attachments = uploadedAttachments;
+        await persistAiMessage(conversation.id, "user", question, uploadedAttachments);
+        await updateAiConversationMeta(conversation);
         if (uploadedAttachments.length) {
           conversation.messages[conversation.messages.length - 1] = {
             type: "assistant",
@@ -494,6 +685,7 @@
         assistantMessage.meta = {
           saveSuggestion: detectOperationalSaveSuggestion(question, assistantMessage.text),
         };
+        await persistAiMessage(conversation.id, "assistant", assistantMessage.text, []);
       } catch (error) {
         console.error(error);
         conversation.messages[conversation.messages.length - 1] = {
@@ -501,8 +693,10 @@
           text: error.message || "AI 답변 생성에 실패했습니다.",
           meta: { error: true },
         };
+        await persistAiMessage(conversation.id, "assistant", conversation.messages[conversation.messages.length - 1].text, []);
       } finally {
         conversation.updatedAt = new Date().toISOString();
+        await updateAiConversationMeta(conversation);
         aiPageChatSendButton.disabled = false;
         renderAiPageMessages();
         renderConversationList();
@@ -616,8 +810,9 @@
       attachments.forEach((attachment) => {
         const item = document.createElement("div");
         item.className = `ai-message-attachment ${attachment.type || "file"}`;
-        const preview = attachment.type === "image" && attachment.dataUrl
-          ? `<img src="${attachment.dataUrl}" alt="">`
+        const imageSrc = attachment.type === "image" ? (attachment.dataUrl || attachment.publicUrl || "") : "";
+        const preview = imageSrc
+          ? `<img src="${escapeHtml(imageSrc)}" alt="">`
           : `<span class="ai-attachment-file-icon">${escapeHtml((attachment.type || "file").toUpperCase())}</span>`;
         item.innerHTML = `${preview}<span>${escapeHtml(attachment.name || attachment.originalFilename || "첨부 파일")}</span>`;
         wrap.append(item);
@@ -630,7 +825,8 @@
       for (const attachment of attachments) {
         const storagePath = buildAiAttachmentStoragePath(conversationId, attachment.file.name);
         const bucket = supabaseConfig.chatAttachmentBucket || "ai-chat-attachments";
-        const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${bucket}/${encodeURIComponent(storagePath)}`;
+        const encodedStoragePath = storagePath.split("/").map(encodeURIComponent).join("/");
+        const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${bucket}/${encodedStoragePath}`;
         const response = await fetch(uploadUrl, {
           method: "POST",
           headers: {
@@ -654,6 +850,7 @@
           type: attachment.type,
           storageBucket: bucket,
           storagePath,
+          publicUrl: `${supabaseConfig.url}/storage/v1/object/public/${bucket}/${encodedStoragePath}`,
           dataUrl: attachment.type === "image" ? attachment.dataUrl : "",
           textContent: attachment.type === "text" ? attachment.textContent : "",
         };

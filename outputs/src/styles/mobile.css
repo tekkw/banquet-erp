@@ -645,3 +645,227 @@
     padding-bottom: calc(128px + env(safe-area-inset-bottom));
   }
 }
+
+:root {
+  --mobile-bottom-nav-height: 72px;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .hotel-topbar,
+  .erp-shell,
+  .erp-workspace,
+  .erp-page,
+  .dashboard-overview,
+  .dashboard-widget-grid,
+  .dashboard-operations-row,
+  .today-operations-card,
+  .dashboard-month-card,
+  .weekly-events-grid,
+  .ai-assistant-page,
+  .ai-page-layout,
+  .ai-main-panel {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .hotel-topbar {
+    width: 100%;
+  }
+
+  .erp-shell {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 12px;
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 16px);
+  }
+
+  .erp-page,
+  .ai-assistant-page {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 16px);
+  }
+
+  .dashboard-widget-grid,
+  .quick-menu-grid,
+  .home-widget-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    overflow: visible;
+  }
+
+  .dashboard-widget,
+  .dashboard-card,
+  .quick-menu-card,
+  .home-widget-card {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .today-operations-card .operation-list,
+  .today-event-list,
+  .dashboard-today-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 100%;
+    gap: 12px;
+    overflow: visible;
+  }
+
+  .today-operations-card .operation-row,
+  .today-event-card,
+  .dashboard-event-card {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1200;
+    min-height: var(--mobile-bottom-nav-height);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 64px;
+  }
+
+  .ai-chat-panel,
+  #aiChatModePanel.active {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    height: min(65vh, 640px);
+    overflow: hidden;
+  }
+
+  .ai-mode-tabs {
+    flex: 0 0 auto;
+  }
+
+  .ai-page-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 16px;
+  }
+
+  .ai-attachment-preview {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .ai-page-chat-form {
+    position: static;
+    flex: 0 0 auto;
+    display: grid;
+    grid-template-columns: 48px 48px minmax(0, 1fr) 64px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 8px;
+    align-items: stretch;
+    padding: 12px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    background: #fff;
+  }
+
+  .ai-page-chat-form .ai-tool-button:nth-child(2) {
+    display: inline-flex;
+  }
+
+  .ai-page-chat-form textarea,
+  .ai-page-chat-form input {
+    width: 100%;
+    min-width: 0;
+    resize: none;
+  }
+
+  .ai-page-message,
+  .chat-message {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ai-page-message.user {
+    justify-content: flex-end;
+  }
+
+  .ai-page-message.assistant {
+    justify-content: flex-start;
+  }
+
+  .ai-page-message.user .ai-page-bubble,
+  .ai-page-message.assistant .ai-page-bubble,
+  .message-bubble,
+  .chat-bubble {
+    min-width: 0;
+    max-width: 85%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .ai-message-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    max-width: 100%;
+    gap: 8px;
+  }
+
+  .ai-attachment-chip,
+  .ai-message-attachment {
+    flex: 1 1 140px;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .ai-attachment-chip img,
+  .ai-message-attachment img {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .ai-attachment-name,
+  .ai-message-attachment span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .ai-page-chat-form {
+    grid-template-columns: 42px 42px minmax(0, 1fr) 56px;
+    gap: 6px;
+  }
+}
