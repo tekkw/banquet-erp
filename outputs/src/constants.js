@@ -29,6 +29,7 @@ window.BANQUET_ERP_CONSTANTS = {
     anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2x0dGR1Ynh4bXhvcnVmcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMDYxMTIsImV4cCI6MjA5NzU4MjExMn0.WhDRdoQUSQdQTfkcdEvzV2QT642vROHJxAE6k7hLqxA",
     bucket: "event-orders",
     assetImageBucket: "asset-images",
+    chatAttachmentBucket: "ai-chat-attachments",
     chatFunction: "event-order-ai-chat",
     functionUrl: "https://pnolttdubxxmxorufpyk.supabase.co/functions/v1/event-order-ai-chat",
   },

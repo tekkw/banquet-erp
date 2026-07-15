@@ -1,0 +1,895 @@
+/*
+ * Role: Global page frame, top bar, routing shells, cards, tables, and generic layout primitives.
+ * Why separated: Layout CSS changes often affect every ERP page, so it needs a clear home.
+ * Connections: Feature styles build on these base wrappers without changing class names.
+ */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", "Noto Sans KR", Arial, sans-serif;
+
+}
+
+main {
+  width: min(1680px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 28px 0 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+  align-items: start;
+}
+
+.erp-workspace {
+  min-width: 0;
+}
+
+header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 750;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Density refinement layer
+ * - Keeps the navy/gold design direction.
+ * - Reduces oversized empty space while raising text readability for ERP use.
+ * - Placed after the original split rules so existing class names and behavior stay unchanged.
+ */
+body {
+  font-size: var(--font-md);
+}
+
+main {
+  width: min(1760px, calc(100% - 20px));
+  padding: 18px 0 28px;
+  gap: 14px;
+}
+
+h1 {
+  font-size: var(--font-2xl);
+}
+
+.erp-workspace {
+  font-size: var(--font-md);
+}
+
+.hotel-topbar {
+  min-height: 76px;
+  padding: 12px 22px;
+}
+
+.erp-shell {
+  gap: 14px;
+  padding: 14px;
+}
+
+.erp-workspace,
+.erp-page {
+  min-width: 0;
+}
+
+.dashboard-overview,
+.upload-panel,
+.status,
+.result-wrap,
+.calendar-section,
+.asset-section,
+.ai-chat-panel,
+.info-card,
+.calendar-save-settings,
+.similar-events-section,
+.ai-analysis-section,
+.export-panel,
+.event-management-page,
+.ai-page-card {
+  border-radius: 16px;
+}
+
+.page-intro,
+.upload-panel,
+.status,
+.result-wrap,
+.calendar-section,
+.asset-section,
+.ai-chat-panel {
+  margin-bottom: 12px;
+}
+
+.page-intro {
+  padding: 18px 20px;
+}
+
+.page-intro h1 {
+  font-size: var(--font-3xl);
+  line-height: 1.2;
+}
+
+.section-heading h2,
+.asset-header h2,
+.ai-chat-header h2,
+.calendar-title {
+  font-size: var(--font-xl);
+  line-height: 1.25;
+}
+
+.section-heading p,
+.status,
+.file-name,
+.info-label {
+  font-size: var(--font-sm);
+}
+
+.card-grid {
+  gap: 10px;
+}
+
+.info-card {
+  min-height: 88px;
+  padding: 13px 14px;
+}
+
+.info-label {
+  margin-bottom: 6px;
+}
+
+.info-value {
+  font-size: var(--font-lg);
+  line-height: 1.32;
+}
+
+.table-wrap,
+.schedule-table-wrap,
+.asset-table-wrap {
+  margin-top: 10px;
+}
+
+.schedule-table th,
+.schedule-table td,
+.asset-table th,
+.asset-table td,
+.data-table th,
+.data-table td {
+  padding: 10px 12px;
+  font-size: var(--font-md);
+}
+
+.empty-state {
+  padding: 18px;
+  font-size: var(--font-md);
+}
+
+.status {
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.status.error {
+  border-color: var(--error-line);
+  background: var(--error-bg);
+  color: #8a1f1f;
+}
+
+.status.warn {
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+  color: #73510d;
+}
+
+.sheet-bar {
+  display: none;
+  gap: 8px;
+  align-items: center;
+  margin-top: 18px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.sheet-bar.visible {
+  display: flex;
+}
+
+.result-wrap {
+  margin-top: 18px;
+  min-height: 220px;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.setting-label {
+  display: block;
+  margin-bottom: 8px;
+  color: #475467;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.date-adder {
+  display: flex;
+  gap: 8px;
+}
+
+.chip-remove {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0F2A43;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.chip-remove:hover {
+  border-color: var(--theme-gold, #D4AF37);
+  background: rgba(212, 175, 55, 0.14);
+}
+
+.color-dot {
+  width: 100%;
+  height: 100%;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 42, 67, 0.18);
+}
+
+.color-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.color-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.color-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(15, 42, 67, 0.06);
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.info-card {
+  min-height: 104px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.info-label {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.info-value {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.info-card.missing .info-value {
+  color: #98a2b3;
+  font-weight: 650;
+}
+
+.similar-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.similar-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #0F2A43;
+  background: rgba(212, 175, 55, 0.16);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.similar-memo-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: #202631;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.schedule-card {
+  grid-column: 1 / -1;
+}
+
+.wide-card {
+  grid-column: 1 / -1;
+}
+
+.text-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.45;
+}
+
+.schedule-list {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schedule-list li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.schedule-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--brand);
+  font-weight: 800;
+}
+
+.schedule-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.schedule-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.schedule-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef2f6;
+  color: #344054;
+  font-weight: 800;
+}
+
+.schedule-table .number-cell,
+.schedule-table .number-header {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-table.schedule-data col:nth-child(1) { width: 15%; }
+
+.schedule-table.schedule-data col:nth-child(2) { width: 20%; }
+
+.schedule-table.schedule-data col:nth-child(3) { width: 35%; }
+
+.schedule-table.schedule-data col:nth-child(4) { width: 20%; }
+
+.schedule-table.schedule-data col:nth-child(5) { width: 10%; }
+
+.schedule-table.items-data col:nth-child(1) { width: 40%; }
+
+.schedule-table.items-data col:nth-child(2) { width: 20%; }
+
+.schedule-table.items-data col:nth-child(3) { width: 10%; }
+
+.schedule-table.items-data col:nth-child(4) { width: 30%; }
+
+.schedule-table.items-data td:first-child,
+.schedule-table.items-data th:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.schedule-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.event-title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.risk-low {
+  background: #e4f2d8;
+  color: #3f6b1f;
+}
+
+.risk-medium {
+  background: #fff1bd;
+  color: #7a5600;
+}
+
+.risk-high {
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.file-storage-note {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.editable-table td {
+  padding: 5px 6px;
+}
+
+.table-row-delete {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: #fff0f0;
+  color: #9d2424;
+  cursor: pointer;
+  font-size: 17px;
+}
+
+.table-add-row {
+  margin-top: 8px;
+}
+
+.table-wrap {
+  margin-top: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+  min-height: 300px;
+}
+
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+th,
+td {
+  min-width: 96px;
+  max-width: 360px;
+  padding: 8px 10px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #eef2f6;
+  color: #344054;
+  font-weight: 700;
+}
+
+th:first-child,
+td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 54px;
+  width: 54px;
+  max-width: 54px;
+  background: #f8fafc;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 700;
+}
+
+th:first-child {
+  z-index: 3;
+  background: #e6ebf2;
+}
+
+.empty-state {
+  display: grid;
+  min-height: 300px;
+  place-items: center;
+  color: var(--muted);
+  text-align: center;
+  padding: 24px;
+}
+
+.hotel-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 34px;
+  color: #fff;
+  background: linear-gradient(135deg, #0F2A43 0%, #16395B 100%);
+  border-bottom: 3px solid #D4AF37;
+  box-shadow: 0 14px 34px rgba(15, 42, 67, 0.24);
+}
+
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    linear-gradient(135deg, rgba(15, 42, 67, 0.92), rgba(22, 57, 91, 0.86)),
+    #0F2A43;
+}
+
+.auth-card {
+  width: min(420px, 100%);
+  padding: 34px;
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  border-radius: 18px;
+  background: #FFFFFF;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.28);
+}
+
+.auth-brand {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.auth-brand span {
+  color: #D4AF37;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.auth-brand h1 {
+  margin: 0;
+  color: #0F2A43;
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.auth-brand p {
+  color: #667085;
+  font-size: 14px;
+}
+
+.login-error {
+  min-height: 20px;
+  color: #9d2424;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-weight: 750;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.hotel-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(212, 175, 55, 0.72);
+  border-radius: 50%;
+  color: #D4AF37;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  letter-spacing: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.brand-kicker {
+  color: #D4AF37;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.brand-title {
+  margin-top: 3px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.brand-meta {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+body {
+  background:
+    linear-gradient(180deg, rgba(15, 42, 67, 0.06), transparent 220px),
+    #F7F5EF;
+}
+
+main {
+  padding-top: 24px;
+}
+
+.page-intro {
+  align-items: center;
+  padding: 24px 28px;
+  margin-bottom: 18px;
+  border-left: 5px solid #D4AF37;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(247, 245, 239, 0.9)),
+    #FFFFFF;
+}
+
+.eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: #D4AF37;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.page-intro h1 {
+  color: #0F2A43;
+  font-size: 30px;
+  letter-spacing: 0;
+}
+
+.card-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.info-card {
+  border-radius: 16px;
+  border: 1px solid rgba(15, 42, 67, 0.1);
+  background: linear-gradient(180deg, #FFFFFF, rgba(247, 245, 239, 0.55));
+  box-shadow: 0 12px 26px rgba(15, 42, 67, 0.07);
+}
+
+.info-label {
+  color: #D4AF37;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.info-value {
+  color: #0F2A43;
+  font-weight: 800;
+}
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+body {
+  background: var(--theme-bg);
+  color: var(--theme-text);
+}
+
+.hotel-topbar {
+  height: 74px;
+  padding: 0 32px;
+  background: linear-gradient(135deg, var(--theme-navy-dark), var(--theme-navy));
+  border-bottom: 2px solid var(--theme-gold);
+  box-shadow: 0 14px 32px rgba(6, 27, 53, 0.18);
+}
+
+.brand-title {
+  color: #FFFFFF;
+}
+
+.erp-shell {
+  width: min(1540px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 22px 0 38px;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 360px;
+  gap: 20px;
+  align-items: start;
+}
+
+.erp-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  margin: 4px 0 0;
+  color: var(--theme-navy);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.erp-page {
+  min-width: 0;
+}
+
+.erp-shell[data-active-page="home"],
+.erp-shell[data-active-page="ai"] {
+  width: 100%;
+  max-width: none;
+  min-height: calc(100vh - 74px);
+  margin: 0;
+  padding: 22px 28px 34px;
+  grid-template-columns: 248px minmax(0, 1fr);
+}
+
+.erp-shell[data-active-page="home"] .erp-workspace,
+.erp-shell[data-active-page="ai"] .erp-workspace {
+  min-height: calc(100vh - 130px);
+  width: 100%;
+  max-width: none;
+}
+
+.hotel-topbar {
+  width: 100%;
+  max-width: none;
+}
+
+.erp-workspace {
+  width: 100%;
+  max-width: none;
+}
+
+/*
+ * 업무용 ERP 가독성 보정 레이어
+ * - 화면 구조나 기능 로직은 건드리지 않고, 마지막 CSS 우선순위에서 폰트와 캘린더 밀도만 상향한다.
+ * - 넓은 PC 화면에서 멀리서도 행사명, 날짜, 버튼을 읽을 수 있도록 전체 기준을 16px 이상으로 맞춘다.
+ */
+body {
+  font-size: 16px;
+}
+
+.event-title {
+  font-weight: 900;
+}
+
+.lucide-icon {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

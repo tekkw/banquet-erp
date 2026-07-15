@@ -1,0 +1,305 @@
+/*
+ * Role: Banquet asset management form, image thumbnail, table, and admin-only styles.
+ * Why separated: Asset management has table-heavy UI that should not clutter global layout CSS.
+ * Connections: Asset JavaScript keeps writing the same asset-* classes.
+ */
+
+.asset-section {
+  margin-top: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.asset-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.asset-header h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.asset-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) 64px minmax(150px, 1fr) 72px minmax(220px, 1.5fr) 122px 130px auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.asset-form input {
+  min-width: 0;
+  height: 44px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.asset-image-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  color: #0F2A43;
+  background: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.asset-image-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.asset-image-preview {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 750;
+  overflow: hidden;
+}
+
+.asset-image-preview img {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: cover;
+  background: #f2f4f7;
+}
+
+.asset-thumb {
+  width: 66px;
+  height: 66px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: cover;
+  background: #f2f4f7;
+}
+
+.asset-form .primary-button,
+.asset-form .secondary-button {
+  height: 44px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.asset-thumb-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.asset-no-image {
+  display: inline-flex;
+  width: 66px;
+  height: 66px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  color: #98a2b3;
+  background: #f8fafc;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.asset-table-wrap {
+  max-height: 430px;
+  overflow: auto;
+}
+
+.asset-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 15px;
+}
+
+.asset-table th,
+.asset-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+  line-height: 1.35;
+}
+
+.asset-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #eef2f6;
+  color: #475467;
+  font-weight: 900;
+}
+
+.asset-table .number-cell {
+  text-align: right;
+}
+
+.asset-table th:nth-child(1),
+.asset-table td:nth-child(1),
+.asset-table th:nth-child(3),
+.asset-table td:nth-child(3),
+.asset-table th:nth-child(5),
+.asset-table td:nth-child(5),
+.asset-table th:nth-child(7),
+.asset-table td:nth-child(7) {
+  text-align: center;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.asset-actions button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.asset-actions .danger-button {
+  border-color: #ee9b9b;
+  background: #fff0f0;
+  color: #9d2424;
+}
+
+.asset-section.readonly .asset-form,
+.asset-section.readonly .admin-only,
+.asset-section.readonly .admin-only-cell,
+.asset-section.readonly .admin-only-col {
+  display: none;
+}
+
+/* Density refinement for asset management tables and toolbar. */
+.asset-section {
+  padding: 14px 16px;
+}
+
+.asset-header {
+  margin-bottom: 12px;
+}
+
+.asset-header h2 {
+  font-size: 24px;
+}
+
+.asset-form {
+  gap: 9px;
+  align-items: center;
+}
+
+.asset-form input,
+.asset-image-picker,
+.asset-form .primary-button,
+.asset-form .secondary-button {
+  min-height: 42px;
+  font-size: var(--font-md);
+}
+
+.asset-table {
+  font-size: var(--font-md);
+}
+
+.asset-table th,
+.asset-table td {
+  padding: 10px 12px;
+}
+
+.asset-table th {
+  font-size: var(--font-md);
+}
+
+.asset-thumb,
+.asset-no-image {
+  width: 66px;
+  height: 66px;
+}
+
+.asset-actions {
+  gap: 6px;
+}
+
+.asset-actions button {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 15px;
+}
+
+.asset-permission-note {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  border-radius: 12px;
+  color: #0F2A43;
+  background: rgba(212, 175, 55, 0.12);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.asset-section {
+  padding: 22px;
+}
+
+.asset-form input,
+.asset-image-picker,
+.asset-form .primary-button,
+.asset-form .secondary-button {
+  height: 48px;
+  font-size: 16px;
+}
+
+.asset-table,
+.data-table,
+.schedule-table,
+.items-table,
+table {
+  font-size: 16px;
+}
+
+.asset-table th,
+.asset-table td,
+.data-table th,
+.data-table td,
+.schedule-table th,
+.schedule-table td,
+.items-table th,
+.items-table td {
+  padding: 14px 13px;
+}

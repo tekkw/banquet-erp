@@ -1,0 +1,76 @@
+/*
+ * Role: Shared design tokens and global reset rules.
+ * Why separated: Common colors, sizing, shadows, and reset rules should be managed once.
+ * Connections: Imported first by app.css so every feature stylesheet can reuse these variables.
+ */
+
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --line: #d8dde6;
+  --line-strong: #aeb7c5;
+  --text: #202631;
+  --muted: #667085;
+  --brand: #1d6f64;
+  --brand-dark: #15574e;
+  --warn-bg: #fff6df;
+  --warn-line: #f0ca68;
+  --error-bg: #fff0f0;
+  --error-line: #ee9b9b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
+   Venezia ERP Design System - Design D
+   --------------------------------------------------------------------------
+   This layer sits on top of the existing functional CSS. It centralizes the
+   premium hotel ERP theme: white background, navy sidebar, gold accents, cards,
+   buttons, widgets, section headers, sidebar, and header styling.
+*/
+:root {
+  --theme-navy: #102B55;
+  --theme-navy-dark: #061B35;
+  --theme-gold: #D4AF37;
+  --theme-bg: #FFFFFF;
+  --theme-card: #FFFFFF;
+  --theme-border: #E9ECEF;
+  --theme-text: #1F2937;
+  --theme-muted: #6B7280;
+  --theme-soft-navy: #F4F7FB;
+  --theme-gold-soft: #FFF8E1;
+  --theme-radius-card: 18px;
+  --theme-radius-control: 12px;
+  --theme-shadow-card: 0 18px 44px rgba(6, 27, 53, 0.08);
+  --theme-shadow-hover: 0 22px 50px rgba(6, 27, 53, 0.14);
+  --theme-focus: 0 0 0 3px rgba(212, 175, 55, 0.22);
+  --font-xs: 13px;
+  --font-sm: 15px;
+  --font-md: 16px;
+  --font-lg: 18px;
+  --font-xl: 22px;
+  --font-2xl: 26px;
+  --font-3xl: 30px;
+  --density-gap-sm: 8px;
+  --density-gap-md: 12px;
+  --density-gap-lg: 16px;
+}
+
+/* ERP page routing layer.
+   The business modules keep their original IDs, while this layer decides which
+   workspace page is visible. This keeps navigation behavior separated from
+   upload, calendar, asset, and AI logic. */
+.erp-page[hidden] {
+  display: none !important;
+}

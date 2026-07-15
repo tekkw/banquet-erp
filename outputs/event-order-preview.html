@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=calendar-density-20260710">
+  <link rel="stylesheet" href="./src/styles/app.css?v=ai-interview-review-20260711">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -186,6 +186,7 @@
             <textarea id="chatInput" rows="3" placeholder="예: 6월 26일 행사 스케줄 알려줘"></textarea>
             <button id="chatSendButton" class="primary-button" type="submit">질문</button>
           </form>
+          <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰"></section>
         </aside>
       </section>
       </section>
@@ -332,15 +333,86 @@
       </section>
 
       <section id="aiPage" class="erp-page" data-erp-page="ai" aria-label="AI 비서 페이지" hidden>
-        <section class="ai-page-card">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">Banquet AI Assistant</span>
-              <h2>연회장 AI 비서</h2>
+        <section class="ai-assistant-page">
+          <header class="ai-page-header">
+            <div class="ai-page-title">
+              <span class="ai-page-bot-icon" aria-hidden="true">AI</span>
+              <div>
+                <span class="eyebrow">Banquet AI Assistant</span>
+                <h2>AI 비서</h2>
+                <p>베네치아 호텔의 행사 운영, 자산, 공간, 과거 데이터를 바탕으로 답변합니다.</p>
+              </div>
             </div>
-            <span class="soft-badge">운영 데이터 기반</span>
+            <button id="aiNewConversationButton" class="primary-button" type="button">새 대화 시작</button>
+          </header>
+
+          <div class="ai-page-layout">
+            <aside class="ai-conversation-panel" aria-label="대화 기록">
+              <div class="ai-panel-heading">
+                <h3>대화 기록</h3>
+                <button id="aiSideNewConversationButton" class="text-button" type="button">+ 새 대화</button>
+              </div>
+              <div id="aiConversationList" class="ai-conversation-list"></div>
+              <button id="aiConversationMoreButton" class="secondary-button" type="button">더 보기</button>
+            </aside>
+
+            <section class="ai-main-panel" aria-label="AI 채팅 및 학습 인터뷰">
+              <div class="ai-mode-tabs" role="tablist" aria-label="AI 비서 모드">
+                <button class="active" type="button" data-ai-mode="chat">일반 대화</button>
+                <button type="button" data-ai-mode="interview">AI 학습 인터뷰</button>
+                <button type="button" data-ai-mode="teach">직접 가르치기</button>
+              </div>
+
+              <div class="ai-main-scroll">
+                <div id="aiChatModePanel" class="ai-mode-panel active" data-ai-mode-panel="chat">
+                  <div id="aiPageMessages" class="ai-page-messages" aria-live="polite">
+                    <div class="ai-page-message assistant">
+                      <span class="ai-message-avatar" aria-hidden="true">AI</span>
+                      <div class="ai-page-bubble">
+                        <p>안녕하세요. 저장된 행사, 자산, 공간 정보와 공식 지식을 기준으로 답변합니다.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="aiPageAttachmentPreview" class="ai-attachment-preview" hidden></div>
+                  <form id="aiPageChatForm" class="ai-page-chat-form">
+                    <button id="aiPageAttachButton" class="ai-tool-button" type="button" aria-label="파일 첨부" title="파일 첨부">＋</button>
+                    <button id="aiPageAttachmentListButton" class="ai-tool-button" type="button" aria-label="첨부 자료 보기" title="첨부 자료 보기">자료</button>
+                    <input id="aiPageAttachmentInput" class="visually-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple>
+                    <textarea id="aiPageChatInput" rows="3" placeholder="궁금한 내용을 입력하세요..."></textarea>
+                    <button id="aiPageChatSendButton" class="primary-button" type="submit">전송</button>
+                  </form>
+                </div>
+
+                <div id="aiInterviewModePanel" class="ai-mode-panel" data-ai-mode-panel="interview"></div>
+                <div id="aiDirectTeachModePanel" class="ai-mode-panel" data-ai-mode-panel="teach"></div>
+              </div>
+            </section>
+
+            <aside class="ai-reference-panel" aria-label="AI 참조 데이터와 지식 베이스">
+              <section class="ai-reference-card">
+                <div class="ai-panel-heading">
+                  <h3>AI가 참조한 데이터</h3>
+                  <button class="text-button" type="button" data-ai-refresh-stats>새로고침</button>
+                </div>
+                <div id="aiReferenceStats" class="ai-reference-list"></div>
+              </section>
+
+              <section class="ai-reference-card">
+                <div class="ai-panel-heading">
+                  <h3>AI 지식 베이스</h3>
+                  <button class="text-button" type="button" data-ai-knowledge-more>더 보기</button>
+                </div>
+                <div id="aiKnowledgeStats" class="ai-knowledge-summary-list"></div>
+              </section>
+
+              <section class="ai-reference-card">
+                <div class="ai-panel-heading">
+                  <h3>AI 학습 현황</h3>
+                </div>
+                <div id="aiLearningStats" class="ai-learning-stats"></div>
+              </section>
+            </aside>
           </div>
-          <p>대시보드 하단 AI 비서에서 저장된 이벤오더, 자산, 연회장 운영 정보를 기준으로 질문할 수 있습니다.</p>
         </section>
       </section>
     </div>
@@ -471,6 +543,27 @@
     const chatInput = document.querySelector("#chatInput");
     const chatMessages = document.querySelector("#chatMessages");
     const chatSendButton = document.querySelector("#chatSendButton");
+    const aiInterviewPanel = document.querySelector("#aiInterviewPanel");
+    const aiPageMessages = document.querySelector("#aiPageMessages");
+    const aiPageChatForm = document.querySelector("#aiPageChatForm");
+    const aiPageChatInput = document.querySelector("#aiPageChatInput");
+    const aiPageChatSendButton = document.querySelector("#aiPageChatSendButton");
+    const aiPageAttachButton = document.querySelector("#aiPageAttachButton");
+    const aiPageAttachmentListButton = document.querySelector("#aiPageAttachmentListButton");
+    const aiPageAttachmentInput = document.querySelector("#aiPageAttachmentInput");
+    const aiPageAttachmentPreview = document.querySelector("#aiPageAttachmentPreview");
+    const aiNewConversationButton = document.querySelector("#aiNewConversationButton");
+    const aiSideNewConversationButton = document.querySelector("#aiSideNewConversationButton");
+    const aiConversationList = document.querySelector("#aiConversationList");
+    const aiConversationMoreButton = document.querySelector("#aiConversationMoreButton");
+    const aiChatModePanel = document.querySelector("#aiChatModePanel");
+    const aiInterviewModePanel = document.querySelector("#aiInterviewModePanel");
+    const aiDirectTeachModePanel = document.querySelector("#aiDirectTeachModePanel");
+    const aiModeButtons = document.querySelectorAll("[data-ai-mode]");
+    const aiReferenceStats = document.querySelector("#aiReferenceStats");
+    const aiKnowledgeStats = document.querySelector("#aiKnowledgeStats");
+    const aiLearningStats = document.querySelector("#aiLearningStats");
+    const aiRefreshStatsButton = document.querySelector("[data-ai-refresh-stats]");
     const mobileNavButtons = document.querySelectorAll("[data-mobile-target]");
     const dashboardNavButtons = document.querySelectorAll("[data-dashboard-target]");
     const erpPagePanels = document.querySelectorAll("[data-erp-page]");
@@ -519,11 +612,16 @@
     let uploadedOriginalFile = null;
     let savedEvents = [];
     let banquetAssets = [];
+    let venueDirectoryCache = null;
     let calendarDate = new Date();
     let selectedSaveDates = [];
     let selectedEventColor = "navy";
     let selectedEventType = "";
     let selectedMealTypes = [];
+    let aiReviewStatus = "idle";
+    let aiReviewQuestions = [];
+    let aiReviewMessage = "";
+    let aiReviewEventOrderId = "";
     let activeEventId = null;
     let activeCalendarDate = null;
     let currentUser = null;
@@ -634,10 +732,30 @@
         chatInput,
         chatMessages,
         chatSendButton,
+        interviewPanel: aiInterviewPanel,
+        aiPageMessages,
+        aiPageChatForm,
+        aiPageChatInput,
+        aiPageChatSendButton,
+        aiPageAttachmentInput,
+        aiPageAttachmentPreview,
+        aiNewConversationButton,
+        aiSideNewConversationButton,
+        aiConversationList,
+        aiConversationMoreButton,
+        aiChatModePanel,
+        aiInterviewModePanel,
+        aiDirectTeachModePanel,
+        aiModeButtons,
+        aiReferenceStats,
+        aiKnowledgeStats,
+        aiLearningStats,
+        aiRefreshStatsButton,
       },
       deps: {
         supabaseConfig,
         parseSupabaseResponse,
+        supabaseRequest,
         cleanValue,
         normalizeMealTypes,
       },
@@ -648,12 +766,24 @@
         onAnalysisStateChange: () => {
           if (previewExtracted) renderExtractedInfo(previewExtracted);
         },
+        onPendingQuestionsChange: () => updateAiPendingBadges(),
       },
     });
     const {
       handleChatSubmit,
+      handleAiPageChatSubmit,
+      handleAiPageInputKeydown,
+      handleAiAttachmentSelect,
+      openAiAttachmentPicker,
+      showAiAttachmentList,
+      startNewAiConversation,
+      initializeAiAssistantPage,
+      loadAiReferenceStats,
       requestAiAnalysis,
       createAiAnalysisSection,
+      loadCurrentInterview,
+      analyzeEventOrderForKnowledgeGaps,
+      createPostEventReviewQuestions,
     } = aiAssistant;
 
     prevMonthButton.addEventListener("click", () => {
@@ -679,11 +809,22 @@
     refreshAssetsButton.addEventListener("click", loadBanquetAssets);
     input.addEventListener("change", handleExcelUpload);
     chatForm.addEventListener("submit", handleChatSubmit);
+    aiPageChatForm.addEventListener("submit", handleAiPageChatSubmit);
+    aiPageChatInput.addEventListener("keydown", handleAiPageInputKeydown);
+    aiPageAttachmentInput.addEventListener("change", handleAiAttachmentSelect);
+    aiPageAttachButton.addEventListener("click", openAiAttachmentPicker);
+    aiPageAttachmentListButton.addEventListener("click", showAiAttachmentList);
+    aiNewConversationButton.addEventListener("click", startNewAiConversation);
+    aiSideNewConversationButton.addEventListener("click", startNewAiConversation);
+    aiRefreshStatsButton.addEventListener("click", loadAiReferenceStats);
     chatInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
       if (chatSendButton.disabled) return;
       chatForm.requestSubmit();
+    });
+    aiModeButtons.forEach((button) => {
+      button.addEventListener("click", () => initializeAiAssistantPage(button.dataset.aiMode || "chat"));
     });
     loginForm.addEventListener("submit", authController.handleLogin);
     logoutButton.addEventListener("click", authController.handleLogout);
@@ -737,6 +878,7 @@
       uploadedOriginalFile = file;
       fileName.textContent = file.name;
       selectedSaveDates = [];
+      resetEventOrderAiReviewState();
       previewExtracted = null;
       pendingEvent = null;
       showErpPage("upload");
@@ -764,6 +906,7 @@
         pendingEvent.calendarDates = [...selectedSaveDates];
         applyFilenameYearToEventDates(pendingEvent);
         selectedSaveDates = [...pendingEvent.calendarDates].sort();
+        await resolveAndApplyVenueInfo(pendingEvent);
 
         renderExtractedInfo(previewExtracted);
         loadSimilarEventsForPreview();
@@ -815,6 +958,7 @@
       fields.filter((field) => !["schedule", "items", "list"].includes(field.type)).forEach((field) => {
         cardGrid.append(createPreviewField(field, extracted[field.key] || "", false));
       });
+      cardGrid.append(createVenueSpacesPreview());
 
       const scheduleCard = document.createElement("div");
       scheduleCard.className = "info-card schedule-card";
@@ -836,6 +980,7 @@
         cardGrid,
         createAiAnalysisSection(),
         createSimilarEventsSection(),
+        createEventOrderAiReviewNoticeFromState(),
         createCalendarSaveSettings()
       );
     }
@@ -912,6 +1057,29 @@
       };
       const pendingKey = pendingKeys[field.key];
       if (pendingKey) pendingEvent[pendingKey] = value;
+      if (field.key === "place") resetVenueResolution(pendingEvent);
+    }
+
+    function createVenueSpacesPreview() {
+      const card = document.createElement("div");
+      card.className = "info-card wide-card";
+      const label = document.createElement("div");
+      label.className = "info-label";
+      label.textContent = "실제 사용 공간";
+      const value = document.createElement("div");
+      value.className = "info-value";
+      value.textContent = formatVenueSpaces(pendingEvent);
+      const note = document.createElement("p");
+      note.className = "file-storage-note";
+      if (pendingEvent?.venueMatchSource === "alias") {
+        note.textContent = `장소 alias "${pendingEvent.venueAliasName}" 기준으로 매칭되었습니다.`;
+      } else if (pendingEvent?.venueMatchSource === "venue") {
+        note.textContent = "venues.venue_name 기준으로 직접 매칭되었습니다.";
+      } else {
+        note.textContent = "저장 시 venue_aliases와 venues 기준으로 다시 확인합니다.";
+      }
+      card.append(label, value, note);
+      return card;
     }
 
     function createSimilarEventsSection() {
@@ -1483,6 +1651,12 @@
         companyName: cleanValue(extracted.host),
         eventDateTime: cleanValue(extracted.eventDate),
         venue: cleanValue(extracted.place),
+        venueId: null,
+        venueSpaces: [],
+        venueSpaceIds: [],
+        venueSpaceNames: [],
+        venueMatchSource: "",
+        venueAliasName: "",
         guestCount: cleanValue(extracted.guestCount || inferRepresentativeGuestCount(extracted.schedule)),
         schedule: Array.isArray(extracted.schedule) ? extracted.schedule : [],
         items: Array.isArray(extracted.items) ? extracted.items : [],
@@ -1576,7 +1750,227 @@
       }
     }
 
+    function normalizeVenueMatchText(value) {
+      return cleanValue(value)
+        .replace(/^\s*(?:[123]\s*f|[123]\s*층)\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase()
+        .replace(/^[\s,./_-]*(?:b\d+|地下\d+|지하\s*\d+\s*층?|地下|地下층)/i, "")
+        .replace(/^[\s,./_-]*(?:\d+\s*(?:f|층|floor|fl)\s*)/i, "")
+        .replace(/^[\s,./_-]*(?:[123456789]\s*층\s*)/i, "")
+        .replace(/[Ⅲⅲ]/g, "3")
+        .replace(/[Ⅱⅱ]/g, "2")
+        .replace(/[Ⅰⅰ]/g, "1")
+        .replace(/\biii\b/gi, "3")
+        .replace(/\bii\b/gi, "2")
+        .replace(/\bi\b/gi, "1")
+        .replace(/\s*(?:\+|,|，|·|ㆍ|∙|･|&|＆)\s*/g, "+")
+        .replace(/\s+/g, "")
+        .replace(/[()[\]{}<>｜|/\\.，,·ㆍ∙･_-]/g, "");
+    }
+
+    function resetVenueResolution(eventItem) {
+      if (!eventItem) return;
+      eventItem.venueId = null;
+      eventItem.venueSpaces = [];
+      eventItem.venueSpaceIds = [];
+      eventItem.venueSpaceNames = [];
+      eventItem.venueMatchSource = "";
+      eventItem.venueAliasName = "";
+    }
+
+    async function loadVenueDirectory() {
+      if (venueDirectoryCache) return venueDirectoryCache;
+      const [aliases, venues, mappings] = await Promise.all([
+        supabaseRequest("venue_aliases?select=id,alias_name,venue_id,is_active&is_active=eq.true"),
+        supabaseRequest("venues?select=id,venue_name,venue_code,floor,is_active&is_active=eq.true"),
+        supabaseRequest("venue_space_mappings?select=venue_id,sort_order,venue_spaces(id,space_name,space_code,floor)&order=sort_order.asc"),
+      ]);
+
+      const venueMap = new Map((venues || []).map((venue) => [venue.id, venue]));
+      const spacesByVenueId = (mappings || []).reduce((groups, mapping) => {
+        const space = Array.isArray(mapping.venue_spaces) ? mapping.venue_spaces[0] : mapping.venue_spaces;
+        if (!mapping.venue_id || !space?.id) return groups;
+        if (!groups[mapping.venue_id]) groups[mapping.venue_id] = [];
+        groups[mapping.venue_id].push({
+          id: space.id,
+          spaceName: space.space_name || "",
+          spaceCode: space.space_code || "",
+          floor: space.floor || "",
+          sortOrder: mapping.sort_order ?? 0,
+        });
+        return groups;
+      }, {});
+
+      Object.values(spacesByVenueId).forEach((spaces) => {
+        spaces.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      });
+
+      venueDirectoryCache = {
+        aliases: aliases || [],
+        venues: venues || [],
+        venueMap,
+        spacesByVenueId,
+      };
+      return venueDirectoryCache;
+    }
+
+    function findMatchedRecord(items, rawVenueName, labelKey) {
+      const target = normalizeVenueMatchText(rawVenueName);
+      if (!target) return null;
+      const normalized = (items || [])
+        .map((item) => ({ item, key: normalizeVenueMatchText(item[labelKey]) }))
+        .filter(({ key }) => key);
+      return normalized.find(({ key }) => key === target)?.item
+        || normalized.find(({ key }) => target.includes(key) || key.includes(target))?.item
+        || null;
+    }
+
+    function getVenueMatchDebug(rawVenueName, directory) {
+      const normalizedLookup = normalizeVenueMatchText(rawVenueName);
+      const venueResults = (directory?.venues || [])
+        .map((item) => ({
+          item,
+          venue: item.venue_name,
+          normalized: normalizeVenueMatchText(item.venue_name),
+        }))
+        .filter((item) => item.normalized && (
+          item.normalized === normalizedLookup
+          || normalizedLookup.includes(item.normalized)
+          || item.normalized.includes(normalizedLookup)
+        ));
+      const aliasResults = (directory?.aliases || [])
+        .map((item) => ({
+          item,
+          alias: item.alias_name,
+          normalized: normalizeVenueMatchText(item.alias_name),
+        }))
+        .filter((item) => item.normalized && (
+          item.normalized === normalizedLookup
+          || normalizedLookup.includes(item.normalized)
+          || item.normalized.includes(normalizedLookup)
+        ));
+      return {
+        rawVenueName,
+        normalizedVenueName: normalizedLookup,
+        normalizedAliases: (directory?.aliases || [])
+          .map((item) => ({
+            alias: item.alias_name,
+            normalized: normalizeVenueMatchText(item.alias_name),
+          }))
+          .filter((item) => item.normalized),
+        venueResults: venueResults.map(({ item, ...rest }) => rest),
+        aliasResults: aliasResults.map(({ item, ...rest }) => rest),
+      };
+    }
+
+    function logVenueMatchFailure(rawVenueName, directory) {
+      const debug = getVenueMatchDebug(rawVenueName, directory);
+      const aliasKeys = (directory?.aliases || [])
+        .map((item) => ({
+          alias: item.alias_name,
+          normalized: normalizeVenueMatchText(item.alias_name),
+        }))
+        .filter((item) => item.normalized)
+        .slice(0, 20);
+      const venueKeys = (directory?.venues || [])
+        .map((item) => ({
+          venue: item.venue_name,
+          normalized: normalizeVenueMatchText(item.venue_name),
+        }))
+        .filter((item) => item.normalized)
+        .slice(0, 20);
+      console.warn("장소 매칭 실패:", {
+        ...debug,
+        aliasSample: aliasKeys,
+        venueSample: venueKeys,
+      });
+    }
+
+    async function resolveVenueByName(rawVenueName) {
+      const venueName = cleanValue(rawVenueName);
+      if (!venueName) return null;
+      try {
+        const directory = await loadVenueDirectory();
+        const debug = getVenueMatchDebug(venueName, directory);
+        const venue = findMatchedRecord(directory.venues, venueName, "venue_name");
+        console.log("장소 매칭 검색:", {
+          rawVenueName: venueName,
+          normalizedVenueName: debug.normalizedVenueName,
+          normalizedAliases: debug.normalizedAliases,
+          venueResults: debug.venueResults,
+          aliasResults: debug.aliasResults,
+          finalMatch: venue ? {
+            source: "venue",
+            venueName: venue.venue_name,
+            venueId: venue.id,
+          } : null,
+        });
+        if (venue?.id) {
+          return {
+            venueId: venue.id,
+            venueName: venue.venue_name || venueName,
+            venueSpaces: directory.spacesByVenueId[venue.id] || [],
+            matchSource: "venue",
+            aliasName: "",
+          };
+        }
+
+        const alias = findMatchedRecord(directory.aliases, venueName, "alias_name");
+        const aliasVenue = alias?.venue_id ? directory.venueMap.get(alias.venue_id) : null;
+        console.log("장소 alias 매칭 결과:", {
+          rawVenueName: venueName,
+          normalizedVenueName: debug.normalizedVenueName,
+          normalizedAliases: debug.normalizedAliases,
+          finalMatch: aliasVenue ? {
+            source: "alias",
+            aliasName: alias.alias_name,
+            venueName: aliasVenue.venue_name,
+            venueId: aliasVenue.id,
+          } : null,
+        });
+        if (aliasVenue) {
+          return {
+            venueId: aliasVenue.id,
+            venueName: aliasVenue.venue_name || venueName,
+            venueSpaces: directory.spacesByVenueId[aliasVenue.id] || [],
+            matchSource: "alias",
+            aliasName: alias.alias_name || "",
+          };
+        }
+        logVenueMatchFailure(venueName, directory);
+      } catch (error) {
+        console.warn("장소 DB 매칭 정보를 불러오지 못했습니다.", error);
+      }
+      return null;
+    }
+
+    async function resolveAndApplyVenueInfo(eventItem) {
+      if (!eventItem) return null;
+      const resolved = await resolveVenueByName(eventItem.venue);
+      if (!resolved) {
+        resetVenueResolution(eventItem);
+        return null;
+      }
+      eventItem.venueId = resolved.venueId;
+      eventItem.venue = resolved.venueName;
+      eventItem.venueSpaces = resolved.venueSpaces;
+      eventItem.venueSpaceIds = resolved.venueSpaces.map((space) => space.id).filter(Boolean);
+      eventItem.venueSpaceNames = resolved.venueSpaces.map((space) => space.spaceName).filter(Boolean);
+      eventItem.venueMatchSource = resolved.matchSource;
+      eventItem.venueAliasName = resolved.aliasName;
+      return resolved;
+    }
+
+    function formatVenueSpaces(eventItem) {
+      const spaces = eventItem?.venueSpaces || [];
+      if (!spaces.length) return "매칭된 실제 공간이 없습니다.";
+      return spaces.map((space) => space.spaceName || space.spaceCode).filter(Boolean).join(", ");
+    }
+
     async function savePendingEvent() {
+      console.log("final save handler called");
       if (!pendingEvent) return;
       if (selectedSaveDates.length === 0) {
         setStatus("캘린더 저장 날짜를 1개 이상 추가해주세요.", "warn");
@@ -1588,6 +1982,7 @@
         return;
       }
 
+      await resolveAndApplyVenueInfo(pendingEvent);
       setStatus("원본 엑셀 파일을 Supabase Storage에 업로드하는 중입니다...");
 
       let uploadedFile;
@@ -1615,9 +2010,18 @@
       try {
         setStatus("행사 데이터를 Supabase Database에 저장하는 중입니다...");
         savedEvent = await createEventInSupabase(eventToSave);
+        console.log("event order saved:", { eventOrderId: savedEvent?.id, savedEvent });
+        console.log("savedEventOrderId:", savedEvent?.id);
+        console.log("child records save completed:", { eventOrderId: savedEvent?.id });
       } catch (error) {
-        console.error(error);
+        console.error("caught error:", error);
         setStatus(error.message || "행사 데이터 저장에 실패했습니다. 캘린더에는 반영되지 않습니다.", "error");
+        return;
+      }
+
+      if (!savedEvent?.id) {
+        console.error("caught error:", new Error("savedEventOrderId is missing"));
+        setStatus("행사는 저장되었지만 저장 ID를 확인하지 못해 AI 검토를 실행하지 못했습니다.", "warn");
         return;
       }
 
@@ -1625,8 +2029,169 @@
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
       renderCalendar();
-      setStatus(`"${pendingEvent.eventName || "이름 없는 행사"}" 행사를 ${selectedSaveDates.length}개 날짜에 저장했습니다.`);
+      setStatus("이벤트오더가 저장되었습니다. AI가 내용을 검토하고 있습니다.");
       showToast("이벤트오더가 저장되었습니다.");
+      await reviewSavedEventOrderWithAi(savedEvent.id);
+    }
+
+    async function reviewSavedEventOrderWithAi(eventOrderId) {
+      aiReviewStatus = "reviewing";
+      aiReviewQuestions = [];
+      aiReviewMessage = "이벤트오더가 저장되었습니다. AI가 내용을 검토하고 있습니다.";
+      aiReviewEventOrderId = eventOrderId || "";
+      renderEventOrderAiReviewState();
+      console.log("analyzeEventOrderForKnowledgeGaps called:", { eventOrderId });
+      try {
+        const result = await analyzeEventOrderForKnowledgeGaps(eventOrderId);
+        const questions = Array.isArray(result?.questions) ? result.questions : [];
+        console.log("questions count:", questions.length);
+        console.log("event order AI review result:", result);
+        aiReviewQuestions = questions;
+        if (result?.ok === false) {
+          aiReviewStatus = "error";
+          aiReviewMessage = result.message || "이벤트오더는 저장되었지만 AI 검토에 실패했습니다.";
+          setStatus(aiReviewMessage, "warn");
+          console.error("caught error:", new Error(aiReviewMessage));
+        } else if (questions.length) {
+          aiReviewStatus = "success";
+          aiReviewMessage = `AI가 확인이 필요한 항목 ${questions.length}개를 발견했습니다.`;
+          setStatus(aiReviewMessage, "warn");
+          showToast(aiReviewMessage);
+        } else {
+          aiReviewStatus = "empty";
+          aiReviewMessage = "AI 검토 결과 추가 확인이 필요한 항목은 없습니다.";
+          setStatus(aiReviewMessage);
+        }
+        renderEventOrderAiReviewState();
+        await updateAiPendingBadges();
+        if (appMain.dataset.activePage === "ai") {
+          initializeAiAssistantPage("interview");
+          await loadCurrentInterview();
+        }
+      } catch (error) {
+        console.error("caught error:", error);
+        aiReviewStatus = "error";
+        aiReviewQuestions = [];
+        aiReviewMessage = error.message || "이벤트오더는 저장되었지만 AI 검토에 실패했습니다.";
+        setStatus(aiReviewMessage, "warn");
+        renderEventOrderAiReviewState();
+      }
+    }
+
+    function resetEventOrderAiReviewState() {
+      aiReviewStatus = "idle";
+      aiReviewQuestions = [];
+      aiReviewMessage = "";
+      aiReviewEventOrderId = "";
+    }
+
+    function createEventOrderAiReviewNoticeFromState() {
+      if (aiReviewStatus === "idle") return document.createDocumentFragment();
+      return createEventOrderAiReviewNotice({
+        state: aiReviewStatus === "reviewing" ? "loading" : aiReviewStatus,
+        ok: aiReviewStatus === "error" ? false : true,
+        questions: aiReviewQuestions,
+        message: aiReviewMessage,
+      }, aiReviewEventOrderId);
+    }
+
+    function renderEventOrderAiReviewState() {
+      resultWrap.querySelectorAll(".event-order-ai-review").forEach((element) => element.remove());
+      if (aiReviewStatus === "idle") return;
+      const calendarSettings = resultWrap.querySelector(".calendar-save-settings");
+      const notice = createEventOrderAiReviewNoticeFromState();
+      if (calendarSettings) {
+        resultWrap.insertBefore(notice, calendarSettings);
+      } else {
+        resultWrap.prepend(notice);
+      }
+    }
+
+    function createEventOrderAiReviewNotice(result = {}, eventOrderId = "") {
+      const card = document.createElement("section");
+      card.className = `event-order-ai-review${result.ok === false ? " error" : ""}`;
+      const questions = Array.isArray(result.questions) ? result.questions : [];
+      const title = document.createElement("h3");
+      title.textContent = "이벤트오더 저장 완료";
+      const message = document.createElement("p");
+      if (result.state === "loading") {
+        message.textContent = result.message || "AI 검토 중입니다.";
+      } else if (result.ok === false) {
+        message.textContent = result.message || "이벤트오더는 저장되었지만 AI 검토에 실패했습니다.";
+      } else if (questions.length) {
+        message.textContent = result.message || `AI가 확인이 필요한 항목 ${questions.length}개를 발견했습니다.`;
+      } else {
+        message.textContent = result.message || "AI 검토 결과 추가 확인이 필요한 항목은 없습니다.";
+      }
+      card.append(title, message);
+
+      if (questions.length) {
+        const list = document.createElement("ul");
+        list.className = "event-order-ai-question-list";
+        questions.forEach((question) => {
+          const item = document.createElement("li");
+          const strong = document.createElement("strong");
+          strong.textContent = question.question || "확인 질문";
+          const reason = document.createElement("span");
+          reason.textContent = question.reason || question.question_reason || "";
+          item.append(strong, reason);
+          list.append(item);
+        });
+        card.append(list);
+      }
+
+      const actions = document.createElement("div");
+      actions.className = "event-order-ai-review-actions";
+      if (questions.length) {
+        const answerNow = document.createElement("button");
+        answerNow.type = "button";
+        answerNow.className = "primary-button";
+        answerNow.textContent = "지금 답변하기";
+        answerNow.addEventListener("click", async () => {
+          showErpPage("ai");
+          initializeAiAssistantPage("interview");
+          await loadCurrentInterview();
+        });
+        const later = document.createElement("button");
+        later.type = "button";
+        later.className = "secondary-button";
+        later.textContent = "나중에 AI 비서에서 확인";
+        later.addEventListener("click", () => card.remove());
+        actions.append(answerNow, later);
+      } else if (result.ok === false && eventOrderId) {
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "secondary-button";
+        retry.textContent = "다시 검토";
+        retry.addEventListener("click", () => reviewSavedEventOrderWithAi(eventOrderId));
+        actions.append(retry);
+      }
+      if (actions.children.length) card.append(actions);
+      return card;
+    }
+
+    async function updateAiPendingBadges() {
+      try {
+        const rows = await supabaseRequest("ai_interviews?select=id&status=eq.pending&limit=100");
+        const count = Array.isArray(rows) ? rows.length : 0;
+        console.log("AI pending interview count:", count);
+        document.querySelectorAll('[data-dashboard-target="ai"], [data-mobile-target="ai"]').forEach((button) => {
+          let badge = button.querySelector(".ai-pending-badge");
+          if (!count) {
+            badge?.remove();
+            return;
+          }
+          if (!badge) {
+            badge = document.createElement("span");
+            badge.className = "ai-pending-badge";
+            button.append(badge);
+          }
+          badge.textContent = String(count);
+          badge.setAttribute("aria-label", `대기 중인 AI 질문 ${count}건`);
+        });
+      } catch (error) {
+        console.error("AI pending badge load failed:", error);
+      }
     }
 
     async function createEventInSupabase(eventItem) {
@@ -1851,6 +2416,9 @@
       const internalMemoNotes = notes
         .filter((note) => note.note_type === "internal_memo" && cleanValue(note.content))
         .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      const postEventReviewNotes = notes
+        .filter((note) => note.note_type === "post_event_review" && cleanValue(note.content))
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
       return {
         id: row.id,
         eventName: row.event_name || "",
@@ -1859,6 +2427,12 @@
         startDate: row.start_date || "",
         endDate: row.end_date || "",
         venue: row.venue || "",
+        venueId: null,
+        venueSpaceIds: [],
+        venueSpaceNames: [],
+        venueSpaces: [],
+        venueMatchSource: "",
+        venueAliasName: "",
         guestCount: row.guest_count ?? "",
         color: normalizeEventColorKey(row.color || "gray"),
         eventType: row.event_type || "",
@@ -1868,6 +2442,7 @@
         originalFileUrl: row.storage_path ? buildPublicStorageUrl(row.storage_path) : "",
         internalMemo: row.internal_memo || internalMemoNotes[0]?.content || "",
         internalMemoNotes,
+        postEventReviewNotes,
         calendarDates: (row.event_calendar_dates || []).map((item) => item.calendar_date),
         schedule: (row.event_schedules || []).map((item) => ({
           date: item.schedule_date || "",
@@ -1922,7 +2497,7 @@
 
     function showErpPage(target) {
       const allowedPages = new Set(["home", "upload", "calendar", "events", "assets", "ai"]);
-      const pageName = target === "ai" ? "home" : (allowedPages.has(target) ? target : "home");
+      const pageName = allowedPages.has(target) ? target : "home";
       const activeTarget = allowedPages.has(target) ? target : "home";
 
       appMain.dataset.activePage = pageName;
@@ -1956,8 +2531,11 @@
       }
 
       if (target === "ai") {
-        document.querySelector(".ai-chat-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
-        chatInput.focus();
+        initializeAiAssistantPage("chat");
+        createPostEventReviewQuestions().finally(() => {
+          updateAiPendingBadges();
+          loadCurrentInterview();
+        });
       }
     }
 
@@ -2479,6 +3057,7 @@
         ["행사주최", eventItem.companyName],
         ["행사일시", eventItem.eventDateTime],
         ["장소", eventItem.venue],
+        ["실제 사용 공간", formatVenueSpaces(eventItem)],
         ["대표 행사 인원", formatPeopleSummary(eventItem)],
         ["행사 유형", eventItem.eventType || "미입력"],
         ["식사유형", formatMealTypes(eventItem.mealTypes)],
@@ -2548,6 +3127,8 @@
       memoSaveButton.addEventListener("click", () => saveInternalMemo(memoField.querySelector("textarea").value));
       memoField.append(memoSaveButton);
 
+      const reviewNotesCard = createPostEventReviewNotesCard(eventItem);
+
       const actions = document.createElement("div");
       actions.className = "modal-actions";
       const editButton = document.createElement("button");
@@ -2562,8 +3143,34 @@
       deleteButton.addEventListener("click", () => requestDelete(eventItem));
       actions.append(editButton, deleteButton);
 
-      modalBody.append(detailGrid, fileCard, scheduleCard, memoField, actions);
+      modalBody.append(detailGrid, fileCard, scheduleCard, memoField, reviewNotesCard, actions);
       eventModal.classList.add("visible");
+    }
+
+    function createPostEventReviewNotesCard(eventItem) {
+      const card = document.createElement("article");
+      card.className = `info-card wide-card${eventItem.postEventReviewNotes?.length ? "" : " missing"}`;
+      const label = document.createElement("div");
+      label.className = "info-label";
+      label.textContent = "행사 회고";
+      card.append(label);
+      const notes = eventItem.postEventReviewNotes || [];
+      if (!notes.length) {
+        const empty = document.createElement("div");
+        empty.className = "info-value";
+        empty.textContent = "저장된 행사 회고가 없습니다.";
+        card.append(empty);
+        return card;
+      }
+      const list = document.createElement("ul");
+      list.className = "modal-note-list";
+      notes.forEach((note) => {
+        const item = document.createElement("li");
+        item.textContent = note.content;
+        list.append(item);
+      });
+      card.append(list);
+      return card;
     }
 
     function closeEventModal() {
@@ -2786,6 +3393,7 @@
       };
       applyFilenameYearToEventDates(updatedEvent);
       logEventDateDetection(updatedEvent);
+      await resolveAndApplyVenueInfo(updatedEvent);
       try {
         setStatus("수정한 행사 정보를 Supabase Database에 저장하는 중입니다...");
         await updateEventInSupabase(updatedEvent);
@@ -3436,6 +4044,10 @@
       renderCalendar();
       loadEventsFromSupabase();
       loadBanquetAssets();
+      createPostEventReviewQuestions().finally(() => {
+        updateAiPendingBadges();
+        loadCurrentInterview();
+      });
     }
 
     /*

@@ -1,0 +1,2369 @@
+/*
+ * Role: AI assistant chat, AI page, learning interview, knowledge confirmation, and reference panels.
+ * Why separated: AI features are growing quickly and need a dedicated stylesheet.
+ * Connections: Dashboard quick chat and AI tab share these classes.
+ */
+
+.ai-chat-panel {
+  position: sticky;
+  top: 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: min(640px, calc(100vh - 36px));
+  max-height: calc(100vh - 36px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  overflow: hidden;
+}
+
+.ai-chat-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  background: #f8fafc;
+}
+
+.ai-chat-header h2 {
+  margin: 0 0 5px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.ai-chat-header p {
+  font-size: 13px;
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 14px;
+  overflow: auto;
+  background: #fbfcfe;
+}
+
+.chat-message {
+  display: flex;
+}
+
+.chat-message.user {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 88%;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.chat-message.user .chat-bubble {
+  border-color: #0F2A43;
+  background: #0F2A43;
+  color: #FFFFFF;
+}
+
+.chat-message.error .chat-bubble {
+  border-color: var(--error-line);
+  background: var(--error-bg);
+  color: #8a1f1f;
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.chat-form textarea {
+  width: 100%;
+  min-height: 72px;
+  max-height: 150px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 9px 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.chat-form textarea:focus {
+  outline: 2px solid rgba(29, 111, 100, 0.2);
+  border-color: var(--brand);
+}
+
+.ai-analysis-section {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+}
+
+.ai-analysis-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.ai-analysis-header h2 {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.ai-analysis-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.ai-analysis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-analysis-card {
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(15, 42, 67, 0.08);
+}
+
+.ai-analysis-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--navy);
+  font-size: 15px;
+}
+
+.ai-analysis-card .metric {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--navy);
+}
+
+.ai-analysis-card .subtle {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-analysis-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-analysis-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px dashed rgba(15, 42, 67, 0.12);
+  padding-bottom: 6px;
+}
+
+.ai-analysis-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ai-analysis-list li.has-children {
+  display: grid;
+  gap: 8px;
+  justify-content: stretch;
+}
+
+.ai-analysis-child-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 0 0 12px;
+  list-style: none;
+  border-top: 1px solid rgba(15, 42, 67, 0.08);
+}
+
+.ai-analysis-child-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 0;
+  padding-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ai-analysis-fallback {
+  white-space: pre-wrap;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.page-intro,
+.upload-panel,
+.status,
+.result-wrap,
+.calendar-section,
+.asset-section,
+.ai-chat-panel {
+  border-radius: 16px;
+  border: 1px solid rgba(15, 42, 67, 0.1);
+  background: #FFFFFF;
+  box-shadow: 0 18px 44px rgba(15, 42, 67, 0.09);
+}
+
+.asset-header h2,
+.ai-chat-header h2 {
+  color: #0F2A43;
+  font-weight: 900;
+}
+
+.ai-chat-panel {
+  position: sticky;
+  top: 96px;
+  overflow: hidden;
+  border-top: 4px solid #D4AF37;
+  background:
+    linear-gradient(180deg, rgba(15, 42, 67, 0.04), #FFFFFF 160px),
+    #FFFFFF;
+}
+
+.ai-chat-header {
+  padding: 22px 20px 16px;
+  background: #FFFFFF;
+  border-bottom: 1px solid rgba(15, 42, 67, 0.08);
+}
+
+.ai-chat-header p {
+  color: #667085;
+}
+
+.chat-messages {
+  background: linear-gradient(180deg, #FFFFFF, rgba(247, 245, 239, 0.58));
+}
+
+.chat-bubble {
+  border-radius: 16px;
+}
+
+.chat-message.assistant .chat-bubble {
+  color: #0F2A43;
+  background: #F7F5EF;
+  border: 1px solid rgba(15, 42, 67, 0.08);
+}
+
+.chat-message.user .chat-bubble {
+  background: #0F2A43;
+  border-color: #0F2A43;
+  color: #FFFFFF;
+}
+
+.chat-form {
+  flex-shrink: 0;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(15, 42, 67, 0.08);
+  background: #FFFFFF;
+}
+
+.chat-form textarea,
+input,
+textarea,
+select {
+  border-radius: 12px;
+}
+
+.dashboard-overview,
+.upload-panel,
+.status,
+.result-wrap,
+.calendar-section,
+.asset-section,
+.ai-chat-panel,
+.info-card,
+.calendar-save-settings,
+.similar-events-section,
+.ai-analysis-section,
+.export-panel {
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius-card);
+  background: var(--theme-card);
+  box-shadow: var(--theme-shadow-card);
+}
+
+.dashboard-month-card,
+.dashboard-ai-summary-card,
+.weekday-event-card {
+  border: 1px solid var(--theme-border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #FFFFFF, #FBFCFE);
+  box-shadow: var(--theme-shadow-card);
+}
+
+.dashboard-ai-summary-card {
+  padding: 18px 20px;
+}
+
+.dashboard-overview > .ai-chat-panel {
+  position: static;
+  min-height: 260px;
+  max-height: none;
+  display: grid;
+  grid-template-columns: minmax(0, 70fr) minmax(260px, 30fr);
+  grid-template-areas:
+    "header header"
+    "messages form";
+  border-color: var(--theme-border);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #FFFFFF, #FBFCFE);
+  box-shadow: var(--theme-shadow-card);
+}
+
+.dashboard-overview > .ai-chat-panel .ai-chat-header {
+  grid-area: header;
+  border-bottom: 1px solid var(--theme-border);
+  background: #FFFFFF;
+}
+
+.dashboard-overview > .ai-chat-panel .ai-chat-header h2 {
+  font-size: 22px;
+}
+
+.dashboard-overview > .ai-chat-panel .ai-chat-header p {
+  font-size: 15px;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-messages {
+  grid-area: messages;
+  min-height: 180px;
+  border-right: 1px solid var(--theme-border);
+}
+
+.dashboard-overview > .ai-chat-panel .chat-form {
+  grid-area: form;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: stretch;
+  border-top: 0;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-form textarea {
+  min-height: 132px;
+  font-size: 15px;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-form .primary-button {
+  min-height: 46px;
+  font-size: 15px;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-bubble {
+  font-size: 15px;
+}
+
+.event-order-ai-review {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 16px;
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  border-left: 5px solid var(--theme-gold);
+  border-radius: 16px;
+  background: #fffdf7;
+  box-shadow: 0 14px 34px rgba(16, 43, 85, 0.08);
+}
+
+.event-order-ai-review.error {
+  border-color: rgba(220, 38, 38, 0.25);
+  border-left-color: #dc2626;
+  background: #fff7f7;
+}
+
+.event-order-ai-review h3,
+.event-order-ai-review p {
+  margin: 0;
+}
+
+.event-order-ai-review h3 {
+  color: var(--theme-navy);
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.event-order-ai-review p {
+  color: var(--theme-text);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.event-order-ai-question-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-order-ai-question-list li {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.event-order-ai-question-list strong {
+  color: var(--theme-navy);
+  font-size: 15px;
+}
+
+.event-order-ai-question-list span {
+  color: var(--theme-muted);
+  font-size: 14px;
+}
+
+.event-order-ai-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-direct-teach-form {
+  gap: 14px;
+}
+
+.ai-direct-teach-guide {
+  padding: 14px 16px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  border-radius: 14px;
+  background: #fffdf7;
+}
+
+.ai-direct-teach-guide strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--theme-navy);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.ai-direct-teach-guide p {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.ai-direct-teach-form textarea {
+  min-height: 180px;
+}
+
+.ai-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-summary-grid div {
+  min-height: 72px;
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  border-radius: 14px;
+  background: #FFFFFF;
+}
+
+.ai-summary-grid strong {
+  color: var(--theme-muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-summary-grid span {
+  color: var(--theme-navy);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.calendar-title,
+.asset-header h2,
+.ai-chat-header h2,
+.info-value,
+.upload-copy strong {
+  color: var(--theme-navy);
+}
+
+.ai-chat-panel {
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 118px);
+  display: grid;
+  grid-template-rows: auto minmax(280px, 1fr) auto;
+  border-top: 4px solid var(--theme-gold);
+}
+
+.ai-chat-header {
+  background: #FFFFFF;
+}
+
+.chat-message.user .chat-bubble {
+  background: var(--theme-navy);
+  border-color: var(--theme-navy);
+  color: #FFFFFF;
+}
+
+.chat-message.assistant .chat-bubble {
+  color: var(--theme-navy);
+  background: #F8FAFC;
+  border-color: var(--theme-border);
+}
+
+.erp-shell[data-active-page="upload"] .ai-chat-panel,
+.erp-shell[data-active-page="calendar"] .ai-chat-panel,
+.erp-shell[data-active-page="events"] .ai-chat-panel,
+.erp-shell[data-active-page="assets"] .ai-chat-panel {
+  display: none;
+}
+
+.event-management-page,
+.ai-page-card {
+  padding: 22px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-card);
+  box-shadow: var(--theme-shadow);
+}
+
+.management-card p,
+.ai-page-card p {
+  margin: 0;
+  color: var(--theme-muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.section-heading h2,
+.asset-header h2,
+.ai-chat-header h2 {
+  font-size: 40px;
+  line-height: 1.25;
+}
+
+.section-heading p,
+.ai-chat-header p,
+.status,
+.file-name,
+.operation-row span,
+.info-label,
+.soft-badge {
+  font-size: 16px;
+}
+
+.chat-bubble,
+.chat-form textarea,
+.dashboard-overview > .ai-chat-panel .chat-bubble,
+.dashboard-overview > .ai-chat-panel .chat-form textarea {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.dashboard-overview > .ai-chat-panel .ai-chat-header h2 {
+  font-size: 24px;
+}
+
+.dashboard-overview > .ai-chat-panel .ai-chat-header p,
+.dashboard-overview > .ai-chat-panel .chat-form .primary-button {
+  font-size: 16px;
+}
+
+/*
+ * 모바일 전용 사용성 보정
+ * - PC 대시보드 구조는 유지하고, 768px 이하에서만 하단 탭바 고정/상단 메뉴 숨김/홈 화면 단순화를 적용한다.
+ */
+@media (max-width: 768px) {
+  :root {
+    --mobile-content-width: 100vw;
+  }
+
+  html,
+  body {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+
+  .hotel-topbar,
+  .erp-sidebar {
+    display: none !important;
+  }
+
+  .erp-shell,
+  .erp-shell[data-active-page="home"],
+  .erp-shell[data-active-page="ai"],
+  .erp-shell[data-active-page="upload"],
+  .erp-shell[data-active-page="calendar"],
+  .erp-shell[data-active-page="events"],
+  .erp-shell[data-active-page="assets"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 100vh;
+    grid-template-columns: 1fr !important;
+    margin: 0 !important;
+    padding: 12px 12px calc(104px + env(safe-area-inset-bottom)) !important;
+    overflow-x: hidden;
+  }
+
+  .erp-workspace,
+  .erp-page,
+  .dashboard-overview,
+  .upload-panel,
+  .calendar-section,
+  .asset-section,
+  .ai-chat-panel,
+  .result-wrap,
+  .status,
+  .info-card,
+  .calendar-save-settings,
+  .similar-events-section,
+  .ai-analysis-section,
+  .export-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .dashboard-overview {
+    gap: 14px;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .dashboard-widget-grid {
+    display: grid;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    padding: 2px 0 10px;
+    scroll-snap-type: none;
+  }
+
+  .dashboard-widget {
+    min-width: 0;
+    min-height: 156px;
+    padding: 16px;
+    scroll-snap-align: none;
+  }
+
+  .dashboard-widget .widget-icon {
+    width: 52px;
+    height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+
+  .dashboard-widget .widget-icon .lucide-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .dashboard-widget .widget-code {
+    display: none;
+  }
+
+  .dashboard-widget strong {
+    font-size: 18px;
+    line-height: 1.25;
+  }
+
+  .dashboard-widget small {
+    font-size: 15px;
+  }
+
+  .dashboard-operations-row {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  .today-operations-card,
+  .dashboard-month-card {
+    width: 100%;
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .section-heading h2,
+  .mini-calendar-header h3 {
+    font-size: 22px;
+  }
+
+  .operation-row {
+    grid-template-columns: 76px minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .today-operations-card .operation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    border: 0;
+  }
+
+  .today-operations-card .operation-row {
+    min-height: 112px;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-content: start;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(16, 43, 85, 0.1);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #FFFFFF, #F8FAFC);
+    box-shadow: 0 10px 24px rgba(6, 27, 53, 0.08);
+  }
+
+  .today-operations-card .operation-row:active {
+    transform: scale(0.98);
+    background: #FFF8E1;
+  }
+
+  .today-operations-card .operation-time,
+  .today-operations-card .operation-venue-name {
+    display: none;
+  }
+
+  .today-operations-card .operation-venue-code {
+    width: fit-content;
+    min-width: 48px;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: 1px solid rgba(212, 175, 55, 0.55);
+    border-radius: 999px;
+    color: #102B55;
+    background: rgba(212, 175, 55, 0.2);
+    font-size: 18px;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .today-operations-card .operation-info {
+    min-width: 0;
+  }
+
+  .today-operations-card .operation-row strong {
+    display: -webkit-box;
+    overflow: hidden;
+    color: #102B55;
+    font-size: 16px;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .today-operations-card .operation-card-time {
+    display: block;
+    margin-top: 7px;
+    color: #64748B;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .mini-calendar-grid {
+    gap: 6px;
+  }
+
+  .mini-weekday {
+    font-size: 15px;
+  }
+
+  .mini-day {
+    min-height: 42px;
+    font-size: 16px;
+  }
+
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .weekly-events-grid,
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .dashboard-ai-summary-card,
+  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .ai-chat-panel {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-target="ai"] .dashboard-widget-grid,
+  .erp-shell[data-active-target="ai"] .dashboard-operations-row,
+  .erp-shell[data-active-target="ai"] .weekly-events-grid,
+  .erp-shell[data-active-target="ai"] .dashboard-ai-summary-card {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-target="ai"] .ai-chat-panel {
+    display: grid !important;
+    min-height: calc(100vh - 130px);
+  }
+
+  .calendar-grid,
+  .calendar-week,
+  .calendar-event-layer {
+    max-width: 100%;
+  }
+
+  .erp-shell[data-active-page="calendar"] {
+    padding-top: 8px !important;
+  }
+
+  .erp-shell[data-active-page="calendar"] .workspace-tabs,
+  .erp-shell[data-active-page="calendar"] .export-panel {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-section {
+    margin-top: 0;
+    padding: 10px;
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-header {
+    padding: 4px 2px 10px;
+    gap: 8px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-title {
+    font-size: 22px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-nav {
+    gap: 6px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-nav .icon-button {
+    width: 36px;
+    min-height: 36px;
+    border-radius: 12px;
+    font-size: 18px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-grid {
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .weekday {
+    min-height: 24px;
+    padding: 3px 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #64748B;
+    font-size: 13px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-week {
+    min-height: 72px !important;
+    height: clamp(58px, 11.8vh, 82px);
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day {
+    min-height: 0;
+    height: 100%;
+    padding: 5px 3px;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .day-number {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day.today .day-number {
+    min-width: 24px;
+    height: 24px;
+    margin: 0 auto;
+    padding: 0 6px;
+    font-size: 13px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-day.has-events .day-number::after {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-layer {
+    inset: 28px 0 4px;
+    grid-auto-rows: 12px;
+    gap: 2px 4px;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar {
+    min-height: 12px;
+    height: 12px;
+    grid-template-columns: 3px minmax(0, 1fr);
+    gap: 3px;
+    padding: 0 3px 0 0;
+    border-radius: 4px;
+    border-width: 1px;
+    font-size: 9px;
+    font-weight: 900;
+    box-shadow: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .event-color-strip {
+    width: 3px;
+    height: calc(100% + 2px);
+    margin: -1px 0 -1px -1px;
+    border-radius: 4px 0 0 4px;
+  }
+
+  .erp-shell[data-active-page="calendar"] .event-title {
+    line-height: 1;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 4"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 5"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 6"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 7"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 8"],
+  .erp-shell[data-active-page="calendar"] .calendar-event-bar[style*="grid-row: 9"] {
+    display: none;
+  }
+
+  .erp-shell[data-active-page="calendar"] .calendar-overflow-count {
+    position: absolute;
+    right: 4px;
+    bottom: 3px;
+    display: inline-flex;
+    min-width: 18px;
+    height: 14px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: #102B55;
+    background: rgba(212, 175, 55, 0.88);
+    font-size: 9px;
+    font-weight: 900;
+    line-height: 1;
+    z-index: 6;
+  }
+
+  .mobile-bottom-nav {
+    position: fixed !important;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1000;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-height: 84px;
+    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(212, 175, 55, 0.6);
+    background: rgba(6, 27, 53, 0.98);
+    box-shadow: 0 -14px 34px rgba(6, 27, 53, 0.26);
+  }
+
+  .mobile-bottom-nav[hidden] {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav button[data-mobile-target="settings"] {
+    display: none;
+  }
+
+  .mobile-bottom-nav button {
+    min-height: 66px;
+    display: grid;
+    place-items: center;
+    gap: 5px;
+    border: 0;
+    border-radius: 0;
+    color: #FFFFFF;
+    background: transparent;
+    font: inherit;
+    font-weight: 900;
+  }
+
+  .mobile-bottom-nav button span {
+    color: #FFFFFF;
+    font-size: 22px;
+    line-height: 1;
+  }
+
+  .mobile-bottom-nav .lucide-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .mobile-bottom-nav button strong {
+    color: #FFFFFF;
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .mobile-bottom-nav button:active,
+  .mobile-bottom-nav button:hover {
+    background: transparent;
+  }
+
+  .mobile-bottom-nav button.active {
+    color: #D4AF37;
+    background: transparent;
+  }
+
+  .mobile-bottom-nav button.active span,
+  .mobile-bottom-nav button.active strong {
+    color: #D4AF37;
+  }
+
+  .mobile-bottom-nav button.active::after {
+    content: "";
+    width: 28px;
+    height: 3px;
+    border-radius: 999px;
+    background: #D4AF37;
+  }
+
+  .mobile-bottom-nav button.active .lucide-icon {
+    stroke: #D4AF37;
+  }
+}
+
+.ai-interview-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  background: #fff;
+}
+
+.ai-interview-header {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-interview-header strong,
+.ai-knowledge-confirm-title h3,
+.ai-interview-question-card h3 {
+  margin: 0;
+  color: var(--navy);
+}
+
+.ai-interview-header span,
+.ai-interview-question-card p,
+.ai-knowledge-confirm-title p,
+.ai-knowledge-summary p,
+.ai-follow-up-question p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.ai-interview-question-card,
+.ai-knowledge-confirm-card,
+.ai-knowledge-row {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(16, 43, 85, 0.07);
+}
+
+.ai-interview-question-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.ai-interview-meta {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-interview-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ai-interview-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  border-radius: 999px;
+  color: var(--navy);
+  background: #fff8e1;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ai-interview-answer-form {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-interview-answer-form textarea,
+.ai-knowledge-row input,
+.ai-knowledge-row textarea {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+.ai-interview-answer-form textarea,
+.ai-knowledge-row textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.ai-knowledge-confirm-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.ai-knowledge-confirm-title,
+.ai-knowledge-summary,
+.ai-follow-up-question {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-knowledge-summary,
+.ai-follow-up-question {
+  padding: 12px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.ai-knowledge-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ai-knowledge-row {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+}
+
+.ai-knowledge-row dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.ai-knowledge-row dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-knowledge-row dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ai-knowledge-row dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.ai-knowledge-row p {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.ai-knowledge-row .subtle {
+  color: var(--muted);
+}
+
+.ai-knowledge-row.edit-mode label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ai-interview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ai-interview-error-wrap {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-interview-panel .status.success {
+  border-color: rgba(22, 163, 74, 0.28);
+  background: #ecfdf3;
+  color: #166534;
+  font-weight: 800;
+}
+
+.ai-question-generator {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.ai-question-generator p {
+  margin: 0;
+  color: var(--theme-muted);
+  line-height: 1.55;
+}
+
+.ai-question-candidate-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-question-candidate {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--theme-border);
+  border-left: 5px solid var(--theme-gold);
+  border-radius: 14px;
+  background: #fffdf7;
+}
+
+.ai-question-candidate.priority-high {
+  border-left-color: #dc2626;
+}
+
+.ai-question-candidate.priority-medium {
+  border-left-color: var(--theme-gold);
+}
+
+.ai-question-candidate.priority-low {
+  border-left-color: #16a34a;
+}
+
+.ai-question-candidate h3 {
+  margin: 0;
+  color: var(--theme-navy);
+  font-size: 17px;
+}
+
+.ai-question-candidate p {
+  margin: 0;
+  color: var(--theme-muted);
+  line-height: 1.55;
+}
+
+.dashboard-overview > .ai-chat-panel .ai-interview-panel {
+  display: none;
+}
+
+.ai-assistant-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  height: calc(100vh - 132px);
+  min-height: 680px;
+}
+
+.ai-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-card);
+  box-shadow: var(--theme-shadow);
+}
+
+.ai-page-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ai-page-bot-icon,
+.ai-message-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(212, 175, 55, 0.7);
+  border-radius: 14px;
+  background: linear-gradient(145deg, #061B35, #102B55);
+  color: var(--theme-gold);
+  font-weight: 950;
+}
+
+.ai-page-title h2 {
+  margin: 0;
+  color: var(--theme-navy);
+  font-size: 28px;
+}
+
+.ai-page-title p {
+  margin: 4px 0 0;
+  color: var(--theme-muted);
+  font-size: 16px;
+}
+
+.ai-page-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 20%) minmax(460px, 55%) minmax(260px, 25%);
+  gap: 16px;
+  min-height: 0;
+}
+
+.ai-conversation-panel,
+.ai-main-panel,
+.ai-reference-panel,
+.ai-reference-card {
+  min-width: 0;
+  border: 1px solid var(--theme-border);
+  border-radius: var(--theme-radius);
+  background: var(--theme-card);
+  box-shadow: var(--theme-shadow);
+}
+
+.ai-conversation-panel,
+.ai-main-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-reference-panel {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.ai-reference-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.ai-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 16px 10px;
+}
+
+.ai-reference-card .ai-panel-heading {
+  padding: 0;
+}
+
+.ai-panel-heading h3 {
+  margin: 0;
+  color: var(--theme-navy);
+  font-size: 18px;
+}
+
+.ai-conversation-list {
+  display: grid;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 12px 12px;
+}
+
+.ai-conversation-group h4 {
+  margin: 8px 6px;
+  color: var(--theme-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ai-conversation-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--theme-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-conversation-item:hover {
+  border-color: rgba(16, 43, 85, 0.16);
+  background: #fff;
+}
+
+.ai-conversation-item.active {
+  border-color: rgba(212, 175, 55, 0.75);
+  background: #fff8df;
+}
+
+.ai-conversation-text {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.ai-conversation-item strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.ai-conversation-item small {
+  color: var(--theme-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ai-conversation-hide {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(16, 43, 85, 0.12);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--theme-muted);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.ai-conversation-item:hover .ai-conversation-hide,
+.ai-conversation-item:focus-within .ai-conversation-hide {
+  opacity: 1;
+}
+
+.ai-conversation-hide:hover {
+  border-color: rgba(220, 38, 38, 0.35);
+  color: #b91c1c;
+}
+
+.ai-mode-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px;
+  border-bottom: 1px solid var(--theme-border);
+}
+
+.ai-mode-tabs button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--theme-muted);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ai-mode-tabs button.active {
+  border-color: var(--theme-gold);
+  background: var(--theme-navy);
+  color: var(--theme-gold);
+}
+
+.ai-mode-panel {
+  display: none;
+  min-height: 0;
+}
+
+.ai-mode-panel.active {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.ai-page-messages {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+  background: linear-gradient(180deg, #f8fafc, #fff);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+}
+
+.ai-attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px 0;
+  border-top: 1px solid var(--theme-border);
+  background: #fff;
+}
+
+.ai-attachment-preview[hidden] {
+  display: none;
+}
+
+.ai-attachment-chip,
+.ai-message-attachment {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 7px 8px;
+  border: 1px solid rgba(212, 175, 55, 0.36);
+  border-radius: 12px;
+  background: #fffaf0;
+  color: var(--theme-navy);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ai-message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ai-message-attachment {
+  grid-template-columns: auto minmax(0, 1fr);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ai-attachment-chip img,
+.ai-message-attachment img {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #eef2f7;
+}
+
+.ai-attachment-file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--theme-navy);
+  color: var(--theme-gold);
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.ai-attachment-name,
+.ai-message-attachment span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-attachment-chip small {
+  color: var(--theme-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ai-attachment-chip button {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(16, 43, 85, 0.1);
+  color: var(--theme-navy);
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ai-page-message {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ai-page-message.user {
+  justify-content: flex-end;
+}
+
+.ai-page-message.user .ai-page-bubble {
+  max-width: min(680px, 82%);
+  border-color: #102B55;
+  background: #102B55;
+  color: #fff;
+}
+
+.ai-page-message.assistant .ai-page-bubble {
+  max-width: min(760px, 86%);
+}
+
+.ai-page-message.error .ai-page-bubble {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.ai-page-bubble {
+  padding: 14px 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 10px 26px rgba(16, 43, 85, 0.08);
+}
+
+.ai-answer-content {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-answer-content p {
+  margin: 0;
+  line-height: 1.65;
+}
+
+.ai-answer-list-item {
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #f8fafc;
+  line-height: 1.5;
+}
+
+.ai-message-feedback {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ai-message-feedback button {
+  min-height: 28px;
+  border: 1px solid var(--theme-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--theme-muted);
+  font-size: 12px;
+}
+
+.ai-quick-question-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 12px 16px 0;
+}
+
+.ai-quick-question-row button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 999px;
+  background: #fffaf0;
+  color: var(--theme-navy);
+  font-weight: 900;
+}
+
+.ai-page-chat-form {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid var(--theme-border);
+  background: #fff;
+}
+
+.ai-tool-button {
+  min-width: 44px;
+  min-height: 48px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--theme-navy);
+  font-weight: 900;
+}
+
+.ai-page-chat-form textarea {
+  min-height: 56px;
+  max-height: 130px;
+  resize: vertical;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  padding: 13px 14px;
+  font: inherit;
+  font-size: 16px;
+}
+
+#aiInterviewModePanel {
+  overflow: auto;
+  padding: 16px;
+}
+
+.ai-reference-list,
+.ai-knowledge-summary-list,
+.ai-learning-stats {
+  display: grid;
+  gap: 9px;
+}
+
+.ai-reference-row,
+.ai-knowledge-summary-row,
+.ai-learning-stats div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--theme-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--theme-text);
+  text-align: left;
+}
+
+.ai-reference-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #fff3c4;
+  color: var(--theme-gold);
+}
+
+.ai-learning-stats div {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.ai-reference-row strong,
+.ai-knowledge-summary-row strong,
+.ai-learning-stats strong {
+  color: var(--theme-navy);
+}
+
+.ai-knowledge-summary-card {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ai-knowledge-summary-card small {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--theme-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.ai-reference-empty {
+  padding: 14px;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: var(--theme-muted);
+}
+
+/* Density refinement for AI assistant and learning panels. */
+.ai-chat-panel {
+  top: 88px;
+  max-height: calc(100vh - 104px);
+  grid-template-rows: auto minmax(360px, 1fr) auto;
+}
+
+.ai-chat-header {
+  padding: 16px 18px;
+}
+
+.ai-chat-header h2 {
+  font-size: 24px;
+}
+
+.ai-chat-header p {
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.chat-messages {
+  min-height: 360px;
+  padding: 16px;
+}
+
+.chat-bubble {
+  padding: 12px 14px;
+  font-size: var(--font-md);
+  line-height: 1.5;
+}
+
+.chat-form {
+  gap: 9px;
+  padding: 13px 14px 15px;
+}
+
+.chat-form textarea {
+  min-height: 68px;
+  padding: 13px 14px;
+  font-size: var(--font-md);
+}
+
+.dashboard-overview > .ai-chat-panel {
+  min-height: 300px;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-messages {
+  min-height: 210px;
+}
+
+.dashboard-overview > .ai-chat-panel .chat-form textarea {
+  min-height: 150px;
+  font-size: var(--font-md);
+}
+
+.ai-assistant-page {
+  gap: 14px;
+}
+
+.ai-page-header {
+  padding: 16px 18px;
+}
+
+.ai-page-title h2 {
+  font-size: 26px;
+}
+
+.ai-page-title p {
+  font-size: var(--font-sm);
+}
+
+.ai-page-layout {
+  gap: 14px;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+}
+
+.ai-conversation-panel,
+.ai-main-panel,
+.ai-reference-panel,
+.ai-reference-card {
+  border-radius: 15px;
+}
+
+.ai-reference-panel {
+  gap: 10px;
+}
+
+.ai-reference-card {
+  padding: 12px;
+}
+
+.ai-panel-heading {
+  margin-bottom: 9px;
+}
+
+.ai-panel-heading h3 {
+  font-size: 17px;
+}
+
+.ai-reference-list,
+.ai-knowledge-summary-list,
+.ai-learning-stats {
+  gap: 7px;
+}
+
+.ai-reference-row,
+.ai-knowledge-summary-row,
+.ai-learning-stats div {
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: var(--font-sm);
+}
+
+.ai-page-messages {
+  gap: 12px;
+  padding: 16px;
+}
+
+.ai-page-bubble {
+  padding: 12px 14px;
+  font-size: var(--font-md);
+}
+
+.ai-page-chat-form {
+  padding: 12px 14px;
+}
+
+.ai-page-chat-form textarea {
+  min-height: 72px;
+  font-size: var(--font-md);
+}
+
+.ai-mode-tabs {
+  padding: 10px 12px;
+}
+
+#aiInterviewModePanel {
+  padding: 12px;
+}
+
+.ai-interview-question-card,
+.ai-knowledge-confirm-card,
+.ai-question-candidate {
+  padding: 12px;
+}
+
+/* AI 학습 센터 확장 레이아웃
+ * - 좌측 대화 기록과 우측 지식 베이스는 페이지 높이 안에 고정한다.
+ * - 가운데 ai-main-scroll만 독립적으로 스크롤되게 해 지식 카드가 많아져도 화면이 잘리지 않도록 한다.
+ */
+.ai-assistant-page {
+  height: calc(100vh - 128px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-page-layout {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
+}
+
+.ai-conversation-panel,
+.ai-reference-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ai-reference-panel {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.ai-main-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ai-mode-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex: 0 0 auto;
+  background: #FFFFFF;
+}
+
+.ai-main-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+  scrollbar-gutter: stable;
+}
+
+.ai-main-scroll::-webkit-scrollbar,
+.ai-reference-panel::-webkit-scrollbar,
+.ai-conversation-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.ai-main-scroll::-webkit-scrollbar-thumb,
+.ai-reference-panel::-webkit-scrollbar-thumb,
+.ai-conversation-list::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(16, 43, 85, 0.28);
+  background-clip: padding-box;
+}
+
+.ai-main-scroll::-webkit-scrollbar-track,
+.ai-reference-panel::-webkit-scrollbar-track,
+.ai-conversation-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ai-mode-panel.active {
+  min-height: 100%;
+}
+
+#aiInterviewModePanel,
+#aiDirectTeachModePanel {
+  padding: 14px 14px 48px;
+}
+
+#aiChatModePanel.active {
+  min-height: 100%;
+}
+
+.ai-direct-teach-result {
+  display: grid;
+  gap: 14px;
+  padding-bottom: 72px;
+}
+
+.ai-direct-teach-section,
+.ai-knowledge-summary,
+.ai-follow-up-question {
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-direct-teach-section {
+  display: grid;
+  gap: 7px;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 14px;
+  background: #FFFFFF;
+}
+
+.ai-direct-teach-section strong,
+.ai-knowledge-summary strong,
+.ai-follow-up-question strong {
+  color: var(--theme-navy);
+  font-size: 16px;
+  font-weight: 950;
+}
+
+.ai-direct-teach-section p,
+.ai-knowledge-summary p,
+.ai-follow-up-question p {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 15px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-direct-teach-count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 16px;
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  border-radius: 14px;
+  background: #fffdf7;
+}
+
+.ai-direct-teach-count strong {
+  color: var(--theme-navy);
+  font-size: 16px;
+}
+
+.ai-direct-teach-count span {
+  color: var(--theme-gold-dark, #9a6a00);
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.ai-knowledge-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-knowledge-row {
+  display: grid;
+  gap: 11px;
+  overflow: hidden;
+}
+
+.ai-knowledge-row-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ai-knowledge-row-header strong {
+  min-width: 0;
+  color: var(--theme-navy);
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-knowledge-row-header span {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #fff8df;
+  color: #9a6a00;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.ai-knowledge-main {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-knowledge-row dl {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ai-knowledge-row dd {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ai-knowledge-row .subtle {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-save-suggestion-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(212, 175, 55, 0.42);
+  border-radius: 14px;
+  background: #fffdf7;
+  box-shadow: 0 10px 24px rgba(15, 42, 67, 0.08);
+}
+
+.ai-save-suggestion-card.saved {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: #f0fdf4;
+}
+
+.ai-save-suggestion-card.error {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: #fff5f5;
+}
+
+.ai-save-suggestion-card.dismissed {
+  opacity: 0.72;
+}
+
+.ai-save-suggestion-header {
+  display: grid;
+  gap: 5px;
+}
+
+.ai-save-suggestion-header span {
+  color: var(--theme-gold-dark, #9a6a00);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ai-save-suggestion-header strong {
+  color: var(--theme-navy);
+  font-size: 16px;
+  line-height: 1.35;
+}
+
+.ai-save-suggestion-card p {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.ai-save-suggestion-card .ai-save-suggestion-success {
+  color: #166534;
+  font-weight: 800;
+}
+
+.ai-save-suggestion-card .ai-save-suggestion-error {
+  color: #b91c1c;
+  font-weight: 800;
+}
+
+.ai-save-suggestion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-save-suggestion-actions .compact {
+  min-height: 36px;
+  padding: 8px 13px;
+  font-size: 14px;
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ai-page-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+
+  .ai-conversation-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .ai-assistant-page {
+    height: calc(100vh - 24px);
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 86px;
+  }
+
+  .ai-page-layout {
+    height: 100%;
+    grid-template-columns: 1fr;
+    overflow: hidden;
+  }
+
+  .ai-conversation-panel,
+  .ai-reference-panel {
+    display: none;
+  }
+
+  .ai-main-panel {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .ai-main-scroll {
+    padding-right: 4px;
+  }
+
+  #aiInterviewModePanel,
+  #aiDirectTeachModePanel {
+    padding: 12px 10px calc(126px + env(safe-area-inset-bottom));
+  }
+
+  .ai-mode-tabs {
+    gap: 6px;
+    overflow-x: auto;
+    padding: 10px;
+  }
+
+  .ai-mode-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .ai-knowledge-row dl {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-knowledge-row-header {
+    display: grid;
+  }
+
+  .ai-knowledge-row-header span {
+    width: fit-content;
+  }
+}

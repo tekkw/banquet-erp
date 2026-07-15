@@ -1,0 +1,673 @@
+/*
+ * Role: Buttons, inputs, upload controls, tabs, chips, color selectors, export controls, and editable fields.
+ * Why separated: Form controls are reused across upload, calendar saving, assets, and modals.
+ * Connections: Existing button/input class names stay unchanged.
+ */
+
+.upload-panel {
+  display: grid;
+  grid-template-columns: minmax(230px, max-content) 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.file-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.upload-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.upload-button:hover {
+  background: var(--brand-dark);
+}
+
+.primary-button,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.primary-button {
+  padding: 0 15px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 15px;
+}
+
+.primary-button:disabled {
+  background: #98a2b3;
+  cursor: not-allowed;
+}
+
+.icon-button {
+  width: 38px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 18px;
+}
+
+.file-name {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.sheet-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sheet-button.active {
+  border-color: var(--brand);
+  background: #e7f4f1;
+  color: var(--brand-dark);
+  font-weight: 700;
+}
+
+.workspace-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 18px 0 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-tab {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: #eef2f6;
+  color: #475467;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.workspace-tab.active {
+  background: var(--surface);
+  color: var(--brand-dark);
+  border-color: var(--line-strong);
+}
+
+.date-adder input {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.date-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 7px 0 10px;
+  border: 1px solid #b9ddd5;
+  border-radius: 6px;
+  background: #e7f4f1;
+  color: var(--brand-dark);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.meal-type-group {
+  grid-column: 1 / -1;
+}
+
+.meal-type-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meal-type-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.meal-type-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+
+.color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+}
+
+.color-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  color: var(--text);
+  background: #fff;
+  cursor: pointer;
+  font-size: 0;
+  box-shadow: inset 0 0 0 1px rgba(15, 42, 67, 0.1);
+}
+
+.color-option.selected {
+  border-color: #1d2939;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(212, 175, 55, 0.34);
+}
+
+.color-option.selected::after {
+  content: "✓";
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #fff;
+  background: #0F2A43;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.export-panel {
+  display: grid;
+  grid-template-columns: 1.2fr repeat(4, minmax(120px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+  margin: 14px 0 16px;
+  padding: 14px;
+  border: 1px solid rgba(15, 42, 67, 0.1);
+  border-radius: 14px;
+  background: rgba(247, 245, 239, 0.72);
+}
+
+.export-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.export-field label {
+  color: #475467;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.export-field input,
+.export-field select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  padding: 0 10px;
+}
+
+.export-panel.mode-all .export-year-field,
+.export-panel.mode-all .export-month-field,
+.export-panel.mode-all .export-range-field,
+.export-panel.mode-year .export-month-field,
+.export-panel.mode-year .export-range-field,
+.export-panel.mode-month .export-range-field,
+.export-panel.mode-range .export-year-field,
+.export-panel.mode-range .export-month-field {
+  display: none;
+}
+
+.preview-input,
+.preview-textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.preview-input {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+.preview-textarea {
+  min-height: 92px;
+  padding: 10px 11px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.preview-input:focus,
+.preview-textarea:focus {
+  outline: none;
+  border-color: #D4AF37;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.16);
+}
+
+.secondary-button,
+.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.secondary-button {
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--text);
+}
+
+.danger-button {
+  border: 1px solid #e69898;
+  background: #fff0f0;
+  color: #9d2424;
+}
+
+.form-field {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.form-field label {
+  color: #475467;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.form-field input,
+.form-field textarea,
+.editable-table input {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.form-field input {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.form-field textarea {
+  min-height: 96px;
+  padding: 9px 10px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.editable-table input {
+  min-height: 30px;
+  padding: 4px 6px;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-field {
+  display: grid;
+  gap: 7px;
+}
+
+.login-field label {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.login-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 0 13px;
+  border: 1px solid #aeb7c5;
+  border-radius: 12px;
+  color: #202631;
+  font: inherit;
+}
+
+.login-field input:focus {
+  outline: none;
+  border-color: #D4AF37;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.18);
+}
+
+.logout-button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(212, 175, 55, 0.62);
+  border-radius: 999px;
+  color: #0F2A43;
+  background: #D4AF37;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  filter: brightness(1.04);
+}
+
+.upload-dropzone {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  min-height: 118px;
+  padding: 22px;
+  border: 1.5px dashed rgba(212, 175, 55, 0.78);
+  background:
+    linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(255, 255, 255, 0.96)),
+    #FFFFFF;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.upload-dropzone:hover {
+  transform: translateY(-2px);
+  border-color: #D4AF37;
+  box-shadow: 0 22px 52px rgba(15, 42, 67, 0.13);
+}
+
+.upload-symbol {
+  width: 58px;
+  height: 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  color: #D4AF37;
+  background: #0F2A43;
+  font-size: 28px;
+  font-weight: 900;
+  box-shadow: 0 12px 24px rgba(15, 42, 67, 0.22);
+}
+
+.upload-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.upload-copy strong {
+  color: #0F2A43;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.upload-copy span {
+  color: #667085;
+  font-size: 14px;
+}
+
+.upload-action {
+  justify-self: end;
+}
+
+.file-name {
+  grid-column: 2 / -1;
+  color: #16395B;
+  font-weight: 700;
+}
+
+.upload-button,
+.primary-button {
+  min-height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0F2A43, #16395B);
+  box-shadow: 0 10px 18px rgba(15, 42, 67, 0.16);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.upload-button:hover,
+.primary-button:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(135deg, #16395B, #0F2A43);
+  box-shadow: 0 14px 24px rgba(15, 42, 67, 0.2);
+}
+
+.secondary-button,
+.icon-button,
+.workspace-tab {
+  border-radius: 12px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.secondary-button:hover,
+.icon-button:hover,
+.workspace-tab:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 42, 67, 0.1);
+}
+
+.workspace-tabs {
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.workspace-tab.active {
+  color: #FFFFFF;
+  border-color: #0F2A43;
+  background: #0F2A43;
+}
+
+.event-order-save-button {
+  min-width: 180px;
+  min-height: 46px;
+}
+
+.upload-dropzone {
+  border-color: rgba(212, 175, 55, 0.62);
+  background: #FFFFFF;
+}
+
+.upload-symbol,
+.primary-button,
+.upload-button {
+  background: var(--theme-navy);
+}
+
+.primary-button,
+.upload-button {
+  border: 1px solid transparent;
+  color: #FFFFFF;
+}
+
+.primary-button:hover,
+.upload-button:hover {
+  background: var(--theme-navy-dark);
+  border-color: var(--theme-gold);
+}
+
+.secondary-button,
+.icon-button,
+.workspace-tab {
+  border-color: var(--theme-border);
+  background: #FFFFFF;
+  color: var(--theme-navy);
+}
+
+.workspace-tab.active {
+  border-color: var(--theme-gold);
+  color: var(--theme-navy-dark);
+  background: var(--theme-gold);
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--theme-focus);
+}
+
+.workspace-tabs {
+  display: none;
+}
+
+button,
+input,
+select,
+textarea,
+.primary-button,
+.secondary-button,
+.danger-button,
+.upload-button,
+.icon-button,
+.workspace-tab {
+  font-size: 16px;
+}
+
+/* Density refinement for ERP controls. */
+.primary-button,
+.secondary-button,
+.danger-button,
+.upload-button,
+.icon-button,
+.workspace-tab,
+.sheet-button,
+.table-add-row,
+.table-row-delete {
+  min-height: 42px;
+  font-size: var(--font-md);
+  font-weight: 850;
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.upload-button {
+  padding-inline: 16px;
+}
+
+input,
+select,
+textarea,
+.preview-input,
+.preview-textarea,
+.form-field input,
+.form-field textarea,
+.editable-table input {
+  font-size: var(--font-md);
+}
+
+.upload-dropzone {
+  min-height: 96px;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.upload-symbol {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  font-size: 25px;
+}
+
+.upload-copy strong {
+  font-size: var(--font-lg);
+}
+
+.upload-copy span {
+  font-size: var(--font-sm);
+}
+
+.calendar-save-settings {
+  padding: 14px 16px;
+}
+
+.date-chip,
+.meal-type-option,
+.color-legend {
+  font-size: var(--font-sm);
+}
+
+.workspace-tabs {
+  margin-top: 10px;
+}
+
+.text-button {
+  border: 0;
+  background: transparent;
+  color: var(--theme-gold);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+#aiConversationMoreButton {
+  margin: 0 12px 14px;
+}

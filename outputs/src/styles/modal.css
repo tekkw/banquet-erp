@@ -1,0 +1,97 @@
+/*
+ * Role: Modal overlays, detail dialogs, Excel viewer, and confirmation panels.
+ * Why separated: Overlay z-index and sizing rules should be isolated from page layout.
+ * Connections: Existing modal open/close JavaScript continues to use these classes.
+ */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.42);
+  z-index: 10;
+}
+
+.modal-backdrop.visible {
+  display: flex;
+}
+
+.modal {
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100vh - 40px));
+  overflow: auto;
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+}
+
+.excel-viewer-dialog {
+  width: 90vw;
+  height: 90vh;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.modal-body {
+  padding: 18px;
+}
+
+.excel-viewer-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0;
+  background: #f8fafc;
+}
+
+.excel-viewer-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.delete-choice-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #e69898;
+  border-radius: 6px;
+  background: #fff8f8;
+}
+
+.delete-choice-message {
+  width: 100%;
+  color: #7a271a;
+  font-size: 14px;
+  font-weight: 700;
+}
