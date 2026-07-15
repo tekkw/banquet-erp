@@ -29,7 +29,7 @@
     const { calendarTitle, calendarGrid } = elements;
     const { eventColors } = constants;
     const { formatDateKey, normalizeEventColorKey, getEventRenderRange, syncExportDefaults } = helpers;
-    const { openEventModal } = callbacks;
+    const { openEventModal, openDateEventsSheet } = callbacks;
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -110,6 +110,7 @@
             overflow.textContent = `+${mobileOverflowByDate.get(dateKey)}`;
             dayCell.append(overflow);
           }
+          dayCell.addEventListener("click", () => openDateEventsSheet?.(dateKey));
           weekRow.append(dayCell);
         });
 

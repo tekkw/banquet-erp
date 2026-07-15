@@ -4,6 +4,15 @@
  * Connections: Imported last so media queries can override desktop styles safely.
  */
 
+.ai-mobile-menu-button,
+.ai-mobile-menu,
+.mobile-date-sheet,
+.mobile-asset-toolbar,
+.mobile-asset-list,
+.mobile-asset-fab {
+  display: none;
+}
+
 @media (max-width: 768px) {
   :root {
     --mobile-content-width: max(100vw, 700px);
@@ -867,5 +876,615 @@
   .ai-page-chat-form {
     grid-template-columns: 42px 42px minmax(0, 1fr) 56px;
     gap: 6px;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --mobile-content-width: 100%;
+    --mobile-bottom-nav-height: 76px;
+  }
+
+  html,
+  body {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    overflow-y: auto;
+  }
+
+  main,
+  .hotel-topbar,
+  .erp-shell,
+  .erp-workspace,
+  .erp-page,
+  .calendar-section,
+  .asset-section,
+  .ai-assistant-page {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .erp-shell {
+    padding: 12px 12px calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 18px);
+  }
+
+  /* Mobile calendar: Samsung Calendar style monthly overview */
+  .erp-shell[data-active-page="calendar"] {
+    min-height: calc(100dvh - 78px);
+  }
+
+  .calendar-section {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .calendar-header {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .calendar-title {
+    font-size: 22px;
+  }
+
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: auto;
+    gap: 0;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden;
+  }
+
+  .calendar-grid > .weekday {
+    min-height: 32px;
+    padding: 7px 0;
+    border: 0;
+    background: transparent;
+    color: var(--theme-muted);
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .calendar-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-rows: 1fr;
+    grid-column: 1 / -1;
+    min-height: clamp(74px, 12.2vh, 96px);
+    border-top: 1px solid var(--theme-border);
+    position: relative;
+  }
+
+  .calendar-week .calendar-day {
+    min-height: 0;
+    height: 100%;
+    padding: 6px 4px 18px;
+    border: 0;
+    border-right: 1px solid rgba(233, 236, 239, 0.86);
+    border-radius: 0;
+    background: #fff;
+    overflow: hidden;
+  }
+
+  .calendar-week .calendar-day:last-of-type {
+    border-right: 0;
+  }
+
+  .calendar-day.outside {
+    background: #f8fafc;
+  }
+
+  .calendar-day .day-number {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .calendar-day.today .day-number {
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    background: var(--theme-navy);
+    color: #fff;
+  }
+
+  .calendar-event-layer {
+    pointer-events: none;
+    position: absolute;
+    inset: 30px 3px 4px;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-auto-rows: 15px;
+    gap: 2px 0;
+    overflow: hidden;
+  }
+
+  .calendar-event-bar {
+    pointer-events: auto;
+    min-width: 0;
+    height: 15px;
+    min-height: 15px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 900;
+    line-height: 13px;
+    box-shadow: none;
+  }
+
+  .calendar-event-bar .event-color-strip {
+    width: 3px;
+    min-width: 3px;
+  }
+
+  .calendar-event-bar .event-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .calendar-overflow-count {
+    position: absolute;
+    right: 4px;
+    bottom: 3px;
+    min-width: 22px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--theme-gold);
+    color: var(--theme-navy);
+    font-size: 10px;
+    font-weight: 950;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  .mobile-date-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 1500;
+    display: none;
+  }
+
+  .mobile-date-sheet.visible {
+    display: block;
+  }
+
+  .mobile-sheet-scrim {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(6, 27, 53, 0.38);
+  }
+
+  .mobile-sheet-panel {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    max-height: min(72dvh, 620px);
+    padding: 8px 16px calc(env(safe-area-inset-bottom) + 18px);
+    border-radius: 24px 24px 0 0;
+    background: #fff;
+    box-shadow: 0 -18px 48px rgba(6, 27, 53, 0.22);
+    overflow-y: auto;
+  }
+
+  .mobile-sheet-handle {
+    width: 42px;
+    height: 4px;
+    margin: 4px auto 14px;
+    border-radius: 999px;
+    background: #d9dee8;
+  }
+
+  .mobile-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--theme-border);
+  }
+
+  .mobile-sheet-header h2 {
+    margin: 2px 0 0;
+    color: var(--theme-navy);
+    font-size: 22px;
+  }
+
+  .mobile-sheet-body {
+    display: grid;
+    gap: 10px;
+    padding-top: 14px;
+  }
+
+  .mobile-date-event-card {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 4px 12px;
+    width: 100%;
+    min-height: 72px;
+    padding: 14px;
+    border: 1px solid var(--theme-border);
+    border-radius: 16px;
+    background: #fff;
+    color: var(--theme-text);
+    text-align: left;
+    box-shadow: 0 10px 24px rgba(16, 43, 85, 0.08);
+  }
+
+  .mobile-date-event-time {
+    grid-row: 1 / span 2;
+    color: var(--theme-gold);
+    font-weight: 950;
+  }
+
+  .mobile-date-event-card strong {
+    overflow: hidden;
+    color: var(--theme-navy);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-date-event-card small,
+  .mobile-sheet-empty {
+    color: var(--theme-muted);
+    font-size: 14px;
+  }
+
+  /* Mobile assets: list first, editor on demand */
+  .erp-shell[data-active-page="assets"] {
+    min-height: calc(100dvh - 78px);
+  }
+
+  .asset-section {
+    position: relative;
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 24px);
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .asset-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 2px 12px;
+  }
+
+  .asset-header h2 {
+    font-size: 24px;
+  }
+
+  .mobile-asset-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 112px;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .mobile-asset-toolbar label {
+    display: grid;
+    gap: 5px;
+    color: var(--theme-muted);
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  .mobile-asset-toolbar input,
+  .mobile-asset-toolbar select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    border: 1px solid var(--theme-border);
+    border-radius: 14px;
+    padding: 0 13px;
+    background: #fff;
+    font-size: 15px;
+  }
+
+  .asset-table-wrap {
+    display: none;
+  }
+
+  .mobile-asset-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobile-asset-card {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    padding: 13px;
+    border: 1px solid var(--theme-border);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(16, 43, 85, 0.08);
+  }
+
+  .mobile-asset-image {
+    width: 64px;
+    height: 64px;
+    overflow: hidden;
+    border: 1px solid var(--theme-border);
+    border-radius: 16px;
+    background: #f8fafc;
+  }
+
+  .mobile-asset-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mobile-asset-placeholder {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    place-items: center;
+    color: var(--theme-muted);
+  }
+
+  .mobile-asset-info {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .mobile-asset-info strong,
+  .mobile-asset-info span,
+  .mobile-asset-info small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-asset-info strong {
+    color: var(--theme-navy);
+    font-size: 16px;
+  }
+
+  .mobile-asset-info span,
+  .mobile-asset-info small {
+    color: var(--theme-muted);
+    font-size: 13px;
+  }
+
+  .mobile-asset-qty {
+    min-width: 42px;
+    padding: 6px 9px;
+    border-radius: 999px;
+    background: #fff8df;
+    color: var(--theme-navy);
+    font-weight: 950;
+    text-align: center;
+  }
+
+  .mobile-asset-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .mobile-asset-actions button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--theme-border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--theme-navy);
+    font-weight: 900;
+  }
+
+  .mobile-asset-fab {
+    position: fixed;
+    right: 18px;
+    bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 16px);
+    z-index: 1150;
+    display: grid;
+    width: 58px;
+    height: 58px;
+    place-items: center;
+    border: 0;
+    border-radius: 999px;
+    background: var(--theme-gold);
+    color: var(--theme-navy);
+    font-size: 34px;
+    font-weight: 900;
+    box-shadow: 0 14px 28px rgba(16, 43, 85, 0.22);
+  }
+
+  .asset-form {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1500;
+    display: grid;
+    grid-template-columns: 1fr;
+    max-height: 82dvh;
+    padding: 18px 16px calc(env(safe-area-inset-bottom) + 18px);
+    border-radius: 24px 24px 0 0;
+    background: #fff;
+    box-shadow: 0 -18px 48px rgba(6, 27, 53, 0.22);
+    transform: translateY(110%);
+    transition: transform 0.22s ease;
+    overflow-y: auto;
+  }
+
+  .asset-section.mobile-asset-editor-open .asset-form {
+    transform: translateY(0);
+  }
+
+  .asset-section.readonly .mobile-asset-fab {
+    display: none;
+  }
+
+  /* Mobile AI: focused chat surface */
+  .erp-shell[data-active-page="ai"] {
+    height: calc(100dvh - 78px);
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="ai"] .erp-workspace,
+  .erp-shell[data-active-page="ai"] #aiPage,
+  .ai-assistant-page {
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .ai-assistant-page {
+    display: flex;
+    flex-direction: column;
+    border-radius: 0;
+    background: #fff;
+  }
+
+  .ai-page-header {
+    flex: 0 0 auto;
+    min-height: 62px;
+    padding: 10px 14px;
+    border: 0;
+    border-bottom: 1px solid var(--theme-border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .ai-page-title p,
+  .ai-page-title .eyebrow,
+  #aiNewConversationButton {
+    display: none;
+  }
+
+  .ai-page-title h2 {
+    font-size: 20px;
+  }
+
+  .ai-page-bot-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .ai-mobile-menu-button {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border: 1px solid var(--theme-border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--theme-navy);
+    font-size: 24px;
+    font-weight: 950;
+  }
+
+  .ai-mobile-menu {
+    position: fixed;
+    top: 72px;
+    right: 12px;
+    z-index: 1300;
+    display: grid;
+    min-width: 210px;
+    padding: 8px;
+    border: 1px solid var(--theme-border);
+    border-radius: 18px;
+    background: #fff;
+    box-shadow: 0 18px 42px rgba(6, 27, 53, 0.2);
+  }
+
+  .ai-mobile-menu[hidden] {
+    display: none;
+  }
+
+  .ai-mobile-menu button {
+    min-height: 44px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--theme-navy);
+    font-size: 15px;
+    font-weight: 900;
+    text-align: left;
+  }
+
+  .ai-mobile-menu button:active {
+    background: #fff8df;
+  }
+
+  .ai-page-layout {
+    flex: 1 1 auto;
+    display: block;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .ai-main-panel {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .ai-mode-tabs {
+    display: none;
+  }
+
+  .ai-main-scroll {
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #aiChatModePanel.active {
+    height: 100%;
+    max-height: none;
+  }
+
+  .ai-page-messages {
+    padding: 14px 14px 10px;
+    background: #f8fafc;
+  }
+
+  .ai-page-chat-form {
+    grid-template-columns: 46px 46px minmax(0, 1fr) 58px;
+    padding: 10px 12px calc(env(safe-area-inset-bottom) + var(--mobile-bottom-nav-height) + 8px);
+    border-top: 1px solid var(--theme-border);
+  }
+
+  .ai-page-chat-form textarea {
+    min-height: 48px;
+    max-height: 96px;
+  }
+
+  .ai-conversation-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 1450;
+    display: none;
+    padding: 16px;
+    border: 0;
+    border-radius: 0;
+    background: #fff;
+  }
+
+  .ai-conversation-panel.mobile-open {
+    display: flex;
   }
 }

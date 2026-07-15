@@ -56,6 +56,14 @@
     let editingAssetId = null;
     let editingAssetImageUrl = "";
     let selectedAssetImageFile = null;
+    let mobileAssetSearch = "";
+    let mobileAssetFloorFilter = "";
+    let mobileUiInitialized = false;
+    let mobileAssetToolbar = null;
+    let mobileAssetSearchInput = null;
+    let mobileAssetFloorSelect = null;
+    let mobileAssetList = null;
+    let mobileAssetFab = null;
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -121,7 +129,9 @@
      */
     function renderBanquetAssets() {
       applyAssetPermissionState();
+      ensureMobileAssetUi();
       const banquetAssets = state.getAssets();
+      renderMobileAssetList(banquetAssets);
       assetTableBody.innerHTML = "";
       if (!banquetAssets.length) {
         assetTableBody.innerHTML = '<tr><td colspan="7">등록된 자산이 없습니다.</td></tr>';
@@ -200,6 +210,7 @@
       assetSaveButton.textContent = "저장";
       assetCancelButton.hidden = false;
       assetNameInput.focus();
+      openMobileAssetEditor();
     }
 
     function resetAssetForm() {
@@ -210,6 +221,7 @@
       renderAssetImagePreview("");
       assetSaveButton.textContent = "등록";
       assetCancelButton.hidden = true;
+      closeMobileAssetEditor();
     }
 
     function handleAssetImageSelection(event) {
@@ -345,6 +357,7 @@
           setStatus("연회장 자산을 등록했습니다.");
         }
         resetAssetForm();
+        closeMobileAssetEditor();
         await loadBanquetAssets();
       } catch (error) {
         console.error("banquet_assets save failed:", error);
@@ -373,6 +386,137 @@
         console.error("banquet_assets delete failed:", error);
         setStatus(error.message || "연회장 자산 삭제에 실패했습니다.", "error");
       }
+    }
+
+    function ensureMobileAssetUi() {
+      if (mobileUiInitialized) return;
+      mobileUiInitialized = true;
+
+      mobileAssetToolbar = document.createElement("div");
+      mobileAssetToolbar.className = "mobile-asset-toolbar";
+      mobileAssetToolbar.innerHTML = `
+        <label class="mobile-asset-search">
+          <span>검색</span>
+          <input type="search" placeholder="자산명, 위치, 규격 검색">
+        </label>
+        <label class="mobile-asset-filter">
+          <span>층</span>
+          <select>
+            <option value="">전체</option>
+          </select>
+        </label>
+      `;
+      mobileAssetSearchInput = mobileAssetToolbar.querySelector("input");
+      mobileAssetFloorSelect = mobileAssetToolbar.querySelector("select");
+      mobileAssetList = document.createElement("div");
+      mobileAssetList.className = "mobile-asset-list";
+      mobileAssetFab = document.createElement("button");
+      mobileAssetFab.type = "button";
+      mobileAssetFab.className = "mobile-asset-fab admin-only";
+      mobileAssetFab.setAttribute("aria-label", "자산 신규 등록");
+      mobileAssetFab.textContent = "+";
+
+      assetForm.insertAdjacentElement("beforebegin", mobileAssetToolbar);
+      assetTableBody.closest(".asset-table-wrap")?.insertAdjacentElement("afterend", mobileAssetList);
+      assetPanel.append(mobileAssetFab);
+
+      mobileAssetSearchInput.addEventListener("input", () => {
+        mobileAssetSearch = mobileAssetSearchInput.value.trim();
+        renderMobileAssetList(state.getAssets());
+      });
+      mobileAssetFloorSelect.addEventListener("change", () => {
+        mobileAssetFloorFilter = mobileAssetFloorSelect.value;
+        renderMobileAssetList(state.getAssets());
+      });
+      mobileAssetFab.addEventListener("click", () => {
+        resetAssetForm();
+        openMobileAssetEditor();
+        assetNameInput.focus();
+      });
+    }
+
+    function renderMobileAssetList(assets) {
+      if (!mobileAssetList) return;
+      updateMobileAssetFloorOptions(assets);
+      const keyword = mobileAssetSearch.toLowerCase();
+      const filteredAssets = (assets || []).filter((asset) => {
+        const matchesFloor = !mobileAssetFloorFilter || String(asset.floor || "") === mobileAssetFloorFilter;
+        const haystack = [
+          asset.asset_name,
+          asset.floor,
+          asset.location,
+          asset.quantity,
+          asset.spec,
+        ].map((value) => String(value || "").toLowerCase()).join(" ");
+        return matchesFloor && (!keyword || haystack.includes(keyword));
+      });
+      mobileAssetList.innerHTML = "";
+      if (!filteredAssets.length) {
+        const empty = document.createElement("div");
+        empty.className = "mobile-asset-empty";
+        empty.textContent = "표시할 자산이 없습니다.";
+        mobileAssetList.append(empty);
+        return;
+      }
+      filteredAssets.forEach((asset) => {
+        const card = document.createElement("article");
+        card.className = "mobile-asset-card";
+        const image = asset.image_url
+          ? `<img src="${escapeHtml(asset.image_url)}" alt="">`
+          : `<span class="mobile-asset-placeholder">□</span>`;
+        const actions = isAdminUser()
+          ? `<div class="mobile-asset-actions">
+              <button type="button" data-asset-action="edit">수정</button>
+              <button type="button" data-asset-action="delete">삭제</button>
+            </div>`
+          : "";
+        card.innerHTML = `
+          <button class="mobile-asset-image" type="button" ${asset.image_url ? "" : "disabled"}>${image}</button>
+          <div class="mobile-asset-info">
+            <strong>${escapeHtml(asset.asset_name || "자산명 없음")}</strong>
+            <span>${escapeHtml([asset.floor, asset.location].filter(Boolean).join(" · ") || "위치 미입력")}</span>
+            <small>${escapeHtml(asset.spec || "규격 미입력")}</small>
+          </div>
+          <div class="mobile-asset-qty">${escapeHtml(asset.quantity ?? "-")}</div>
+          ${actions}
+        `;
+        card.querySelector(".mobile-asset-image")?.addEventListener("click", () => openAssetImageModal(asset));
+        card.querySelector('[data-asset-action="edit"]')?.addEventListener("click", () => startEditBanquetAsset(asset));
+        card.querySelector('[data-asset-action="delete"]')?.addEventListener("click", () => deleteBanquetAsset(asset));
+        mobileAssetList.append(card);
+      });
+    }
+
+    function updateMobileAssetFloorOptions(assets) {
+      if (!mobileAssetFloorSelect) return;
+      const floors = [...new Set((assets || []).map((asset) => String(asset.floor || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko-KR", { numeric: true }));
+      const current = mobileAssetFloorSelect.value;
+      mobileAssetFloorSelect.innerHTML = '<option value="">전체</option>';
+      floors.forEach((floor) => {
+        const option = document.createElement("option");
+        option.value = floor;
+        option.textContent = floor;
+        mobileAssetFloorSelect.append(option);
+      });
+      mobileAssetFloorSelect.value = floors.includes(current) ? current : "";
+      mobileAssetFloorFilter = mobileAssetFloorSelect.value;
+    }
+
+    function openMobileAssetEditor() {
+      assetPanel.classList.add("mobile-asset-editor-open");
+    }
+
+    function closeMobileAssetEditor() {
+      assetPanel.classList.remove("mobile-asset-editor-open");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
     return {

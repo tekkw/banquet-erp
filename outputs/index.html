@@ -343,8 +343,17 @@
                 <p>베네치아 호텔의 행사 운영, 자산, 공간, 과거 데이터를 바탕으로 답변합니다.</p>
               </div>
             </div>
+            <button id="aiMobileMenuButton" class="ai-mobile-menu-button" type="button" aria-label="AI 메뉴">⋮</button>
             <button id="aiNewConversationButton" class="primary-button" type="button">새 대화 시작</button>
           </header>
+          <div id="aiMobileMenu" class="ai-mobile-menu" hidden>
+            <button type="button" data-ai-mobile-action="new">새 대화</button>
+            <button type="button" data-ai-mobile-mode="chat">일반 대화</button>
+            <button type="button" data-ai-mobile-mode="interview">AI 학습 인터뷰</button>
+            <button type="button" data-ai-mobile-mode="teach">직접 가르치기</button>
+            <button type="button" data-ai-mobile-action="history">대화 기록</button>
+            <button type="button" data-ai-mobile-action="settings">설정</button>
+          </div>
 
           <div class="ai-page-layout">
             <aside class="ai-conversation-panel" aria-label="대화 기록">
@@ -441,8 +450,8 @@
     </div>
   </div>
 
-  <div id="excelViewerModal" class="modal-backdrop excel-viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="excelViewerTitle">
-    <div class="modal excel-viewer-dialog">
+    <div id="excelViewerModal" class="modal-backdrop excel-viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="excelViewerTitle">
+      <div class="modal excel-viewer-dialog">
       <div class="modal-header">
         <h2 id="excelViewerTitle" class="modal-title">원본 엑셀 보기</h2>
         <button id="closeExcelViewerModal" class="icon-button" type="button" aria-label="닫기">×</button>
@@ -450,10 +459,25 @@
       <div class="modal-body excel-viewer-body">
         <iframe id="excelViewerFrame" class="excel-viewer-frame" title="원본 엑셀 미리보기"></iframe>
       </div>
+      </div>
     </div>
-  </div>
 
-  <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
+    <div id="mobileDateSheet" class="mobile-date-sheet" aria-hidden="true">
+      <button class="mobile-sheet-scrim" type="button" aria-label="닫기"></button>
+      <section class="mobile-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="mobileDateSheetTitle">
+        <div class="mobile-sheet-handle" aria-hidden="true"></div>
+        <div class="mobile-sheet-header">
+          <div>
+            <span class="eyebrow">Selected Date</span>
+            <h2 id="mobileDateSheetTitle">선택한 날짜</h2>
+          </div>
+          <button id="mobileDateSheetClose" class="icon-button" type="button" aria-label="닫기">×</button>
+        </div>
+        <div id="mobileDateSheetBody" class="mobile-sheet-body"></div>
+      </section>
+    </div>
+
+    <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
     <button class="active" type="button" data-mobile-target="home"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span><strong>캘린더</strong></button>
     <button type="button" data-mobile-target="assets"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span><strong>자산 관리</strong></button>
@@ -523,6 +547,10 @@
     const closeExcelViewerModalButton = document.querySelector("#closeExcelViewerModal");
     const excelViewerTitle = document.querySelector("#excelViewerTitle");
     const excelViewerFrame = document.querySelector("#excelViewerFrame");
+    const mobileDateSheet = document.querySelector("#mobileDateSheet");
+    const mobileDateSheetTitle = document.querySelector("#mobileDateSheetTitle");
+    const mobileDateSheetBody = document.querySelector("#mobileDateSheetBody");
+    const mobileDateSheetClose = document.querySelector("#mobileDateSheetClose");
     const calendarTabButton = document.querySelector("#calendarTabButton");
     const assetTabButton = document.querySelector("#assetTabButton");
     const calendarPanel = document.querySelector("#calendarPanel");
@@ -552,6 +580,8 @@
     const aiPageAttachmentListButton = document.querySelector("#aiPageAttachmentListButton");
     const aiPageAttachmentInput = document.querySelector("#aiPageAttachmentInput");
     const aiPageAttachmentPreview = document.querySelector("#aiPageAttachmentPreview");
+    const aiMobileMenuButton = document.querySelector("#aiMobileMenuButton");
+    const aiMobileMenu = document.querySelector("#aiMobileMenu");
     const aiNewConversationButton = document.querySelector("#aiNewConversationButton");
     const aiSideNewConversationButton = document.querySelector("#aiSideNewConversationButton");
     const aiConversationList = document.querySelector("#aiConversationList");
@@ -670,6 +700,7 @@
       },
       callbacks: {
         openEventModal,
+        openDateEventsSheet,
       },
     });
     const eventOrderService = window.BANQUET_ERP_EVENT_ORDER.createEventOrderService({
@@ -801,6 +832,8 @@
     closeModalButton.addEventListener("click", closeEventModal);
     closeImageModalButton.addEventListener("click", closeAssetImageModal);
     closeExcelViewerModalButton.addEventListener("click", closeExcelViewerModal);
+    mobileDateSheetClose?.addEventListener("click", closeDateEventsSheet);
+    mobileDateSheet?.querySelector(".mobile-sheet-scrim")?.addEventListener("click", closeDateEventsSheet);
     calendarTabButton.addEventListener("click", () => activateWorkspaceTab("calendar"));
     assetTabButton.addEventListener("click", () => activateWorkspaceTab("assets"));
     assetForm.addEventListener("submit", saveBanquetAsset);
@@ -817,6 +850,27 @@
     aiNewConversationButton.addEventListener("click", startNewAiConversation);
     aiSideNewConversationButton.addEventListener("click", startNewAiConversation);
     aiRefreshStatsButton.addEventListener("click", loadAiReferenceStats);
+    aiMobileMenuButton?.addEventListener("click", () => {
+      aiMobileMenu.hidden = !aiMobileMenu.hidden;
+    });
+    aiMobileMenu?.querySelectorAll("[data-ai-mobile-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        initializeAiAssistantPage(button.dataset.aiMobileMode || "chat");
+        aiMobileMenu.hidden = true;
+      });
+    });
+    aiMobileMenu?.querySelector('[data-ai-mobile-action="new"]')?.addEventListener("click", () => {
+      startNewAiConversation();
+      aiMobileMenu.hidden = true;
+    });
+    aiMobileMenu?.querySelector('[data-ai-mobile-action="history"]')?.addEventListener("click", () => {
+      document.querySelector(".ai-conversation-panel")?.classList.toggle("mobile-open");
+      aiMobileMenu.hidden = true;
+    });
+    aiMobileMenu?.querySelector('[data-ai-mobile-action="settings"]')?.addEventListener("click", () => {
+      loadAiReferenceStats();
+      aiMobileMenu.hidden = true;
+    });
     chatInput.addEventListener("keydown", (event) => {
       if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
       event.preventDefault();
@@ -2759,6 +2813,58 @@
       return (savedEvents || [])
         .filter((eventItem) => getEventDateKeys(eventItem).includes(dateKey))
         .sort((a, b) => getDashboardEventTime(a).localeCompare(getDashboardEventTime(b), "ko-KR"));
+    }
+
+    function openDateEventsSheet(dateKey) {
+      if (!window.matchMedia("(max-width: 768px)").matches) return;
+      if (!mobileDateSheet || !mobileDateSheetBody || !mobileDateSheetTitle) return;
+      const events = getEventsForDate(dateKey);
+      mobileDateSheetTitle.textContent = formatDateLabel(dateKey);
+      mobileDateSheetBody.innerHTML = "";
+      if (!events.length) {
+        const empty = document.createElement("div");
+        empty.className = "mobile-sheet-empty";
+        empty.textContent = "이 날짜에 등록된 행사가 없습니다.";
+        mobileDateSheetBody.append(empty);
+      } else {
+        events.forEach((eventItem) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "mobile-date-event-card";
+          const title = getDashboardEventTitle(eventItem);
+          const venue = eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력";
+          const time = getDashboardEventTime(eventItem);
+          button.innerHTML = `
+            <span class="mobile-date-event-time">${escapeHtml(time)}</span>
+            <strong>${escapeHtml(title)}</strong>
+            <small>${escapeHtml(venue)}</small>
+          `;
+          button.addEventListener("click", () => {
+            closeDateEventsSheet();
+            openEventModal(eventItem, dateKey);
+          });
+          mobileDateSheetBody.append(button);
+        });
+      }
+      mobileDateSheet.classList.add("visible");
+      mobileDateSheet.setAttribute("aria-hidden", "false");
+      document.body.classList.add("mobile-sheet-open");
+    }
+
+    function closeDateEventsSheet() {
+      if (!mobileDateSheet) return;
+      mobileDateSheet.classList.remove("visible");
+      mobileDateSheet.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("mobile-sheet-open");
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
     function getEventDateKeys(eventItem) {
