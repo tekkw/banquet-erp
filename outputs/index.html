@@ -53,9 +53,11 @@
         </div>
       </div>
       <nav class="sidebar-nav" aria-label="주요 메뉴">
-        <button class="sidebar-nav-item active" type="button" data-dashboard-target="home">대시보드</button>
+        <button class="sidebar-nav-item active" type="button" data-dashboard-target="home">홈</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="calendar">캘린더</button>
+        <button class="sidebar-nav-item" type="button" data-dashboard-target="events">행사관리</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="assets">자산 관리</button>
+        <button class="sidebar-nav-item" type="button" data-dashboard-target="layouts">공간 / 레이아웃</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="ai">AI 비서</button>
       </nav>
       <div class="sidebar-version">
@@ -332,6 +334,410 @@
       </section>
       </section>
 
+      <section id="layoutsPage" class="erp-page space-layout-page" data-erp-page="layouts" aria-label="공간과 레이아웃 페이지" hidden>
+        <header class="space-layout-page-header">
+          <div>
+            <span class="eyebrow">Space & Layout</span>
+            <h1>공간 / 레이아웃</h1>
+            <p>연회장 기본 도면과 오브젝트를 관리하고, 실제 행사 레이아웃을 편집합니다.</p>
+          </div>
+          <button id="refreshVenueLayoutsButton" class="secondary-button" type="button">전체 새로고침</button>
+        </header>
+
+        <details class="layout-collapsible-section layout-object-master-section" aria-label="도면 오브젝트 마스터 관리">
+          <summary class="layout-collapsible-summary">
+            <span>
+              <strong>도면 오브젝트 마스터</strong>
+              <small>테이블, 문, 기둥, 무대 등 편집기에 사용할 기본 오브젝트를 관리합니다.</small>
+            </span>
+            <span class="layout-toggle-label">
+              <span class="when-closed">오브젝트 관리 열기</span>
+              <span class="when-open">오브젝트 관리 닫기</span>
+            </span>
+          </summary>
+          <div class="asset-header compact-header">
+            <div>
+              <h2>도면 오브젝트 마스터</h2>
+              <p>도면 편집기에서 끌어다 쓸 테이블, 문, 기둥, 무대 등의 기본 규격을 관리합니다.</p>
+            </div>
+            <button id="layoutObjectTypeRefreshButton" class="secondary-button" type="button">마스터 새로고침</button>
+          </div>
+          <form id="layoutObjectTypeForm" class="asset-form layout-object-type-form">
+            <input id="layoutObjectNameInput" type="text" placeholder="오브젝트명" required>
+            <input id="layoutObjectCategoryInput" type="text" placeholder="카테고리 예: 테이블">
+            <input id="layoutObjectTypeInput" type="text" placeholder="object_type 예: seminar_table" required>
+            <input id="layoutObjectWidthInput" type="number" min="0" step="0.01" placeholder="기본 가로(m)">
+            <input id="layoutObjectHeightInput" type="number" min="0" step="0.01" placeholder="기본 세로(m)">
+            <input id="layoutObjectElevationInput" type="number" min="0" step="0.01" placeholder="기본 높이(m)">
+            <input id="layoutObjectSeatCountInput" type="number" min="0" step="1" placeholder="기본 착석">
+            <select id="layoutObjectShapeInput" aria-label="표시 모양">
+              <option value="rect">사각형</option>
+              <option value="circle">원형</option>
+              <option value="ellipse">타원형</option>
+              <option value="area">영역</option>
+              <option value="line">선</option>
+            </select>
+            <label class="inline-check"><input id="layoutObjectCanResizeInput" type="checkbox" checked> 크기 변경</label>
+            <label class="inline-check"><input id="layoutObjectCanRotateInput" type="checkbox" checked> 회전</label>
+            <label class="inline-check"><input id="layoutObjectIsActiveInput" type="checkbox" checked> 사용</label>
+            <textarea id="layoutObjectMemoInput" rows="2" placeholder="메모"></textarea>
+            <div id="layoutObjectTypeLivePreview" class="object-type-live-preview" aria-label="오브젝트 미리보기"></div>
+            <button id="layoutObjectTypeSaveButton" class="primary-button" type="submit">마스터 등록</button>
+            <button id="layoutObjectTypeResetButton" class="secondary-button" type="button">초기화</button>
+          </form>
+          <div class="asset-table-wrap layout-object-type-table-wrap object-master-table-wrap">
+            <table class="asset-table layout-object-type-table object-master-table">
+              <thead>
+                <tr>
+                  <th class="object-preview-column">미리보기</th>
+                  <th class="object-name-column">오브젝트명</th>
+                  <th class="object-category-column">카테고리</th>
+                  <th class="object-size-column">기본 크기</th>
+                  <th>착석</th>
+                  <th>모양</th>
+                  <th>상태</th>
+                  <th class="admin-only object-actions-column">관리</th>
+                </tr>
+              </thead>
+              <tbody id="layoutObjectTypeTableBody">
+                <tr><td colspan="8">오브젝트 마스터를 불러오는 중입니다.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        <section class="layout-editor-workbench" aria-label="도면 레이아웃 편집기">
+          <div class="layout-editor-heading">
+            <div>
+              <h2>도면 레이아웃 편집기</h2>
+              <p>기본 도면 위에 테이블, 문, 기둥, 무대 등의 오브젝트를 배치하고 레이아웃을 저장합니다.</p>
+            </div>
+            <span id="layoutWorkspaceStatusPill" class="layout-editor-status-pill">상태: 저장되지 않음</span>
+          </div>
+          <div class="layout-editor-toolbar">
+            <div class="layout-editor-toolbar-row">
+              <select id="layoutWorkspaceVenueSelect" aria-label="장소 선택"><option value="">장소를 선택하세요</option></select>
+              <select id="layoutWorkspaceSpaceSelect" aria-label="공간 선택"><option value="">공간을 선택하세요</option></select>
+              <select id="layoutWorkspaceFloorplanSelect" aria-label="기본 도면 선택"><option value="">기본 도면을 선택하세요</option></select>
+              <select id="layoutWorkspaceSavedLayoutSelect" aria-label="저장된 레이아웃 불러오기"><option value="">저장된 레이아웃</option></select>
+            </div>
+            <div class="layout-editor-toolbar-row tool-row">
+              <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
+              <button id="layoutWorkspaceSaveButton" type="button">저장</button>
+              <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
+              <button id="layoutWorkspacePreviewButton" type="button">미리보기</button>
+              <button id="layoutWorkspaceExportButton" type="button">PNG 내보내기</button>
+              <button id="layoutWorkspaceUndoButton" type="button">↶ 실행 취소</button>
+              <button id="layoutWorkspaceRedoButton" type="button">↷ 다시 실행</button>
+              <button id="layoutWorkspaceZoomInButton" type="button">＋ 확대</button>
+              <button id="layoutWorkspaceZoomOutButton" type="button">－ 축소</button>
+              <button id="layoutWorkspaceFitButton" type="button">□ 화면 맞춤</button>
+              <button id="layoutWorkspaceActualSizeButton" type="button">100%</button>
+              <button id="layoutWorkspaceCenterButton" type="button">가운데</button>
+              <button id="layoutWorkspaceGridButton" type="button">격자</button>
+              <button id="layoutWorkspaceSnapButton" type="button">스냅</button>
+              <label class="layout-inline-control">도면 크기
+                <select id="layoutWorkspaceDrawingPresetSelect" aria-label="도면 크기 프리셋">
+                  <option value="20000x20000">20m × 20m</option>
+                  <option value="30000x20000">30m × 20m</option>
+                  <option value="30000x30000" selected>30m × 30m</option>
+                  <option value="40000x30000">40m × 30m</option>
+                  <option value="50000x50000">50m × 50m</option>
+                  <option value="custom">직접 입력</option>
+                </select>
+              </label>
+              <label class="layout-inline-control">가로
+                <span class="layout-measure-row compact">
+                  <input id="layoutWorkspaceDrawingWidthInput" type="number" min="1" step="0.001" inputmode="decimal" value="30">
+                  <select id="layoutWorkspaceDrawingWidthUnitSelect">
+                    <option value="m" selected>m</option>
+                    <option value="cm">cm</option>
+                    <option value="mm">mm</option>
+                  </select>
+                </span>
+              </label>
+              <label class="layout-inline-control">세로
+                <span class="layout-measure-row compact">
+                  <input id="layoutWorkspaceDrawingHeightInput" type="number" min="1" step="0.001" inputmode="decimal" value="30">
+                  <select id="layoutWorkspaceDrawingHeightUnitSelect">
+                    <option value="m" selected>m</option>
+                    <option value="cm">cm</option>
+                    <option value="mm">mm</option>
+                  </select>
+                </span>
+              </label>
+              <button id="layoutWorkspaceApplyDrawingSizeButton" type="button">도면 크기 적용</button>
+              <div class="layout-tool-group" aria-label="편집 모드">
+                <button id="layoutWorkspaceModeBaseButton" type="button">기본도면</button>
+                <button id="layoutWorkspaceModeLayoutButton" type="button">레이아웃</button>
+              </div>
+              <div class="layout-tool-group" aria-label="도구">
+                <button id="layoutWorkspaceSelectToolButton" type="button">선택</button>
+                <button id="layoutWorkspaceWallToolButton" type="button">벽</button>
+                <button id="layoutWorkspaceRectToolButton" type="button">사각 영역</button>
+                <button id="layoutWorkspaceCalibrateToolButton" type="button">축척 보정</button>
+              </div>
+              <label class="layout-inline-control">도면 투명도
+                <input id="layoutWorkspaceReferenceOpacityInput" type="range" min="10" max="100" value="40">
+              </label>
+              <label class="layout-inline-control">격자
+                <select id="layoutWorkspaceGridSizeSelect" aria-label="격자 간격">
+                  <option value="50">50mm</option>
+                  <option value="100">100mm</option>
+                  <option value="250">250mm</option>
+                  <option value="500" selected>500mm</option>
+                  <option value="1000">1000mm</option>
+                  <option value="2000">2000mm</option>
+                  <option value="5000">5000mm</option>
+                  <option value="10000">10000mm</option>
+                  <option value="custom">직접 입력</option>
+                </select>
+              </label>
+              <label id="layoutWorkspaceCustomGridControl" class="layout-inline-control" hidden>격자 간격
+                <span class="layout-measure-row compact">
+                  <input id="layoutWorkspaceCustomGridInput" type="number" min="1" step="0.001" inputmode="decimal" value="1000">
+                  <select id="layoutWorkspaceCustomGridUnitSelect">
+                    <option value="m">m</option>
+                    <option value="cm">cm</option>
+                    <option value="mm" selected>mm</option>
+                  </select>
+                </span>
+              </label>
+              <details class="layout-view-menu">
+                <summary>보기</summary>
+                <label><input id="layoutWorkspaceViewGridInput" type="checkbox"> Grid</label>
+                <label><input id="layoutWorkspaceViewFloorplanInput" type="checkbox" checked> 기본 도면</label>
+                <label><input id="layoutWorkspaceViewDimensionsInput" type="checkbox" checked> 치수 표시</label>
+                <label><input id="layoutWorkspaceViewNamesInput" type="checkbox" checked> 오브젝트 이름</label>
+                <label><input id="layoutWorkspaceViewCoordsInput" type="checkbox"> 좌표 표시</label>
+              </details>
+              <label class="layout-inline-control">치수
+                <select id="layoutWorkspaceDimensionModeSelect" aria-label="치수 보기 모드">
+                  <option value="hidden">치수 숨김</option>
+                  <option value="selected" selected>선택한 객체만 표시</option>
+                  <option value="all">모든 객체 표시</option>
+                </select>
+              </label>
+              <label class="layout-inline-control">치수 단위
+                <select id="layoutWorkspaceDimensionUnitSelect" aria-label="치수 표시 단위">
+                  <option value="m" selected>m</option>
+                  <option value="cm">cm</option>
+                  <option value="mm">mm</option>
+                </select>
+              </label>
+              <label class="layout-inline-check">
+                <input id="layoutWorkspaceExportDimensionsInput" type="checkbox" checked>
+                미리보기/PNG 치수 포함
+              </label>
+            </div>
+          </div>
+          <div id="layoutWorkspaceFloorplanInfo" class="layout-floorplan-info">
+            <span>도면: 선택 없음</span>
+            <span>실제 크기: -</span>
+            <span>배율: 100%</span>
+          </div>
+          <div class="layout-editor-grid layout-editor-body">
+            <aside class="layout-editor-palette">
+              <div class="layout-panel-title">
+                <h3>오브젝트</h3>
+                <p>사용 중인 오브젝트 마스터</p>
+              </div>
+              <input id="layoutWorkspaceObjectSearchInput" type="search" placeholder="오브젝트 검색">
+              <div id="layoutWorkspaceObjectPaletteList" class="floorplan-object-library-list">
+                <p>오브젝트 마스터를 불러오는 중입니다.</p>
+              </div>
+            </aside>
+            <section class="layout-editor-canvas-shell layout-canvas-viewport">
+              <svg id="layoutWorkspaceSvg" class="layout-editor-canvas-svg" viewBox="0 0 1200 760" role="img" aria-label="도면 레이아웃 편집기 빈 캔버스">
+                <defs>
+                  <pattern id="layoutEditorGridPattern" width="1000" height="1000" patternUnits="userSpaceOnUse">
+                    <path d="M 1000 0 L 0 0 0 1000" fill="none" stroke="#d8dee8" stroke-width="1"/>
+                  </pattern>
+                  <pattern id="layoutEditorMajorGridPattern" width="10000" height="10000" patternUnits="userSpaceOnUse">
+                    <path d="M 10000 0 L 0 0 0 10000" fill="none" stroke="#aeb7c5" stroke-width="2"/>
+                  </pattern>
+                </defs>
+                <g id="layoutWorkspaceViewport">
+                  <g id="layoutWorkspaceGridLayer">
+                    <rect id="layoutWorkspaceGridBg" width="30000" height="30000" fill="url(#layoutEditorGridPattern)"/>
+                    <rect id="layoutWorkspaceMajorGridBg" width="30000" height="30000" fill="url(#layoutEditorMajorGridPattern)"/>
+                  </g>
+                  <g id="layoutWorkspaceBackgroundLayer"></g>
+                  <g id="layoutWorkspaceObjectLayer"></g>
+                  <g id="layoutWorkspaceSelectionLayer"></g>
+                  <g id="layoutWorkspaceGuideLayer"></g>
+                  <g id="layoutWorkspaceEmptyState">
+                    <rect x="95" y="80" width="1010" height="600" rx="18" fill="rgba(255,255,255,.72)" stroke="#d4af37" stroke-width="3" stroke-dasharray="12 10"/>
+                    <text x="600" y="360" text-anchor="middle" fill="#102B55" font-size="30" font-weight="800">장소와 기본 도면을 선택하거나 빈 도면에서 시작하세요.</text>
+                    <text x="600" y="402" text-anchor="middle" fill="#667085" font-size="20" font-weight="700">오브젝트를 클릭하거나 끌어다 놓으면 이 캔버스에 배치됩니다.</text>
+                  </g>
+                </g>
+              </svg>
+            </section>
+            <aside class="layout-editor-properties object-properties-panel">
+              <div class="layout-panel-title">
+                <h3>선택 오브젝트 속성</h3>
+                <p>도면에서 오브젝트를 선택하세요.</p>
+              </div>
+              <div class="layout-property-grid object-properties-form">
+                <label>오브젝트명<input id="layoutWorkspaceLabelInput" type="text" placeholder="선택 없음" disabled></label>
+                <label>X 좌표<input id="layoutWorkspaceXInput" type="number" placeholder="0" disabled></label>
+                <label>Y 좌표<input id="layoutWorkspaceYInput" type="number" placeholder="0" disabled></label>
+                <label>가로(m)<input id="layoutWorkspaceWidthInput" type="number" min="0.1" step="0.1" placeholder="0" disabled></label>
+                <label>세로(m)<input id="layoutWorkspaceHeightInput" type="number" min="0.1" step="0.1" placeholder="0" disabled></label>
+                <label>회전 각도<input id="layoutWorkspaceRotationInput" type="number" min="0" max="359" step="1" placeholder="0" disabled></label>
+                <label>좌석 수<input id="layoutWorkspaceSeatCountInput" type="number" min="0" step="1" placeholder="0" disabled></label>
+                <label>레이어 순서<input id="layoutWorkspaceZIndexInput" type="number" placeholder="1" disabled></label>
+                <label>투명도(%)<input id="layoutWorkspaceOpacityInput" type="number" min="0" max="100" step="5" placeholder="100" disabled></label>
+                <label class="layout-wall-only">시작점 X(mm)<input id="layoutWorkspaceWallStartXInput" type="number" step="1" placeholder="-" disabled></label>
+                <label class="layout-wall-only">시작점 Y(mm)<input id="layoutWorkspaceWallStartYInput" type="number" step="1" placeholder="-" disabled></label>
+                <label class="layout-wall-only">끝점 X(mm)<input id="layoutWorkspaceWallEndXInput" type="number" step="1" placeholder="-" disabled></label>
+                <label class="layout-wall-only">끝점 Y(mm)<input id="layoutWorkspaceWallEndYInput" type="number" step="1" placeholder="-" disabled></label>
+                <label class="layout-wall-only">실제 길이
+                  <span class="layout-measure-row">
+                    <input id="layoutWorkspaceLengthInput" type="number" min="0" step="0.001" inputmode="decimal" placeholder="-" disabled>
+                    <select id="layoutWorkspaceLengthUnitSelect" disabled>
+                      <option value="m" selected>m</option>
+                      <option value="cm">cm</option>
+                      <option value="mm">mm</option>
+                    </select>
+                  </span>
+                </label>
+                <label class="layout-wall-only">각도(°)<input id="layoutWorkspaceWallAngleInput" type="number" step="0.001" placeholder="-" disabled></label>
+                <label class="layout-wall-only">두께
+                  <span class="layout-measure-row">
+                    <input id="layoutWorkspaceThicknessInput" type="number" min="1" step="0.001" inputmode="decimal" placeholder="-" disabled>
+                    <select id="layoutWorkspaceThicknessUnitSelect" disabled>
+                      <option value="mm" selected>mm</option>
+                      <option value="cm">cm</option>
+                    </select>
+                  </span>
+                </label>
+                <label class="layout-wall-only">치수 표시
+                  <select id="layoutWorkspaceDimensionVisibilitySelect" disabled>
+                    <option value="inherit">보기 모드 따름</option>
+                    <option value="show">항상 표시</option>
+                    <option value="hide">숨김</option>
+                  </select>
+                </label>
+                <label class="layout-wall-only">치수 위치
+                  <select id="layoutWorkspaceDimensionPositionSelect" disabled>
+                    <option value="auto">자동</option>
+                    <option value="above">위</option>
+                    <option value="below">아래</option>
+                    <option value="left">왼쪽</option>
+                    <option value="right">오른쪽</option>
+                  </select>
+                </label>
+                <label class="layout-wall-only">치수 문구<input id="layoutWorkspaceDimensionLabelInput" type="text" placeholder="자동 길이 표시" disabled></label>
+              </div>
+              <div class="layout-property-actions object-properties-actions">
+                <button id="layoutWorkspaceBringFrontButton" type="button" disabled>맨 앞으로</button>
+                <button id="layoutWorkspaceForwardButton" type="button" disabled>앞으로</button>
+                <button id="layoutWorkspaceBackwardButton" type="button" disabled>뒤로</button>
+                <button id="layoutWorkspaceSendBackButton" type="button" disabled>맨 뒤로</button>
+                <button id="layoutWorkspaceDuplicateButton" type="button" disabled>복제</button>
+                <button id="layoutWorkspaceDeleteButton" type="button" disabled>삭제</button>
+              </div>
+            </aside>
+          </div>
+          <footer id="layoutWorkspaceStatusbar" class="layout-editor-statusbar">
+            <span data-layout-status="save">상태: 저장되지 않음</span>
+            <span data-layout-status="selected">선택: 없음</span>
+            <span data-layout-status="zoom">배율: 100%</span>
+            <span data-layout-status="grid">격자: 사용</span>
+            <span data-layout-status="snap">스냅: 사용</span>
+            <span data-layout-status="count">오브젝트: 0개</span>
+            <span data-layout-status="cursor">X: - / Y: -</span>
+          </footer>
+        </section>
+
+        <details id="venueLayoutPanel" class="tab-panel asset-section venue-layout-section layout-collapsible-section" aria-label="저장된 도면과 레이아웃 이미지 관리">
+          <summary class="layout-collapsible-summary">
+            <span>
+              <strong>저장된 도면 / 레이아웃 이미지</strong>
+              <small>기본 도면과 편집기에서 완성한 레이아웃 이미지를 등록하고 관리합니다.</small>
+            </span>
+            <span class="layout-toggle-label">
+              <span class="when-closed">이미지 관리 열기</span>
+              <span class="when-open">이미지 관리 닫기</span>
+            </span>
+          </summary>
+          <div class="asset-header">
+            <div>
+              <h2>저장된 도면 / 레이아웃 이미지</h2>
+              <p>AI 레이아웃 추천에 사용할 기본 도면과 검증된 행사장 세팅 이미지를 등록합니다.</p>
+            </div>
+          </div>
+          <form id="venueLayoutForm" class="asset-form venue-layout-form">
+            <label class="asset-image-picker venue-layout-file-picker">
+              <span>도면/이미지</span>
+              <input id="venueLayoutFileInput" type="file" accept="image/*,.pdf,application/pdf">
+            </label>
+            <select id="venueLayoutVenueSelect" aria-label="행사장">
+              <option value="">행사장 선택 없음</option>
+            </select>
+            <select id="venueLayoutSpaceSelect" aria-label="공간단위">
+              <option value="">공간단위 선택 없음</option>
+            </select>
+            <input id="venueLayoutTypeInput" type="text" placeholder="레이아웃 유형 예: 기본도면, 세미나, 라운드, 뷔페">
+            <input id="venueLayoutMinPeopleInput" type="number" min="0" step="1" placeholder="최소 인원">
+            <input id="venueLayoutMaxPeopleInput" type="number" min="0" step="1" placeholder="최대 인원">
+            <input id="venueLayoutTableTypeInput" type="text" placeholder="테이블 종류">
+            <input id="venueLayoutTableCountInput" type="number" min="0" step="1" placeholder="테이블 수">
+            <input id="venueLayoutSetupCapacityInput" type="number" min="0" step="1" placeholder="실제 세팅 좌석">
+            <input id="venueLayoutColumnCountInput" type="number" min="0" step="1" placeholder="열 수">
+            <input id="venueLayoutRowCountInput" type="number" min="0" step="1" placeholder="줄 수">
+            <input id="venueLayoutSeatsPerTableInput" type="number" min="0" step="1" placeholder="테이블당 착석 인원">
+            <input id="venueLayoutBaseTableCountInput" type="number" min="0" step="1" placeholder="기본 배열 테이블 수">
+            <input id="venueLayoutExtraTableCountInput" type="number" min="0" step="1" placeholder="추가 테이블 수">
+            <label class="inline-check"><input id="venueLayoutHasStageInput" type="checkbox"> 무대</label>
+            <label class="inline-check"><input id="venueLayoutHasBuffetInput" type="checkbox"> 뷔페</label>
+            <label class="inline-check"><input id="venueLayoutIsVerifiedInput" type="checkbox"> 검증됨</label>
+            <textarea id="venueLayoutNotesInput" rows="2" placeholder="레이아웃 조건, 주의사항, 출처 메모"></textarea>
+            <textarea id="venueLayoutCapacityRuleInput" rows="2" placeholder="인원 적용 규칙 예: 100명 기준 5열 x 10줄, 120명 초과 시 뒤쪽 1줄 추가"></textarea>
+            <div id="venueLayoutPreview" class="asset-image-preview venue-layout-preview">파일 없음</div>
+            <button id="venueLayoutSaveButton" class="primary-button" type="submit">등록</button>
+            <button id="venueLayoutResetButton" class="secondary-button" type="button">초기화</button>
+          </form>
+          <div class="asset-table-wrap venue-layout-table-wrap">
+            <table class="asset-table venue-layout-table">
+              <colgroup>
+                <col style="width: 8%;">
+                <col style="width: 15%;">
+                <col style="width: 11%;">
+                <col style="width: 10%;">
+                <col style="width: 10%;">
+                <col style="width: 7%;">
+                <col style="width: 11%;">
+                <col style="width: 11%;">
+                <col style="width: 6%;">
+                <col style="width: 14%;">
+                <col class="admin-only-col" style="width: 7%;">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>이미지</th>
+                  <th>장소/공간</th>
+                  <th>레이아웃</th>
+                  <th>인원 범위</th>
+                  <th>테이블</th>
+                  <th class="number-cell">수량</th>
+                  <th>세팅 좌석</th>
+                  <th>배열</th>
+                  <th>상태</th>
+                  <th>메모</th>
+                  <th class="admin-only">관리</th>
+                </tr>
+              </thead>
+              <tbody id="venueLayoutTableBody">
+                <tr><td colspan="11">도면/레이아웃 이미지를 불러오는 중입니다.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
       <section id="aiPage" class="erp-page" data-erp-page="ai" aria-label="AI 비서 페이지" hidden>
         <section class="ai-assistant-page">
           <header class="ai-page-header">
@@ -450,6 +856,50 @@
     </div>
   </div>
 
+  <div id="layoutWorkspacePreviewModal" class="modal-backdrop layout-preview-backdrop" role="dialog" aria-modal="true" aria-labelledby="layoutWorkspacePreviewTitle" hidden>
+    <div class="modal layout-preview-dialog">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">Layout Preview</span>
+          <h2 id="layoutWorkspacePreviewTitle" class="modal-title">레이아웃 미리보기</h2>
+        </div>
+        <div class="layout-preview-actions">
+          <button id="layoutWorkspacePreviewDownloadButton" class="secondary-button" type="button">PNG 내보내기</button>
+          <button id="layoutWorkspacePreviewCloseButton" class="icon-button" type="button" aria-label="닫기">×</button>
+        </div>
+      </div>
+      <div id="layoutWorkspacePreviewBody" class="modal-body layout-preview-body"></div>
+    </div>
+  </div>
+
+  <div id="layoutWorkspaceNewModal" class="modal-backdrop layout-new-backdrop" role="dialog" aria-modal="true" aria-labelledby="layoutWorkspaceNewTitle" hidden>
+    <div class="modal layout-new-dialog">
+      <div class="modal-header">
+        <div>
+          <span class="eyebrow">New Layout</span>
+          <h2 id="layoutWorkspaceNewTitle" class="modal-title">새 레이아웃</h2>
+        </div>
+        <button id="layoutWorkspaceNewCancelButton" class="icon-button" type="button" aria-label="닫기">×</button>
+      </div>
+      <div class="modal-body layout-new-body">
+        <label>레이아웃 이름
+          <input id="layoutWorkspaceNewNameInput" type="text" placeholder="예: 세미나 120석">
+        </label>
+        <label>기본 도면
+          <select id="layoutWorkspaceNewFloorplanSelect"></select>
+        </label>
+        <div class="layout-new-options">
+          <label><input name="layoutWorkspaceNewMode" type="radio" value="floorplan" checked> 등록된 기본 도면 사용</label>
+          <label><input name="layoutWorkspaceNewMode" type="radio" value="blank"> 빈 도면에서 시작</label>
+        </div>
+        <div class="modal-actions">
+          <button id="layoutWorkspaceNewCreateButton" class="primary-button" type="button">만들기</button>
+          <button id="layoutWorkspaceNewCancelFooterButton" class="secondary-button" type="button">취소</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
     <div id="excelViewerModal" class="modal-backdrop excel-viewer-backdrop" role="dialog" aria-modal="true" aria-labelledby="excelViewerTitle">
       <div class="modal excel-viewer-dialog">
       <div class="modal-header">
@@ -477,6 +927,87 @@
       </section>
     </div>
 
+    <div id="floorplanEditorModal" class="modal-backdrop floorplan-editor-backdrop" hidden>
+      <section class="modal floorplan-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="floorplanEditorTitle">
+        <header class="modal-header floorplan-editor-header">
+          <div>
+            <span class="eyebrow">Floorplan Editor</span>
+            <h2 id="floorplanEditorTitle" class="modal-title">도면 편집</h2>
+            <p id="floorplanEditorSubtitle">기본도면 위에 고정 객체와 레이아웃 객체를 배치합니다.</p>
+          </div>
+          <button id="floorplanEditorCloseButton" class="secondary-button" type="button">닫기</button>
+        </header>
+        <div class="floorplan-editor-body">
+          <aside class="floorplan-editor-panel floorplan-tools-panel">
+            <h3>기본도면</h3>
+            <label>도면명<input id="floorplanNameInput" type="text" placeholder="예: 페스타 기본도면"></label>
+            <div class="floorplan-two-col">
+              <label>실제 폭<input id="floorplanActualWidthInput" type="number" min="0" step="0.1"></label>
+              <label>실제 높이<input id="floorplanActualHeightInput" type="number" min="0" step="0.1"></label>
+            </div>
+            <label>단위<select id="floorplanUnitSelect"><option value="m">m</option><option value="cm">cm</option></select></label>
+            <div class="floorplan-tool-group floorplan-library-group">
+              <h3>오브젝트 라이브러리</h3>
+              <input id="floorplanObjectSearchInput" type="search" placeholder="오브젝트 검색">
+              <div id="floorplanObjectLibraryList" class="floorplan-object-library-list">
+                <p>오브젝트 마스터를 불러오는 중입니다.</p>
+              </div>
+            </div>
+            <div class="floorplan-tool-group">
+              <h3>세미나 자동 생성</h3>
+              <div class="floorplan-two-col">
+                <input id="seminarColumnCountInput" type="number" min="1" step="1" placeholder="열 수">
+                <input id="seminarRowCountInput" type="number" min="1" step="1" placeholder="줄 수">
+                <input id="seminarHorizontalGapInput" type="number" min="0" step="0.01" placeholder="가로 간격">
+                <input id="seminarVerticalGapInput" type="number" min="0" step="0.01" placeholder="세로 간격">
+                <input id="seminarSeatsPerTableInput" type="number" min="1" step="1" placeholder="테이블당 착석">
+              </div>
+              <button id="generateSeminarGridButton" class="primary-button" type="button">세미나 배열 생성</button>
+            </div>
+          </aside>
+          <main class="floorplan-canvas-panel">
+            <div class="floorplan-canvas-toolbar">
+              <button id="floorplanZoomInButton" type="button">확대</button>
+              <button id="floorplanZoomOutButton" type="button">축소</button>
+              <button id="floorplanResetViewButton" type="button">화면 맞춤</button>
+              <button id="floorplanCopyObjectButton" type="button">복사</button>
+              <button id="floorplanDeleteObjectButton" class="danger-button" type="button">삭제</button>
+            </div>
+            <div class="floorplan-canvas-wrap">
+              <canvas id="floorplanEditorCanvas" width="1200" height="760"></canvas>
+            </div>
+            <p class="floorplan-editor-hint">객체는 드래그로 이동하고, 오른쪽 선택 객체 패널에서 크기와 회전을 조정합니다. 빈 공간 드래그는 화면 이동입니다.</p>
+          </main>
+          <aside class="floorplan-editor-panel floorplan-layout-panel">
+            <h3>저장된 레이아웃</h3>
+            <select id="floorplanSavedLayoutsSelect"><option value="">새 레이아웃</option></select>
+            <h3>레이아웃 정보</h3>
+            <label>레이아웃명<input id="floorplanLayoutNameInput" type="text" placeholder="예: 페스타 세미나 100명"></label>
+            <input id="floorplanLayoutTypeInput" type="text" placeholder="layout_type 예: 세미나">
+            <div class="floorplan-two-col">
+              <input id="floorplanMinPeopleInput" type="number" min="0" step="1" placeholder="최소 인원">
+              <input id="floorplanMaxPeopleInput" type="number" min="0" step="1" placeholder="최대 인원">
+              <input id="floorplanSetupCapacityInput" type="number" min="0" step="1" placeholder="실제 세팅 좌석">
+              <input id="floorplanTableCountInput" type="number" min="0" step="1" placeholder="테이블 수">
+              <input id="floorplanRowCountInput" type="number" min="0" step="1" placeholder="줄 수">
+              <input id="floorplanColumnCountInput" type="number" min="0" step="1" placeholder="열 수">
+              <input id="floorplanSeatsPerTableInput" type="number" min="0" step="1" placeholder="테이블당 착석">
+            </div>
+            <input id="floorplanTableTypeInput" type="text" placeholder="table_type">
+            <label class="inline-check"><input id="floorplanHasStageInput" type="checkbox"> 무대 있음</label>
+            <label class="inline-check"><input id="floorplanHasBuffetInput" type="checkbox"> 뷔페 있음</label>
+            <textarea id="floorplanLayoutNotesInput" rows="3" placeholder="레이아웃 메모"></textarea>
+            <h3>선택 객체</h3>
+            <div id="floorplanSelectedObjectPanel" class="floorplan-selected-panel"><p>선택된 객체가 없습니다.</p></div>
+            <div class="floorplan-editor-actions">
+              <button id="saveFloorplanButton" class="secondary-button" type="button">고정 객체 저장</button>
+              <button id="saveVenueLayoutFromEditorButton" class="primary-button" type="button">레이아웃 저장</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+
     <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
     <button class="active" type="button" data-mobile-target="home"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span><strong>캘린더</strong></button>
@@ -493,6 +1024,8 @@
   <script src="./src/eventCalendar.js"></script>
   <script src="./src/eventOrder.js"></script>
   <script src="./src/assetManager.js"></script>
+  <script src="./src/venueLayoutManager.js"></script>
+  <script src="./src/floorplanEditor.js"></script>
   <script src="./src/aiAssistant.js"></script>
   <script>
     /*
@@ -567,6 +1100,138 @@
     const assetCancelButton = document.querySelector("#assetCancelButton");
     const assetTableBody = document.querySelector("#assetTableBody");
     const refreshAssetsButton = document.querySelector("#refreshAssetsButton");
+    const venueLayoutPanel = document.querySelector("#venueLayoutPanel");
+    const venueLayoutForm = document.querySelector("#venueLayoutForm");
+    const venueLayoutFileInput = document.querySelector("#venueLayoutFileInput");
+    const venueLayoutPreview = document.querySelector("#venueLayoutPreview");
+    const venueLayoutVenueSelect = document.querySelector("#venueLayoutVenueSelect");
+    const venueLayoutSpaceSelect = document.querySelector("#venueLayoutSpaceSelect");
+    const venueLayoutTypeInput = document.querySelector("#venueLayoutTypeInput");
+    const venueLayoutMinPeopleInput = document.querySelector("#venueLayoutMinPeopleInput");
+    const venueLayoutMaxPeopleInput = document.querySelector("#venueLayoutMaxPeopleInput");
+    const venueLayoutTableTypeInput = document.querySelector("#venueLayoutTableTypeInput");
+    const venueLayoutTableCountInput = document.querySelector("#venueLayoutTableCountInput");
+    const venueLayoutHasStageInput = document.querySelector("#venueLayoutHasStageInput");
+    const venueLayoutHasBuffetInput = document.querySelector("#venueLayoutHasBuffetInput");
+    const venueLayoutIsVerifiedInput = document.querySelector("#venueLayoutIsVerifiedInput");
+    const venueLayoutNotesInput = document.querySelector("#venueLayoutNotesInput");
+    const venueLayoutSaveButton = document.querySelector("#venueLayoutSaveButton");
+    const venueLayoutResetButton = document.querySelector("#venueLayoutResetButton");
+    const refreshVenueLayoutsButton = document.querySelector("#refreshVenueLayoutsButton");
+    const venueLayoutTableBody = document.querySelector("#venueLayoutTableBody");
+    const layoutObjectTypeForm = document.querySelector("#layoutObjectTypeForm");
+    const layoutObjectNameInput = document.querySelector("#layoutObjectNameInput");
+    const layoutObjectCategoryInput = document.querySelector("#layoutObjectCategoryInput");
+    const layoutObjectTypeInput = document.querySelector("#layoutObjectTypeInput");
+    const layoutObjectWidthInput = document.querySelector("#layoutObjectWidthInput");
+    const layoutObjectHeightInput = document.querySelector("#layoutObjectHeightInput");
+    const layoutObjectElevationInput = document.querySelector("#layoutObjectElevationInput");
+    const layoutObjectSeatCountInput = document.querySelector("#layoutObjectSeatCountInput");
+    const layoutObjectShapeInput = document.querySelector("#layoutObjectShapeInput");
+    const layoutObjectCanResizeInput = document.querySelector("#layoutObjectCanResizeInput");
+    const layoutObjectCanRotateInput = document.querySelector("#layoutObjectCanRotateInput");
+    const layoutObjectIsActiveInput = document.querySelector("#layoutObjectIsActiveInput");
+    const layoutObjectMemoInput = document.querySelector("#layoutObjectMemoInput");
+    const layoutObjectTypeSaveButton = document.querySelector("#layoutObjectTypeSaveButton");
+    const layoutObjectTypeResetButton = document.querySelector("#layoutObjectTypeResetButton");
+    const layoutObjectTypeRefreshButton = document.querySelector("#layoutObjectTypeRefreshButton");
+    const layoutObjectTypeTableBody = document.querySelector("#layoutObjectTypeTableBody");
+    const layoutObjectTypeLivePreview = document.querySelector("#layoutObjectTypeLivePreview");
+    const floorplanObjectSearchInput = document.querySelector("#floorplanObjectSearchInput");
+    const floorplanObjectLibraryList = document.querySelector("#floorplanObjectLibraryList");
+    const layoutWorkspaceObjectSearchInput = document.querySelector("#layoutWorkspaceObjectSearchInput");
+    const layoutWorkspaceObjectPaletteList = document.querySelector("#layoutWorkspaceObjectPaletteList");
+    const layoutWorkspaceVenueSelect = document.querySelector("#layoutWorkspaceVenueSelect");
+    const layoutWorkspaceSpaceSelect = document.querySelector("#layoutWorkspaceSpaceSelect");
+    const layoutWorkspaceFloorplanSelect = document.querySelector("#layoutWorkspaceFloorplanSelect");
+    const layoutWorkspaceSavedLayoutSelect = document.querySelector("#layoutWorkspaceSavedLayoutSelect");
+    const layoutWorkspaceSvg = document.querySelector("#layoutWorkspaceSvg");
+    const layoutWorkspaceViewport = document.querySelector("#layoutWorkspaceViewport");
+    const layoutWorkspaceBackgroundLayer = document.querySelector("#layoutWorkspaceBackgroundLayer");
+    const layoutWorkspaceObjectLayer = document.querySelector("#layoutWorkspaceObjectLayer");
+    const layoutWorkspaceGridLayer = document.querySelector("#layoutWorkspaceGridLayer");
+    const layoutWorkspaceSelectionLayer = document.querySelector("#layoutWorkspaceSelectionLayer");
+    const layoutWorkspaceGuideLayer = document.querySelector("#layoutWorkspaceGuideLayer");
+    const layoutWorkspaceEmptyState = document.querySelector("#layoutWorkspaceEmptyState");
+    const layoutWorkspaceStatusPill = document.querySelector("#layoutWorkspaceStatusPill");
+    const layoutWorkspaceStatusbar = document.querySelector("#layoutWorkspaceStatusbar");
+    const layoutWorkspaceFloorplanInfo = document.querySelector("#layoutWorkspaceFloorplanInfo");
+    const layoutWorkspaceLabelInput = document.querySelector("#layoutWorkspaceLabelInput");
+    const layoutWorkspaceXInput = document.querySelector("#layoutWorkspaceXInput");
+    const layoutWorkspaceYInput = document.querySelector("#layoutWorkspaceYInput");
+    const layoutWorkspaceWidthInput = document.querySelector("#layoutWorkspaceWidthInput");
+    const layoutWorkspaceHeightInput = document.querySelector("#layoutWorkspaceHeightInput");
+    const layoutWorkspaceRotationInput = document.querySelector("#layoutWorkspaceRotationInput");
+    const layoutWorkspaceSeatCountInput = document.querySelector("#layoutWorkspaceSeatCountInput");
+    const layoutWorkspaceZIndexInput = document.querySelector("#layoutWorkspaceZIndexInput");
+    const layoutWorkspaceOpacityInput = document.querySelector("#layoutWorkspaceOpacityInput");
+    const layoutWorkspaceWallStartXInput = document.querySelector("#layoutWorkspaceWallStartXInput");
+    const layoutWorkspaceWallStartYInput = document.querySelector("#layoutWorkspaceWallStartYInput");
+    const layoutWorkspaceWallEndXInput = document.querySelector("#layoutWorkspaceWallEndXInput");
+    const layoutWorkspaceWallEndYInput = document.querySelector("#layoutWorkspaceWallEndYInput");
+    const layoutWorkspaceLengthInput = document.querySelector("#layoutWorkspaceLengthInput");
+    const layoutWorkspaceLengthUnitSelect = document.querySelector("#layoutWorkspaceLengthUnitSelect");
+    const layoutWorkspaceWallAngleInput = document.querySelector("#layoutWorkspaceWallAngleInput");
+    const layoutWorkspaceThicknessInput = document.querySelector("#layoutWorkspaceThicknessInput");
+    const layoutWorkspaceThicknessUnitSelect = document.querySelector("#layoutWorkspaceThicknessUnitSelect");
+    const layoutWorkspaceBringFrontButton = document.querySelector("#layoutWorkspaceBringFrontButton");
+    const layoutWorkspaceForwardButton = document.querySelector("#layoutWorkspaceForwardButton");
+    const layoutWorkspaceBackwardButton = document.querySelector("#layoutWorkspaceBackwardButton");
+    const layoutWorkspaceSendBackButton = document.querySelector("#layoutWorkspaceSendBackButton");
+    const layoutWorkspaceDuplicateButton = document.querySelector("#layoutWorkspaceDuplicateButton");
+    const layoutWorkspaceDeleteButton = document.querySelector("#layoutWorkspaceDeleteButton");
+    const layoutWorkspaceNewButton = document.querySelector("#layoutWorkspaceNewButton");
+    const layoutWorkspaceSaveButton = document.querySelector("#layoutWorkspaceSaveButton");
+    const layoutWorkspaceSaveAsButton = document.querySelector("#layoutWorkspaceSaveAsButton");
+    const layoutWorkspacePreviewButton = document.querySelector("#layoutWorkspacePreviewButton");
+    const layoutWorkspaceExportButton = document.querySelector("#layoutWorkspaceExportButton");
+    const layoutWorkspaceUndoButton = document.querySelector("#layoutWorkspaceUndoButton");
+    const layoutWorkspaceRedoButton = document.querySelector("#layoutWorkspaceRedoButton");
+    const layoutWorkspacePreviewModal = document.querySelector("#layoutWorkspacePreviewModal");
+    const layoutWorkspacePreviewBody = document.querySelector("#layoutWorkspacePreviewBody");
+    const layoutWorkspacePreviewCloseButton = document.querySelector("#layoutWorkspacePreviewCloseButton");
+    const layoutWorkspacePreviewDownloadButton = document.querySelector("#layoutWorkspacePreviewDownloadButton");
+    const layoutWorkspaceNewModal = document.querySelector("#layoutWorkspaceNewModal");
+    const layoutWorkspaceNewNameInput = document.querySelector("#layoutWorkspaceNewNameInput");
+    const layoutWorkspaceNewFloorplanSelect = document.querySelector("#layoutWorkspaceNewFloorplanSelect");
+    const layoutWorkspaceNewCreateButton = document.querySelector("#layoutWorkspaceNewCreateButton");
+    const layoutWorkspaceNewCancelButton = document.querySelector("#layoutWorkspaceNewCancelButton");
+    const layoutWorkspaceNewCancelFooterButton = document.querySelector("#layoutWorkspaceNewCancelFooterButton");
+    const layoutWorkspaceZoomInButton = document.querySelector("#layoutWorkspaceZoomInButton");
+    const layoutWorkspaceZoomOutButton = document.querySelector("#layoutWorkspaceZoomOutButton");
+    const layoutWorkspaceFitButton = document.querySelector("#layoutWorkspaceFitButton");
+    const layoutWorkspaceActualSizeButton = document.querySelector("#layoutWorkspaceActualSizeButton");
+    const layoutWorkspaceCenterButton = document.querySelector("#layoutWorkspaceCenterButton");
+    const layoutWorkspaceGridButton = document.querySelector("#layoutWorkspaceGridButton");
+    const layoutWorkspaceSnapButton = document.querySelector("#layoutWorkspaceSnapButton");
+    const layoutWorkspaceDrawingPresetSelect = document.querySelector("#layoutWorkspaceDrawingPresetSelect");
+    const layoutWorkspaceDrawingWidthInput = document.querySelector("#layoutWorkspaceDrawingWidthInput");
+    const layoutWorkspaceDrawingWidthUnitSelect = document.querySelector("#layoutWorkspaceDrawingWidthUnitSelect");
+    const layoutWorkspaceDrawingHeightInput = document.querySelector("#layoutWorkspaceDrawingHeightInput");
+    const layoutWorkspaceDrawingHeightUnitSelect = document.querySelector("#layoutWorkspaceDrawingHeightUnitSelect");
+    const layoutWorkspaceApplyDrawingSizeButton = document.querySelector("#layoutWorkspaceApplyDrawingSizeButton");
+    const layoutWorkspaceModeBaseButton = document.querySelector("#layoutWorkspaceModeBaseButton");
+    const layoutWorkspaceModeLayoutButton = document.querySelector("#layoutWorkspaceModeLayoutButton");
+    const layoutWorkspaceSelectToolButton = document.querySelector("#layoutWorkspaceSelectToolButton");
+    const layoutWorkspaceWallToolButton = document.querySelector("#layoutWorkspaceWallToolButton");
+    const layoutWorkspaceRectToolButton = document.querySelector("#layoutWorkspaceRectToolButton");
+    const layoutWorkspaceCalibrateToolButton = document.querySelector("#layoutWorkspaceCalibrateToolButton");
+    const layoutWorkspaceReferenceOpacityInput = document.querySelector("#layoutWorkspaceReferenceOpacityInput");
+    const layoutWorkspaceGridSizeSelect = document.querySelector("#layoutWorkspaceGridSizeSelect");
+    const layoutWorkspaceCustomGridControl = document.querySelector("#layoutWorkspaceCustomGridControl");
+    const layoutWorkspaceCustomGridInput = document.querySelector("#layoutWorkspaceCustomGridInput");
+    const layoutWorkspaceCustomGridUnitSelect = document.querySelector("#layoutWorkspaceCustomGridUnitSelect");
+    const layoutWorkspaceViewGridInput = document.querySelector("#layoutWorkspaceViewGridInput");
+    const layoutWorkspaceViewFloorplanInput = document.querySelector("#layoutWorkspaceViewFloorplanInput");
+    const layoutWorkspaceViewDimensionsInput = document.querySelector("#layoutWorkspaceViewDimensionsInput");
+    const layoutWorkspaceViewNamesInput = document.querySelector("#layoutWorkspaceViewNamesInput");
+    const layoutWorkspaceViewCoordsInput = document.querySelector("#layoutWorkspaceViewCoordsInput");
+    const layoutWorkspaceDimensionModeSelect = document.querySelector("#layoutWorkspaceDimensionModeSelect");
+    const layoutWorkspaceDimensionUnitSelect = document.querySelector("#layoutWorkspaceDimensionUnitSelect");
+    const layoutWorkspaceExportDimensionsInput = document.querySelector("#layoutWorkspaceExportDimensionsInput");
+    const layoutWorkspaceDimensionVisibilitySelect = document.querySelector("#layoutWorkspaceDimensionVisibilitySelect");
+    const layoutWorkspaceDimensionPositionSelect = document.querySelector("#layoutWorkspaceDimensionPositionSelect");
+    const layoutWorkspaceDimensionLabelInput = document.querySelector("#layoutWorkspaceDimensionLabelInput");
     const chatForm = document.querySelector("#chatForm");
     const chatInput = document.querySelector("#chatInput");
     const chatMessages = document.querySelector("#chatMessages");
@@ -758,6 +1423,218 @@
       closeAssetImageModal,
       saveBanquetAsset,
     } = assetManager;
+    const venueLayoutManager = window.BANQUET_ERP_VENUE_LAYOUT_MANAGER.createVenueLayoutManager({
+      elements: {
+        panel: venueLayoutPanel,
+        form: venueLayoutForm,
+        fileInput: venueLayoutFileInput,
+        preview: venueLayoutPreview,
+        venueSelect: venueLayoutVenueSelect,
+        spaceSelect: venueLayoutSpaceSelect,
+        layoutTypeInput: venueLayoutTypeInput,
+        minPeopleInput: venueLayoutMinPeopleInput,
+        maxPeopleInput: venueLayoutMaxPeopleInput,
+        tableTypeInput: venueLayoutTableTypeInput,
+        tableCountInput: venueLayoutTableCountInput,
+        setupCapacityInput: venueLayoutSetupCapacityInput,
+        columnCountInput: venueLayoutColumnCountInput,
+        rowCountInput: venueLayoutRowCountInput,
+        seatsPerTableInput: venueLayoutSeatsPerTableInput,
+        baseTableCountInput: venueLayoutBaseTableCountInput,
+        extraTableCountInput: venueLayoutExtraTableCountInput,
+        capacityRuleInput: venueLayoutCapacityRuleInput,
+        hasStageInput: venueLayoutHasStageInput,
+        hasBuffetInput: venueLayoutHasBuffetInput,
+        isVerifiedInput: venueLayoutIsVerifiedInput,
+        notesInput: venueLayoutNotesInput,
+        saveButton: venueLayoutSaveButton,
+        resetButton: venueLayoutResetButton,
+        refreshButton: refreshVenueLayoutsButton,
+        tableBody: venueLayoutTableBody,
+      },
+      deps: {
+        supabaseConfig,
+        loggedSupabaseRequest,
+        supabaseHeaders,
+        parseSupabaseResponse,
+        supabaseErrorFromResponse,
+        toNullableInteger,
+        escapeHtml,
+        setStatus,
+        isAdminUser: () => authController.isAdminUser(),
+      },
+    });
+    const {
+      bindEvents: bindVenueLayoutEvents,
+      loadVenueLayoutImages,
+    } = venueLayoutManager;
+    const floorplanEditor = window.BANQUET_ERP_FLOORPLAN_EDITOR.createFloorplanEditor({
+      elements: {
+        modal: floorplanEditorModal,
+        closeButton: floorplanEditorCloseButton,
+        title: floorplanEditorTitle,
+        subtitle: floorplanEditorSubtitle,
+        canvas: floorplanEditorCanvas,
+        floorplanNameInput,
+        actualWidthInput: floorplanActualWidthInput,
+        actualHeightInput: floorplanActualHeightInput,
+        unitSelect: floorplanUnitSelect,
+        savedLayoutsSelect: floorplanSavedLayoutsSelect,
+        layoutNameInput: floorplanLayoutNameInput,
+        layoutTypeInput: floorplanLayoutTypeInput,
+        minPeopleInput: floorplanMinPeopleInput,
+        maxPeopleInput: floorplanMaxPeopleInput,
+        setupCapacityInput: floorplanSetupCapacityInput,
+        tableCountInput: floorplanTableCountInput,
+        rowCountInput: floorplanRowCountInput,
+        columnCountInput: floorplanColumnCountInput,
+        seatsPerTableInput: floorplanSeatsPerTableInput,
+        tableTypeInput: floorplanTableTypeInput,
+        hasStageInput: floorplanHasStageInput,
+        hasBuffetInput: floorplanHasBuffetInput,
+        layoutNotesInput: floorplanLayoutNotesInput,
+        selectedObjectPanel: floorplanSelectedObjectPanel,
+        zoomInButton: floorplanZoomInButton,
+        zoomOutButton: floorplanZoomOutButton,
+        resetViewButton: floorplanResetViewButton,
+        copyObjectButton: floorplanCopyObjectButton,
+        deleteObjectButton: floorplanDeleteObjectButton,
+        generateSeminarGridButton,
+        seminarColumnCountInput,
+        seminarRowCountInput,
+        seminarHorizontalGapInput,
+        seminarVerticalGapInput,
+        seminarSeatsPerTableInput,
+        saveFloorplanButton,
+        saveLayoutButton: saveVenueLayoutFromEditorButton,
+        objectSearchInput: floorplanObjectSearchInput,
+        objectLibraryList: floorplanObjectLibraryList,
+        workspaceObjectSearchInput: layoutWorkspaceObjectSearchInput,
+        workspaceObjectLibraryList: layoutWorkspaceObjectPaletteList,
+        workspaceVenueSelect: layoutWorkspaceVenueSelect,
+        workspaceSpaceSelect: layoutWorkspaceSpaceSelect,
+        workspaceFloorplanSelect: layoutWorkspaceFloorplanSelect,
+        workspaceSavedLayoutSelect: layoutWorkspaceSavedLayoutSelect,
+        workspaceSvg: layoutWorkspaceSvg,
+        workspaceViewport: layoutWorkspaceViewport,
+        workspaceBackgroundLayer: layoutWorkspaceBackgroundLayer,
+        workspaceObjectLayer: layoutWorkspaceObjectLayer,
+        workspaceGridLayer: layoutWorkspaceGridLayer,
+        workspaceSelectionLayer: layoutWorkspaceSelectionLayer,
+        workspaceGuideLayer: layoutWorkspaceGuideLayer,
+        workspaceEmptyState: layoutWorkspaceEmptyState,
+        workspaceStatusPill: layoutWorkspaceStatusPill,
+        workspaceStatusbar: layoutWorkspaceStatusbar,
+        workspaceFloorplanInfo: layoutWorkspaceFloorplanInfo,
+        workspaceLabelInput: layoutWorkspaceLabelInput,
+        workspaceXInput: layoutWorkspaceXInput,
+        workspaceYInput: layoutWorkspaceYInput,
+        workspaceWidthInput: layoutWorkspaceWidthInput,
+        workspaceHeightInput: layoutWorkspaceHeightInput,
+        workspaceRotationInput: layoutWorkspaceRotationInput,
+        workspaceSeatCountInput: layoutWorkspaceSeatCountInput,
+        workspaceZIndexInput: layoutWorkspaceZIndexInput,
+        workspaceOpacityInput: layoutWorkspaceOpacityInput,
+        workspaceWallStartXInput: layoutWorkspaceWallStartXInput,
+        workspaceWallStartYInput: layoutWorkspaceWallStartYInput,
+        workspaceWallEndXInput: layoutWorkspaceWallEndXInput,
+        workspaceWallEndYInput: layoutWorkspaceWallEndYInput,
+        workspaceLengthInput: layoutWorkspaceLengthInput,
+        workspaceLengthUnitSelect: layoutWorkspaceLengthUnitSelect,
+        workspaceWallAngleInput: layoutWorkspaceWallAngleInput,
+        workspaceThicknessInput: layoutWorkspaceThicknessInput,
+        workspaceThicknessUnitSelect: layoutWorkspaceThicknessUnitSelect,
+        workspaceBringFrontButton: layoutWorkspaceBringFrontButton,
+        workspaceForwardButton: layoutWorkspaceForwardButton,
+        workspaceBackwardButton: layoutWorkspaceBackwardButton,
+        workspaceSendBackButton: layoutWorkspaceSendBackButton,
+        workspaceDuplicateButton: layoutWorkspaceDuplicateButton,
+        workspaceDeleteButton: layoutWorkspaceDeleteButton,
+        workspaceNewButton: layoutWorkspaceNewButton,
+        workspaceSaveButton: layoutWorkspaceSaveButton,
+        workspaceSaveAsButton: layoutWorkspaceSaveAsButton,
+        workspacePreviewButton: layoutWorkspacePreviewButton,
+        workspaceExportButton: layoutWorkspaceExportButton,
+        workspaceUndoButton: layoutWorkspaceUndoButton,
+        workspaceRedoButton: layoutWorkspaceRedoButton,
+        workspacePreviewModal: layoutWorkspacePreviewModal,
+        workspacePreviewBody: layoutWorkspacePreviewBody,
+        workspacePreviewCloseButton: layoutWorkspacePreviewCloseButton,
+        workspacePreviewDownloadButton: layoutWorkspacePreviewDownloadButton,
+        workspaceNewModal: layoutWorkspaceNewModal,
+        workspaceNewNameInput: layoutWorkspaceNewNameInput,
+        workspaceNewFloorplanSelect: layoutWorkspaceNewFloorplanSelect,
+        workspaceNewCreateButton: layoutWorkspaceNewCreateButton,
+        workspaceNewCancelButton: layoutWorkspaceNewCancelButton,
+        workspaceNewCancelFooterButton: layoutWorkspaceNewCancelFooterButton,
+        workspaceZoomInButton: layoutWorkspaceZoomInButton,
+        workspaceZoomOutButton: layoutWorkspaceZoomOutButton,
+        workspaceFitButton: layoutWorkspaceFitButton,
+        workspaceActualSizeButton: layoutWorkspaceActualSizeButton,
+        workspaceCenterButton: layoutWorkspaceCenterButton,
+        workspaceGridButton: layoutWorkspaceGridButton,
+        workspaceSnapButton: layoutWorkspaceSnapButton,
+        workspaceDrawingPresetSelect: layoutWorkspaceDrawingPresetSelect,
+        workspaceDrawingWidthInput: layoutWorkspaceDrawingWidthInput,
+        workspaceDrawingWidthUnitSelect: layoutWorkspaceDrawingWidthUnitSelect,
+        workspaceDrawingHeightInput: layoutWorkspaceDrawingHeightInput,
+        workspaceDrawingHeightUnitSelect: layoutWorkspaceDrawingHeightUnitSelect,
+        workspaceApplyDrawingSizeButton: layoutWorkspaceApplyDrawingSizeButton,
+        workspaceModeBaseButton: layoutWorkspaceModeBaseButton,
+        workspaceModeLayoutButton: layoutWorkspaceModeLayoutButton,
+        workspaceSelectToolButton: layoutWorkspaceSelectToolButton,
+        workspaceWallToolButton: layoutWorkspaceWallToolButton,
+        workspaceRectToolButton: layoutWorkspaceRectToolButton,
+        workspaceCalibrateToolButton: layoutWorkspaceCalibrateToolButton,
+        workspaceReferenceOpacityInput: layoutWorkspaceReferenceOpacityInput,
+        workspaceGridSizeSelect: layoutWorkspaceGridSizeSelect,
+        workspaceCustomGridControl: layoutWorkspaceCustomGridControl,
+        workspaceCustomGridInput: layoutWorkspaceCustomGridInput,
+        workspaceCustomGridUnitSelect: layoutWorkspaceCustomGridUnitSelect,
+        workspaceViewGridInput: layoutWorkspaceViewGridInput,
+        workspaceViewFloorplanInput: layoutWorkspaceViewFloorplanInput,
+        workspaceViewDimensionsInput: layoutWorkspaceViewDimensionsInput,
+        workspaceViewNamesInput: layoutWorkspaceViewNamesInput,
+        workspaceViewCoordsInput: layoutWorkspaceViewCoordsInput,
+        workspaceDimensionModeSelect: layoutWorkspaceDimensionModeSelect,
+        workspaceDimensionUnitSelect: layoutWorkspaceDimensionUnitSelect,
+        workspaceExportDimensionsInput: layoutWorkspaceExportDimensionsInput,
+        workspaceDimensionVisibilitySelect: layoutWorkspaceDimensionVisibilitySelect,
+        workspaceDimensionPositionSelect: layoutWorkspaceDimensionPositionSelect,
+        workspaceDimensionLabelInput: layoutWorkspaceDimensionLabelInput,
+        objectTypeForm: layoutObjectTypeForm,
+        objectNameInput: layoutObjectNameInput,
+        objectCategoryInput: layoutObjectCategoryInput,
+        objectTypeInput: layoutObjectTypeInput,
+        objectWidthInput: layoutObjectWidthInput,
+        objectHeightInput: layoutObjectHeightInput,
+        objectElevationInput: layoutObjectElevationInput,
+        objectSeatCountInput: layoutObjectSeatCountInput,
+        objectShapeInput: layoutObjectShapeInput,
+        objectCanResizeInput: layoutObjectCanResizeInput,
+        objectCanRotateInput: layoutObjectCanRotateInput,
+        objectIsActiveInput: layoutObjectIsActiveInput,
+        objectMemoInput: layoutObjectMemoInput,
+        objectTypeSaveButton: layoutObjectTypeSaveButton,
+        objectTypeResetButton: layoutObjectTypeResetButton,
+        objectTypeRefreshButton: layoutObjectTypeRefreshButton,
+        objectTypeTableBody: layoutObjectTypeTableBody,
+        objectTypeLivePreview: layoutObjectTypeLivePreview,
+      },
+      deps: {
+        supabaseConfig,
+        loggedSupabaseRequest,
+        supabaseErrorFromResponse,
+        toNullableInteger,
+        setStatus,
+        isAdminUser: () => authController.isAdminUser(),
+        reloadVenueLayouts: loadVenueLayoutImages,
+      },
+    });
+    floorplanEditor.bindEvents();
+    refreshVenueLayoutsButton?.addEventListener("click", () => {
+      layoutObjectTypeRefreshButton?.click();
+    });
     const aiAssistant = window.BANQUET_ERP_AI_ASSISTANT.createAiAssistant({
       elements: {
         chatInput,
@@ -840,6 +1717,7 @@
     assetCancelButton.addEventListener("click", resetAssetForm);
     assetImageInput.addEventListener("change", handleAssetImageSelection);
     refreshAssetsButton.addEventListener("click", loadBanquetAssets);
+    bindVenueLayoutEvents();
     input.addEventListener("change", handleExcelUpload);
     chatForm.addEventListener("submit", handleChatSubmit);
     aiPageChatForm.addEventListener("submit", handleAiPageChatSubmit);
@@ -2551,7 +3429,7 @@
     }
 
     function showErpPage(target) {
-      const allowedPages = new Set(["home", "upload", "calendar", "events", "assets", "ai"]);
+      const allowedPages = new Set(["home", "upload", "calendar", "events", "assets", "layouts", "ai"]);
       const pageName = allowedPages.has(target) ? target : "home";
       const activeTarget = allowedPages.has(target) ? target : "home";
 
@@ -2582,6 +3460,11 @@
       if (pageName === "assets") {
         activateWorkspaceTab("assets");
         loadBanquetAssets();
+        return;
+      }
+
+      if (pageName === "layouts") {
+        loadVenueLayoutImages();
         return;
       }
 
@@ -4145,12 +5028,14 @@
       showErpPage("home");
       if (appInitialized) {
         renderBanquetAssets();
+        loadVenueLayoutImages();
         return;
       }
       appInitialized = true;
       renderCalendar();
       loadEventsFromSupabase();
       loadBanquetAssets();
+      loadVenueLayoutImages();
       createPostEventReviewQuestions().finally(() => {
         updateAiPendingBadges();
         loadCurrentInterview();

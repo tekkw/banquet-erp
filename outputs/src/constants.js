@@ -30,6 +30,7 @@ window.BANQUET_ERP_CONSTANTS = {
     bucket: "event-orders",
     assetImageBucket: "asset-images",
     chatAttachmentBucket: "ai-chat-attachments",
+    venueLayoutBucket: "venue-layouts",
     chatFunction: "event-order-ai-chat",
     functionUrl: "https://pnolttdubxxmxorufpyk.supabase.co/functions/v1/event-order-ai-chat",
   },

@@ -461,7 +461,8 @@ button.mini-day:hover {
 .erp-shell[data-active-page="upload"],
 .erp-shell[data-active-page="calendar"],
 .erp-shell[data-active-page="events"],
-.erp-shell[data-active-page="assets"] {
+.erp-shell[data-active-page="assets"],
+.erp-shell[data-active-page="layouts"] {
   width: 100%;
   max-width: none;
   min-height: calc(100vh - 74px);

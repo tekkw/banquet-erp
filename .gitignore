@@ -1,0 +1,6 @@
+supabase/.temp/
+work/.supabase/
+
+.DS_Store
+Thumbs.db
+

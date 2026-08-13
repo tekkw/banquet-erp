@@ -492,7 +492,8 @@
   .erp-shell[data-active-page="upload"],
   .erp-shell[data-active-page="calendar"],
   .erp-shell[data-active-page="events"],
-  .erp-shell[data-active-page="assets"] {
+  .erp-shell[data-active-page="assets"],
+  .erp-shell[data-active-page="layouts"] {
     grid-template-columns: 1fr !important;
   }
 

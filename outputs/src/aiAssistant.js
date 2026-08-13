@@ -53,6 +53,8 @@
     let aiAnalysisRawText = "";
     let aiAnalysisLoading = false;
     let aiAnalysisError = "";
+    let aiLayoutRecommendations = [];
+    let aiLayoutRecommendationError = "";
     let currentInterview = null;
     let interviewAnalysis = null;
     let interviewError = "";
@@ -1333,8 +1335,11 @@
       aiAnalysisError = "";
       aiAnalysis = null;
       aiAnalysisRawText = "";
+      aiLayoutRecommendations = [];
+      aiLayoutRecommendationError = "";
       callbacks.onAnalysisStateChange?.();
       try {
+        const layoutRecommendationPromise = loadLayoutRecommendations(eventItem);
         const response = await fetch(supabaseConfig.functionUrl, {
           method: "POST",
           headers: {
@@ -1352,6 +1357,7 @@
         if (!response.ok) throw new Error(body.message || "AI 자동 분석에 실패했습니다.");
         aiAnalysisRawText = body.answer || body.text || body.message || "";
         aiAnalysis = body.analysis || parseAiAnalysisJson(aiAnalysisRawText) || body;
+        await layoutRecommendationPromise;
       } catch (error) {
         console.error(error);
         aiAnalysisError = error.message || "AI 자동 분석에 실패했습니다.";
@@ -1359,6 +1365,102 @@
         aiAnalysisLoading = false;
         callbacks.onAnalysisStateChange?.();
       }
+    }
+
+    async function loadLayoutRecommendations(eventItem) {
+      if (!supabaseRequest) return [];
+      try {
+        const rows = await supabaseRequest(
+          "venue_layout_images?select=*,files(*),venues(venue_name),venue_spaces(space_name)&is_active=eq.true&order=is_verified.desc&limit=100"
+        );
+        aiLayoutRecommendations = rankLayoutRecommendations(rows || [], eventItem).slice(0, 3);
+        aiLayoutRecommendationError = "";
+        return aiLayoutRecommendations;
+      } catch (error) {
+        console.error("venue layout recommendation load failed:", error);
+        aiLayoutRecommendations = [];
+        aiLayoutRecommendationError = error.message || "추천 레이아웃 이미지를 불러오지 못했습니다.";
+        return [];
+      }
+    }
+
+    function rankLayoutRecommendations(rows, eventItem) {
+      const people = getRepresentativePeople(eventItem);
+      const sourceText = normalizeSearchText([
+        eventItem.eventName,
+        eventItem.eventType,
+        eventItem.venue,
+        eventItem.layoutEqpText,
+        eventItem.othersText,
+        ...(eventItem.schedule || []).flatMap((item) => [item.content, item.venue]),
+        ...(eventItem.items || []).map((item) => item.itemName),
+      ].filter(Boolean).join(" "));
+      const desiredLayoutType = inferLayoutType(sourceText);
+
+      return (rows || [])
+        .map((row) => {
+          const file = Array.isArray(row.files) ? row.files[0] : row.files;
+          const venueName = row.venues?.venue_name || "";
+          const spaceName = row.venue_spaces?.space_name || "";
+          const rowText = normalizeSearchText([
+            venueName,
+            spaceName,
+            row.layout_type,
+            row.table_type,
+            row.layout_notes,
+          ].filter(Boolean).join(" "));
+          let score = 0;
+
+          const minPeople = Number(row.min_people || 0);
+          const maxPeople = Number(row.max_people || 0);
+          if (people > 0 && minPeople > 0 && maxPeople > 0 && people >= minPeople && people <= maxPeople) score += 50;
+          else if (people > 0 && minPeople > 0 && people >= minPeople && !maxPeople) score += 30;
+          else if (!minPeople && !maxPeople) score += 12;
+
+          if (desiredLayoutType && rowText.includes(desiredLayoutType)) score += 35;
+          if (row.is_verified) score += 18;
+          if (sourceText && rowText) {
+            const venueHit = rowText.split(/\s+/).some((token) => token.length >= 2 && sourceText.includes(token));
+            if (venueHit) score += 28;
+          }
+
+          return { ...row, file, score, venueName, spaceName };
+        })
+        .filter((row) => row.score > 0)
+        .sort((a, b) => b.score - a.score);
+    }
+
+    function getRepresentativePeople(eventItem) {
+      const values = [
+        eventItem.guestCount,
+        ...(eventItem.schedule || []).map((item) => item.people),
+      ]
+        .map((value) => Number(String(value ?? "").replace(/[^0-9.]/g, "")))
+        .filter((value) => Number.isFinite(value) && value > 0);
+      return values.length ? Math.max(...values) : 0;
+    }
+
+    function inferLayoutType(text) {
+      const normalized = normalizeSearchText(text);
+      if (/라운드|round/.test(normalized)) return "라운드";
+      if (/뷔페|buffet/.test(normalized)) return "뷔페";
+      if (/class|클래스|스쿨|세미나/.test(normalized)) return "세미나";
+      if (/극장|theater|시어터/.test(normalized)) return "극장";
+      return "";
+    }
+
+    function normalizeSearchText(value) {
+      return cleanValue(value)
+        .toLowerCase()
+        .replace(/[ⅠI]\b/gi, "1")
+        .replace(/[Ⅱ]/g, "2")
+        .replace(/[Ⅲ]/g, "3")
+        .replace(/\biii\b/gi, "3")
+        .replace(/\bii\b/gi, "2")
+        .replace(/\bi\b/gi, "1")
+        .replace(/[,+/·ㆍ]/g, "+")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
     function parseAiAnalysisJson(value) {
@@ -1425,7 +1527,8 @@
         createStaffAnalysisCard(aiAnalysis.staff || {}, aiAnalysis.representativePeople),
         createWarningsAnalysisCard(aiAnalysis.warnings || aiAnalysis.staff?.warnings || [], aiAnalysis.staff?.risk || aiAnalysis.risk),
         createBeverageAnalysisCard(aiAnalysis.beverages || {}),
-        createRequiredItemsAnalysisCard(aiAnalysis.items || [])
+        createRequiredItemsAnalysisCard(aiAnalysis.items || []),
+        createLayoutRecommendationCard()
       );
       section.append(grid);
 
@@ -1457,6 +1560,72 @@
         basisTitle.textContent = "근거";
         card.append(basisTitle, createAnalysisList(basisRows.map((basis) => [basis, ""])));
       }
+      return card;
+    }
+
+    function createLayoutRecommendationCard() {
+      const card = createAnalysisCard("추천 레이아웃 이미지");
+      if (aiLayoutRecommendationError) {
+        const error = document.createElement("div");
+        error.className = "subtle";
+        error.textContent = aiLayoutRecommendationError;
+        card.append(error);
+        return card;
+      }
+
+      if (!aiLayoutRecommendations.length) {
+        const empty = document.createElement("div");
+        empty.className = "subtle";
+        empty.textContent = "조건에 맞는 등록 레이아웃 이미지가 아직 없습니다.";
+        card.append(empty);
+        return card;
+      }
+
+      const list = document.createElement("div");
+      list.className = "layout-recommendation-list";
+      aiLayoutRecommendations.forEach((item) => {
+        const link = document.createElement("a");
+        link.className = "layout-recommendation-item";
+        link.href = item.file?.public_url || "#";
+        link.target = "_blank";
+        link.rel = "noopener";
+        if (!item.file?.public_url) link.removeAttribute("href");
+
+        if (item.file?.public_url && (item.file?.mime_type || "").startsWith("image/")) {
+          const image = document.createElement("img");
+          image.src = item.file.public_url;
+          image.alt = item.file.original_filename || "레이아웃 이미지";
+          link.append(image);
+        } else {
+          const placeholder = document.createElement("span");
+          placeholder.className = "layout-recommendation-file";
+          placeholder.textContent = "파일";
+          link.append(placeholder);
+        }
+
+        const body = document.createElement("span");
+        body.className = "layout-recommendation-body";
+        const title = document.createElement("strong");
+        title.textContent = [
+          item.venueName || item.spaceName || "장소 미지정",
+          item.layout_type || "레이아웃",
+        ].filter(Boolean).join(" / ");
+        const meta = document.createElement("small");
+        const peopleRange = [
+          item.min_people == null ? "" : `${item.min_people}명`,
+          item.max_people == null ? "" : `${item.max_people}명`,
+        ].filter(Boolean).join("~");
+        meta.textContent = [
+          peopleRange,
+          item.table_type,
+          item.table_count == null ? "" : `${item.table_count}개`,
+          item.is_verified ? "검증됨" : "검토 전",
+        ].filter(Boolean).join(" · ");
+        body.append(title, meta);
+        link.append(body);
+        list.append(link);
+      });
+      card.append(list);
       return card;
     }
 
