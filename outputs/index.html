@@ -55,7 +55,6 @@
       <nav class="sidebar-nav" aria-label="주요 메뉴">
         <button class="sidebar-nav-item active" type="button" data-dashboard-target="home">홈</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="calendar">캘린더</button>
-        <button class="sidebar-nav-item" type="button" data-dashboard-target="events">행사관리</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="assets">자산 관리</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="layouts">공간 / 레이아웃</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="ai">AI 비서</button>
@@ -83,11 +82,6 @@
             <span class="widget-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/></svg><span class="widget-code">AI</span></span>
             <strong>AI 추천 보기</strong>
             <small>AI가 분석한 운영 포인트를 확인하세요.</small>
-          </button>
-          <button class="dashboard-widget" type="button" data-dashboard-target="events">
-            <span class="widget-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg><span class="widget-code">EVT</span></span>
-            <strong>행사 관리</strong>
-            <small>등록된 행사 목록을 관리하세요.</small>
           </button>
         </div>
 
@@ -255,30 +249,6 @@
         </div>
         <div id="calendarGrid" class="calendar-grid"></div>
       </section>
-      </section>
-
-      <section id="eventsPage" class="erp-page" data-erp-page="events" aria-label="행사 관리 페이지" hidden>
-        <section class="event-management-page">
-          <div class="section-heading">
-            <div>
-              <span class="eyebrow">Event Management</span>
-              <h2>행사 관리</h2>
-            </div>
-            <span class="soft-badge">캘린더 기반 관리</span>
-          </div>
-          <div class="management-card-grid">
-            <article class="management-card">
-              <strong>행사 상세 / 수정 / 삭제</strong>
-              <p>캘린더의 행사 배지를 클릭하면 상세정보, 내부메모, 원본 엑셀, 수정과 삭제를 관리할 수 있습니다.</p>
-              <button class="secondary-button" type="button" data-dashboard-target="calendar">캘린더에서 관리</button>
-            </article>
-            <article class="management-card">
-              <strong>신규 이벤트오더 등록</strong>
-              <p>새 행사 등록은 이벤트오더 엑셀을 업로드한 뒤 저장 날짜와 색상을 선택해서 진행합니다.</p>
-              <button class="primary-button" type="button" data-dashboard-target="upload">이벤트오더 업로드</button>
-            </article>
-          </div>
-        </section>
       </section>
 
       <section id="assetsPage" class="erp-page" data-erp-page="assets" aria-label="자산 관리 페이지" hidden>
@@ -3429,7 +3399,7 @@
     }
 
     function showErpPage(target) {
-      const allowedPages = new Set(["home", "upload", "calendar", "events", "assets", "layouts", "ai"]);
+      const allowedPages = new Set(["home", "upload", "calendar", "assets", "layouts", "ai"]);
       const pageName = allowedPages.has(target) ? target : "home";
       const activeTarget = allowedPages.has(target) ? target : "home";
 

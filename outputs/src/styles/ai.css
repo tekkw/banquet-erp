@@ -626,7 +626,6 @@ select {
   display: none;
 }
 
-.event-management-page,
 .ai-page-card {
   padding: 22px;
   border: 1px solid var(--theme-border);
@@ -635,7 +634,6 @@ select {
   box-shadow: var(--theme-shadow);
 }
 
-.management-card p,
 .ai-page-card p {
   margin: 0;
   color: var(--theme-muted);

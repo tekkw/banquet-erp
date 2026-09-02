@@ -93,7 +93,7 @@
 
 .dashboard-widget-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -291,38 +291,11 @@
 }
 
 .erp-shell[data-active-page="home"] .dashboard-widget-grid {
-  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
 }
 
 .erp-shell[data-active-page="home"] .today-operations-card {
   min-height: 0;
-}
-
-.management-card-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.management-card {
-  display: grid;
-  gap: 12px;
-  padding: 18px;
-  border: 1px solid var(--theme-border);
-  border-radius: 16px;
-  background: #FFFFFF;
-}
-
-.management-card strong {
-  color: var(--theme-navy);
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.management-card .primary-button,
-.management-card .secondary-button {
-  width: fit-content;
-  min-height: 42px;
 }
 
 .dashboard-widget {

@@ -503,10 +503,6 @@
     min-height: auto;
   }
 
-  .management-card-grid {
-    grid-template-columns: 1fr;
-  }
-
   .dashboard-operations-row {
     grid-template-columns: 1fr;
   }

@@ -87,6 +87,10 @@ Deno.serve(async (request) => {
 
     const chatDataContext = await loadChatDataContext(cleanQuestion);
     const chatAttachments = Array.isArray(attachments) ? attachments : [];
+    const coffeeBreakAnswer = answerCoffeeBreakQuestion(cleanQuestion, chatDataContext.eventData);
+    if (coffeeBreakAnswer && !chatAttachments.length) {
+      return jsonResponse({ answer: `${coffeeBreakAnswer}\n\n출처: event_orders, event_schedules, event_calendar_dates, event_items` });
+    }
     const assetAnswer = answerAssetQuestion(cleanQuestion, chatDataContext.banquetAssets);
     if (assetAnswer && !chatAttachments.length) {
       return jsonResponse({ answer: `${assetAnswer}\n\n출처: banquet_assets` });
@@ -135,6 +139,7 @@ async function loadEventOrderData() {
     eventDateTime: eventOrder.event_datetime,
     venue: eventOrder.venue,
     color: eventOrder.color,
+    mealTypes: eventOrder.meal_types,
     originalFilename: eventOrder.original_filename,
     storagePath: eventOrder.storage_path,
     internalMemo: eventOrder.internal_memo,
@@ -668,28 +673,25 @@ async function loadOperationalHistoryData(intent: ChatIntent) {
   };
 }
 
-function answerAssetQuestion(question: string, banquetAssets: Array<Record<string, unknown>>) {
+export function answerAssetQuestion(question: string, banquetAssets: Array<Record<string, unknown>>) {
   if (!banquetAssets.length) return "";
 
   const normalizedQuestion = normalizeAssetText(question);
+  const eventContext = /(커피\s*브레이크|티\s*브레이크|행사|일정|스케줄|오늘|내일|이번\s*주|이번\s*달|몇\s*번|횟수|건수)/i.test(question);
+  if (eventContext) return "";
   const floorMatch = question.match(/(\d+)\s*(?:floor|f|\uCE35)/i);
   const requestedFloor = floorMatch?.[1] ? `${floorMatch[1]}\uCE35` : "";
-  const quantityIntent = /(\uBA87|\uC218\uB7C9|\uAC1C|\uB300|\uC788\uC5B4|\uBCF4\uC720|\uC7AC\uACE0)/.test(question);
-  const assetIntent = /(\uD14C\uC774\uBE14|\uB0C9\uC628\uC218\uAE30|\uC2A4\uD0E0\uB4DC|\uC774\uC824|flip|chart|\uC790\uC0B0|\uBE44\uD488|\uC7A5\uBE44|\uBA87|\uC218\uB7C9|\uBCF4\uC720|\uC7AC\uACE0)/i.test(question);
+  const quantityIntent = /(몇\s*(?:개|대)|수량|개수|보유|재고|있어)/i.test(question);
+  const assetIntent = /(테이블|냉온수기|스탠드|이젤|커피\s*포트|flip|chart|자산|비품|장비|수량|보유|재고)/i.test(question);
   if (!assetIntent) return "";
 
   const matches = banquetAssets.filter((asset) => {
     const assetName = String(asset.asset_name ?? "");
     const assetFloor = String(asset.floor ?? "");
     const normalizedName = normalizeAssetText(assetName);
-    const nameParts = assetName
-      .split(/\s+/)
-      .map((part) => normalizeAssetText(part))
-      .filter((part) => part.length >= 2);
-    const nameMatches =
-      normalizedQuestion.includes(normalizedName) ||
-      normalizedName.includes(normalizedQuestion) ||
-      nameParts.some((part) => normalizedQuestion.includes(part));
+    // 전체 자산명이 직접 포함된 경우만 shortcut에 사용한다. "커피"처럼 일반적인
+    // 부분 단어가 겹친다는 이유로 "커피브레이크"를 "커피 포트"로 보지 않는다.
+    const nameMatches = normalizedName.length >= 2 && normalizedQuestion.includes(normalizedName);
     const floorMatches = !requestedFloor || normalizeAssetText(assetFloor) === normalizeAssetText(requestedFloor);
     return nameMatches && floorMatches;
   });
@@ -719,6 +721,97 @@ function answerAssetQuestion(question: string, banquetAssets: Array<Record<strin
   return matches
     .map((asset) => `- ${asset.asset_name}${asset.floor ? ` / ${asset.floor}` : ""}${asset.quantity !== null && asset.quantity !== undefined ? ` / ${asset.quantity}` : ""}${asset.spec ? ` / 규격: ${asset.spec}` : ""}`)
     .join("\n");
+}
+
+export function answerCoffeeBreakQuestion(question: string, eventData: unknown[]) {
+  if (!/(커피\s*브레이크|coffee\s*break)/i.test(question)) return "";
+
+  const dateFilter = resolveEventDateFilter(question, new Date());
+  const matches: Array<{ eventName: string; date: string; time: string; content: string }> = [];
+  (Array.isArray(eventData) ? eventData : []).forEach((eventValue) => {
+    const event = eventValue as Record<string, unknown>;
+    const schedules = Array.isArray(event.schedules) ? event.schedules as Array<Record<string, unknown>> : [];
+    const calendarDates = Array.isArray(event.calendarDates) ? event.calendarDates.map(String) : [];
+    const matchCountBeforeEvent = matches.length;
+    schedules.forEach((schedule) => {
+      if (!/(커피\s*브레이크|coffee\s*break)/i.test(String(schedule.content ?? ""))) return;
+      const date = normalizeDateKey(schedule.date) || calendarDates[0] || normalizeDateKey(event.eventDateTime);
+      if (dateFilter && (!date || !dateFilter(date))) return;
+      matches.push({
+        eventName: String(event.eventName || "행사명 미입력"),
+        date,
+        time: String(schedule.time || "").trim(),
+        content: String(schedule.content || "커피브레이크").trim(),
+      });
+    });
+    if (matches.length !== matchCountBeforeEvent) return;
+
+    const mealTypes = Array.isArray(event.mealTypes) ? event.mealTypes.map(String) : [String(event.mealTypes || "")];
+    const items = Array.isArray(event.items) ? event.items as Array<Record<string, unknown>> : [];
+    const hasCoffeeBreak = mealTypes.some((value) => /coffee_?break|커피\s*브레이크/i.test(value))
+      || items.some((item) => /커피\s*브레이크|coffee\s*break/i.test(String(item.itemName ?? "")));
+    if (!hasCoffeeBreak) return;
+    const date = calendarDates[0] || normalizeDateKey(event.eventDateTime);
+    if (dateFilter && (!date || !dateFilter(date))) return;
+    matches.push({ eventName: String(event.eventName || "행사명 미입력"), date, time: "", content: "커피브레이크" });
+  });
+
+  const periodLabel = getRequestedPeriodLabel(question);
+  if (!matches.length) {
+    return `${periodLabel}등록된 행사 데이터에서 커피브레이크 일정을 찾지 못했습니다.`;
+  }
+  matches.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const details = matches
+    .map((item) => `- ${item.date || "날짜 미입력"}${item.time ? ` ${item.time}` : ""} · ${item.eventName} · ${item.content}`)
+    .join("\n");
+  return `${periodLabel}커피브레이크 일정이 총 ${matches.length}회 있습니다.\n${details}`;
+}
+
+function normalizeDateKey(value: unknown) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/(\d{4})[-./년]\s*(\d{1,2})[-./월]\s*(\d{1,2})/);
+  if (!match) return "";
+  return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+}
+
+function resolveEventDateFilter(question: string, now: Date): ((dateKey: string) => boolean) | null {
+  const koreaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+  const year = koreaNow.getFullYear();
+  const month = koreaNow.getMonth() + 1;
+  const today = `${year}-${String(month).padStart(2, "0")}-${String(koreaNow.getDate()).padStart(2, "0")}`;
+  if (/오늘/.test(question)) return (dateKey) => dateKey === today;
+  const monthMatch = question.match(/(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월/);
+  if (monthMatch) {
+    const requestedYear = Number(monthMatch[1] || year);
+    const requestedMonth = Number(monthMatch[2]);
+    return (dateKey) => dateKey.startsWith(`${requestedYear}-${String(requestedMonth).padStart(2, "0")}-`);
+  }
+  if (/이번\s*달/.test(question)) {
+    const prefix = `${year}-${String(month).padStart(2, "0")}-`;
+    return (dateKey) => dateKey.startsWith(prefix);
+  }
+  if (/이번\s*주/.test(question)) {
+    const day = koreaNow.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(koreaNow);
+    monday.setDate(koreaNow.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return (dateKey) => {
+      const date = new Date(`${dateKey}T00:00:00`);
+      return date >= monday && date <= sunday;
+    };
+  }
+  return null;
+}
+
+function getRequestedPeriodLabel(question: string) {
+  if (/오늘/.test(question)) return "오늘 ";
+  if (/이번\s*주/.test(question)) return "이번 주 ";
+  if (/이번\s*달/.test(question)) return "이번 달 ";
+  const match = question.match(/(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월/);
+  return match ? `${match[1] ? `${match[1]}년 ` : ""}${Number(match[2])}월에는 ` : "";
 }
 
 function normalizeAssetText(value: string) {
@@ -1157,7 +1250,7 @@ async function askAiForInterviewKnowledge(interview: Record<string, unknown>) {
 async function generateInterviewQuestions() {
   const [knowledgeRows, interviewRows] = await Promise.all([
     safeSupabaseSelect("ai_knowledge", "select=category,subject,predicate,object,value,natural_language,object_value,explanation,reason,confidence,updated_at&status=eq.approved&order=updated_at.desc&limit=200"),
-    safeSupabaseSelect("ai_interviews", "select=category,question,question_reason,status&status=in.(pending,answered,confirmed)&order=created_at.desc&limit=300"),
+    safeSupabaseSelect("ai_interviews", "select=category,question,question_reason,status&status=in.(pending,answered,confirmed,skipped)&order=created_at.desc&limit=1000"),
   ]);
 
   if (!knowledgeRows.length) return [];
@@ -1241,7 +1334,7 @@ async function safeSupabaseSelect(table: string, query: string) {
   }
 }
 
-function filterInterviewQuestionCandidates(
+export function filterInterviewQuestionCandidates(
   candidates: Array<Record<string, unknown>>,
   existingInterviews: Array<Record<string, unknown>>,
 ) {
@@ -1265,35 +1358,31 @@ function filterInterviewQuestionCandidates(
     });
 }
 
-function normalizeQuestionText(value: string) {
+export function normalizeQuestionText(value: string) {
   return String(value || "")
     .toLowerCase()
-    .replace(/\s+/g, "")
-    .replace(/[?？!.。,:;'"“”‘’()[\]{}<>]/g, "");
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-function isSimilarQuestionKey(a: string, b: string) {
+export function isSimilarQuestionKey(a: string, b: string) {
   if (!a || !b) return false;
   if (a === b) return true;
   if (a.length >= 10 && b.includes(a)) return true;
   if (b.length >= 10 && a.includes(b)) return true;
-  return jaccardSimilarity(splitKoreanQuestionTokens(a), splitKoreanQuestionTokens(b)) >= 0.72;
+  return characterNgramSimilarity(a, b) >= 0.82;
 }
 
-function splitKoreanQuestionTokens(value: string) {
-  return value
-    .split(/(?=[가-힣A-Za-z0-9])|[^가-힣A-Za-z0-9]+/u)
-    .map((token) => token.trim())
-    .filter((token) => token.length >= 2);
-}
-
-function jaccardSimilarity(aTokens: string[], bTokens: string[]) {
-  const a = new Set(aTokens);
-  const b = new Set(bTokens);
+function characterNgramSimilarity(left: string, right: string) {
+  const toBigrams = (value: string) => {
+    const grams = new Set<string>();
+    for (let index = 0; index < value.length - 1; index += 1) grams.add(value.slice(index, index + 2));
+    return grams;
+  };
+  const a = toBigrams(left);
+  const b = toBigrams(right);
   if (!a.size || !b.size) return 0;
-  const intersection = [...a].filter((token) => b.has(token)).length;
-  const union = new Set([...a, ...b]).size;
-  return union ? intersection / union : 0;
+  const intersection = [...a].filter((gram) => b.has(gram)).length;
+  return (2 * intersection) / (a.size + b.size);
 }
 
 function normalizePriority(value: string) {
@@ -1552,7 +1641,7 @@ async function analyzeEventOrderKnowledgeGaps(eventOrderId: string) {
     safeSupabaseSelect("beverages_rules", "select=*&limit=200"),
     safeSupabaseSelect("banquet_assets", "select=asset_name,floor,location,quantity,spec&order=asset_name.asc"),
     safeSupabaseSelect("ai_knowledge", "select=category,subject,predicate,object,value,natural_language,object_value,explanation,reason,confidence&status=eq.approved&order=updated_at.desc&limit=300"),
-    safeSupabaseSelect("ai_interviews", `select=category,question,question_reason,status,source_type,source_id&source_type=eq.event_order&source_id=eq.${encodeURIComponent(id)}&status=in.(pending,answered,confirmed)&order=created_at.desc`),
+    safeSupabaseSelect("ai_interviews", "select=category,question,question_reason,status,source_type,source_id&status=in.(pending,answered,confirmed,skipped)&order=created_at.desc&limit=1000"),
   ]);
   const deterministicVenueCandidates = createUnmappedVenueQuestionCandidates(schedules, venues, venueAliases);
   const learningCandidates = createLearningQuestionCandidates(schedules, venues, venueAliases);
@@ -1689,7 +1778,7 @@ async function insertEventOrderInterviewQuestions(eventOrderId: string, candidat
   if (!candidates.length) return [];
   const existing = await safeSupabaseSelect(
     "ai_interviews",
-    `select=question,status&source_type=eq.event_order&source_id=eq.${encodeURIComponent(eventOrderId)}&status=in.(pending,answered,confirmed)`,
+    "select=question,status&status=in.(pending,answered,confirmed,skipped)&order=created_at.desc&limit=1000",
   );
   const existingKeys = existing.map((row) => normalizeQuestionText(String(row.question || ""))).filter(Boolean);
   const now = new Date().toISOString();
@@ -1734,7 +1823,7 @@ async function createPostEventReviewQuestions() {
   const existingRows = eventIds.length
     ? await safeSupabaseSelect(
         "ai_interviews",
-        `select=source_id,status&category=eq.post_event_review&source_type=eq.event_order&source_id=in.(${eventIds.join(",")})&status=in.(pending,answered,confirmed)`,
+        `select=source_id,status&category=eq.post_event_review&source_type=eq.event_order&source_id=in.(${eventIds.join(",")})&status=in.(pending,answered,confirmed,skipped)`,
       )
     : [];
   const existingIds = new Set(existingRows.map((row) => String(row.source_id || "")));

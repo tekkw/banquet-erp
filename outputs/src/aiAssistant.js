@@ -1776,9 +1776,15 @@
       interviewLoading = true;
       renderInterviewPanel();
       try {
-        const rows = await supabaseRequest("ai_interviews?select=*&status=eq.pending&order=created_at.asc&limit=50");
-        pendingInterviewCount = Array.isArray(rows) ? rows.length : 0;
-        currentInterview = sortPendingInterviews(rows || []).find((row) => !deferredInterviewIds.has(row.id)) || null;
+        const rows = await supabaseRequest("ai_interviews?select=*&status=in.(pending,answered,confirmed,skipped)&order=created_at.asc&limit=1000");
+        const allRows = Array.isArray(rows) ? rows : [];
+        const historicalRows = allRows.filter((row) => row.status !== "pending");
+        const uniquePendingRows = filterDuplicatePendingInterviews(
+          allRows.filter((row) => row.status === "pending"),
+          historicalRows
+        );
+        pendingInterviewCount = uniquePendingRows.length;
+        currentInterview = sortPendingInterviews(uniquePendingRows).find((row) => !deferredInterviewIds.has(row.id)) || null;
         interviewAnalysis = null;
         interviewError = "";
         if (!preserveMessage) interviewSuccess = "";
@@ -2171,6 +2177,14 @@
         });
         laterButton.disabled = isReviewSaving;
         actions.append(noIssueButton, laterButton);
+      } else {
+        const skipButton = createInterviewButton(
+          isReviewSaving ? "처리 중..." : "건너뛰기",
+          "secondary-button",
+          skipCurrentInterview
+        );
+        skipButton.disabled = isReviewSaving;
+        actions.append(skipButton);
       }
       form.append(textarea, actions);
       return form;
@@ -2325,6 +2339,40 @@
         interviewError = error.message || "인터뷰 답변 저장에 실패했습니다.";
       } finally {
         interviewLoading = false;
+        renderInterviewPanel();
+      }
+    }
+
+    async function skipCurrentInterview() {
+      if (isReviewSaving || !currentInterview?.id || isPostEventReviewInterview(currentInterview)) return;
+      const skippedInterviewId = currentInterview.id;
+      isReviewSaving = true;
+      interviewError = "";
+      interviewSuccess = "";
+      renderInterviewPanel();
+      const now = new Date().toISOString();
+      try {
+        await supabaseRequest(`ai_interviews?id=eq.${encodeURIComponent(skippedInterviewId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({
+            // ai_interviews.status에는 저장소 기준 CHECK 제약이 없으므로 의미를 명시한다.
+            status: "skipped",
+            answer: "[건너뛰기] 이 질문은 다시 묻지 않음",
+            answered_at: now,
+            updated_at: now,
+          }),
+        });
+        deferredInterviewIds.delete(skippedInterviewId);
+        currentInterview = null;
+        interviewAnalysis = null;
+        interviewSuccess = "질문을 건너뛰었습니다. 같은 질문은 다시 제안하지 않습니다.";
+        await loadCurrentInterview({ preserveMessage: true });
+      } catch (error) {
+        console.error("ai_interviews skip failed:", error);
+        interviewError = error.message || "질문을 건너뛰지 못했습니다.";
+      } finally {
+        isReviewSaving = false;
         renderInterviewPanel();
       }
     }
@@ -2641,6 +2689,15 @@
       const question = cleanValue(candidate.question);
       if (!question) return;
       try {
+        const existingRows = await supabaseRequest(
+          "ai_interviews?select=question,status&status=in.(pending,answered,confirmed,skipped)&order=created_at.desc&limit=1000"
+        );
+        if ((existingRows || []).some((row) => isSimilarQuestionText(question, row.question))) {
+          interviewQuestionCandidates = interviewQuestionCandidates.filter((_, itemIndex) => itemIndex !== index);
+          interviewQuestionError = "이미 처리했거나 등록된 질문과 중복되어 제외했습니다.";
+          renderInterviewPanel();
+          return;
+        }
         await supabaseRequest("ai_interviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2723,17 +2780,52 @@
     }
 
     function dedupeQuestionCandidates(candidates) {
-      const seen = new Set();
+      const seen = [];
       return (candidates || []).filter((candidate) => {
-        const key = normalizeQuestionText(candidate.question);
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
+        const question = cleanValue(candidate.question);
+        const key = normalizeQuestionText(question);
+        if (!key || seen.some((existing) => isSimilarQuestionText(question, existing))) return false;
+        seen.push(question);
         return true;
       });
     }
 
     function normalizeQuestionText(value) {
-      return cleanValue(value).toLowerCase().replace(/\s+/g, "").replace(/[?？!.。,:;'"“”‘’()[\]{}<>]/g, "");
+      return cleanValue(value)
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}]+/gu, "");
+    }
+
+    function isSimilarQuestionText(left, right) {
+      const a = normalizeQuestionText(left);
+      const b = normalizeQuestionText(right);
+      if (!a || !b) return false;
+      if (a === b) return true;
+      if (Math.min(a.length, b.length) >= 12 && (a.includes(b) || b.includes(a))) return true;
+      return characterNgramSimilarity(a, b) >= 0.82;
+    }
+
+    function characterNgramSimilarity(left, right) {
+      const toBigrams = (value) => {
+        const grams = new Set();
+        for (let index = 0; index < value.length - 1; index += 1) grams.add(value.slice(index, index + 2));
+        return grams;
+      };
+      const a = toBigrams(left);
+      const b = toBigrams(right);
+      if (!a.size || !b.size) return 0;
+      const intersection = [...a].filter((gram) => b.has(gram)).length;
+      return (2 * intersection) / (a.size + b.size);
+    }
+
+    function filterDuplicatePendingInterviews(pendingRows, historicalRows) {
+      const accepted = [];
+      (pendingRows || []).forEach((row) => {
+        const duplicatesHistory = (historicalRows || []).some((past) => isSimilarQuestionText(row.question, past.question));
+        const duplicatesPending = accepted.some((pending) => isSimilarQuestionText(row.question, pending.question));
+        if (!duplicatesHistory && !duplicatesPending) accepted.push(row);
+      });
+      return accepted;
     }
 
     function sortPendingInterviews(rows) {
