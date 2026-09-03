@@ -9,6 +9,9 @@ const wizardSource = fs.readFileSync(path.join(__dirname, "..", "outputs", "src"
 
 assert.equal(geometry.toMillimeters("12"), 12000);
 assert.equal(geometry.toMillimeters("0.0014"), 1);
+assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: true }, true), true);
+assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: true }, false), false);
+assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: false }, true), false);
 
 const rectangle = geometry.rectanglePoints(10000, 8000);
 assert.equal(geometry.validate(rectangle).valid, true);
@@ -81,5 +84,7 @@ assert.match(migration, /add column if not exists is_locked boolean not null def
 assert.doesNotMatch(migration, /alter table public\.(venue_layout_objects|layout_object_types)/i, "object specification tables remain unchanged");
 assert.match(wizardSource, /method: currentFloorplan\?\.id \? "PATCH" : "POST"/, "existing floorplans are updated instead of duplicated");
 assert.match(wizardSource, /unit: "mm", points:/, "millimeter points are the stored geometry source of truth");
+assert.match(wizardSource, /geometryControls\.forEach\(\(control\) => \{ control\.disabled = locked; \}\)/, "locked plans disable geometry controls");
+assert.match(wizardSource, /if \(isEditingLocked\(\) \|\| points\.length <= 1\) return;/, "locked plans block wall undo");
 
 console.log("Floorplan V2 geometry tests passed.");

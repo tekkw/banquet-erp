@@ -1,5 +1,6 @@
 -- Floorplan Editor V2 phase 1.
--- Prepared only: do not apply to production until the V2 UI is approved.
+-- Scope: allow image-less geometry floorplans and persist whole-plan lock state.
+-- This migration is intentionally idempotent and does not rewrite existing rows.
 
 -- A geometry-authored base floorplan has no source image or PDF.
 alter table public.venue_floorplans

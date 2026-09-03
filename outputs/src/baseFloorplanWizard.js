@@ -127,6 +127,9 @@
     const centerY = (bounds.minY + bounds.maxY) / 2;
     return { x: centerX - width / 2, y: centerY - height / 2, width, height, zoom: safeZoom };
   }
+  function isFloorplanEditingLocked(floorplan, lockChecked) {
+    return Boolean(floorplan?.id && floorplan.is_locked && lockChecked);
+  }
 
   function createController() {
     const byId = (id) => document.getElementById(id);
@@ -219,7 +222,7 @@
       wizardTitle.textContent = "새 기본 도면"; setMethod("rectangle"); wizard.hidden = false; empty.hidden = true; resetGeometry(); nameInput.focus();
     }
     function closeWizard() { wizard.hidden = true; empty.hidden = false; transientMessage = ""; }
-    function isEditingLocked() { return Boolean(currentFloorplan?.id && currentFloorplan.is_locked && lockedInput.checked); }
+    function isEditingLocked() { return isFloorplanEditingLocked(currentFloorplan, lockedInput.checked); }
     function resetGeometry() {
       if (isEditingLocked()) return;
       points = [{ x: 0, y: 0 }]; viewZoom = 1; transientMessage = ""; render();
@@ -341,7 +344,7 @@
     return { initialize, setMode };
   }
 
-  window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY = { rectanglePoints, addWall, isClosed, segmentIntersection, hasSelfIntersection, autoClose, boundsOf, polygonArea, validate, viewBoxFor, toMillimeters };
+  window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY = { rectanglePoints, addWall, isClosed, segmentIntersection, hasSelfIntersection, autoClose, boundsOf, polygonArea, validate, viewBoxFor, toMillimeters, isFloorplanEditingLocked };
   window.BANQUET_ERP_BASE_FLOORPLAN = { createController };
   const controller = createController(); controller?.initialize();
 })();
