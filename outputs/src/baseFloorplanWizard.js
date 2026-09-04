@@ -177,6 +177,7 @@
     const validation = byId("floorplanV2Validation"); const saveButton = byId("floorplanV2SaveButton");
     const lockedInput = byId("floorplanV2LockedInput"); const lockStatus = byId("floorplanV2LockStatus");
     const zoomStatus = byId("floorplanV2ZoomStatus"); const nameInput = byId("floorplanV2NameInput");
+    const createLayoutButton = byId("floorplanV2CreateLayoutButton");
     const structureTypes = byId("floorplanV2StructureTypes"); const structureProperties = byId("floorplanV2StructureProperties");
     const structureStatus = byId("floorplanV2StructureStatus"); const structureNameInput = byId("floorplanV2StructureNameInput");
     const structureXInput = byId("floorplanV2StructureXInput"); const structureYInput = byId("floorplanV2StructureYInput");
@@ -230,6 +231,11 @@
       structureDeleteButton?.addEventListener("click", deleteSelectedStructure);
       preview.addEventListener("pointermove", moveFixedStructure); preview.addEventListener("pointerup", endFixedStructureDrag);
       preview.addEventListener("pointercancel", endFixedStructureDrag);
+      createLayoutButton?.addEventListener("click", () => {
+        if (!currentFloorplan?.id) return;
+        setMode("event");
+        window.dispatchEvent(new CustomEvent("banquet:create-layout-from-floorplan", { detail: { venueId: venueSelect.value, spaceId: spaceSelect.value, floorplanId: currentFloorplan.id } }));
+      });
       methodInputs.forEach((input) => input.addEventListener("change", (event) => { if (!isEditingLocked()) { method = event.target.value; resetGeometry(); } }));
       byId("floorplanV2Directions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
         if (isEditingLocked()) return;
@@ -361,6 +367,7 @@
         validation.className = `floorplan-v2-validation${result.valid ? " success" : ""}${locked ? " locked" : ""}`;
       }
       saveButton.disabled = locked || !result.valid || !venueSelect.value || !spaceSelect.value || !nameInput.value.trim();
+      if (createLayoutButton) createLayoutButton.hidden = !currentFloorplan?.id;
       byId("floorplanV2WallNumber").textContent = `현재 벽 ${Math.max(0, points.length - 1)}`;
       zoomStatus.textContent = viewZoom === 1 ? "자동 맞춤" : `${Math.round(viewZoom * 100)}%`;
     }

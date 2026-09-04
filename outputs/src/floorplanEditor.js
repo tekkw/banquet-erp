@@ -226,6 +226,19 @@
     const WORKSPACE_MAX_SCALE = 8;
     const WORKSPACE_PAN_SPEED = 1;
     const fixedObjectTypes = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
+    const layoutTypeOptions = [
+      ["all", "전체"], ["school", "스쿨식"], ["round", "라운드식"], ["buffet", "뷔페식"], ["t_shape", "T-Shape"],
+      ["u_shape", "U-Shape"], ["hollow_square", "ㅁ-Shape"], ["custom", "기타"],
+    ];
+    const floorplanV2EventPanel = document.getElementById("floorplanV2EventPanel"); const libraryPanel = document.getElementById("layoutLibraryPanel"); const libraryGrid = document.getElementById("layoutLibraryGrid");
+    const libraryFilters = document.getElementById("layoutLibraryFilters"); const libraryCreateButton = document.getElementById("layoutLibraryCreateButton");
+    const workspaceBackLibraryButton = document.getElementById("layoutWorkspaceBackLibraryButton");
+    const libraryModal = document.getElementById("layoutLibrarySaveModal"); const libraryForm = document.getElementById("layoutLibrarySaveForm");
+    const libraryTypeInput = document.getElementById("layoutLibraryTypeInput"); const libraryNameInput = document.getElementById("layoutLibraryNameInput");
+    const libraryMinInput = document.getElementById("layoutLibraryMinInput"); const libraryMaxInput = document.getElementById("layoutLibraryMaxInput");
+    const libraryCapacityInput = document.getElementById("layoutLibraryCapacityInput"); const libraryNotesInput = document.getElementById("layoutLibraryNotesInput");
+    const librarySpaceInput = document.getElementById("layoutLibrarySpaceInput");
+    let libraryFilter = "all"; let libraryObjectsByLayout = new Map(); let libraryModalMode = "save"; let libraryModalForceNew = false; let pendingLayoutInfo = null;
     function isWorkspaceBaseObject(object) {
       return Boolean(object?.metadata?.baseFloorplanObject) || fixedObjectTypes.has(object?.objectType);
     }
@@ -527,8 +540,18 @@
       workspaceNewModal?.addEventListener("click", (event) => {
         if (event.target === workspaceNewModal) closeWorkspaceNewLayoutModal();
       });
-      workspaceSaveButton?.addEventListener("click", () => saveWorkspaceLayout(false));
-      workspaceSaveAsButton?.addEventListener("click", () => saveWorkspaceLayout(true));
+      workspaceSaveButton?.addEventListener("click", () => openLayoutInfoModal("save", false));
+      workspaceSaveAsButton?.addEventListener("click", () => openLayoutInfoModal("save", true));
+      libraryCreateButton?.addEventListener("click", startNewLibraryLayout);
+      document.getElementById("floorplanV2EventModeButton")?.addEventListener("click", showLayoutLibrary);
+      workspaceBackLibraryButton?.addEventListener("click", showLayoutLibrary);
+      libraryFilters?.addEventListener("click", (event) => { const button = event.target.closest("button[data-layout-filter]"); if (!button) return; libraryFilter = button.dataset.layoutFilter; renderLayoutLibrary(); });
+      libraryGrid?.addEventListener("click", handleLibraryAction);
+      libraryForm?.addEventListener("submit", submitLayoutInfoModal);
+      document.getElementById("layoutLibraryModalCancelButton")?.addEventListener("click", closeLayoutInfoModal);
+      window.addEventListener("banquet:create-layout-from-floorplan", async (event) => {
+        const detail = event.detail || {}; await selectWorkspaceContext(detail.venueId, detail.spaceId, detail.floorplanId); startNewLibraryLayout();
+      });
       workspacePreviewButton?.addEventListener("click", showWorkspacePreview);
       workspaceExportButton?.addEventListener("click", exportWorkspacePng);
       workspaceUndoButton?.addEventListener("click", undoWorkspaceChange);
@@ -1048,6 +1071,86 @@
       });
     }
 
+    function showLayoutLibrary() {
+      floorplanV2EventPanel?.classList.add("library-mode"); floorplanV2EventPanel?.classList.remove("editor-mode"); renderLayoutLibrary();
+    }
+    function showLayoutEditor() { floorplanV2EventPanel?.classList.remove("library-mode"); floorplanV2EventPanel?.classList.add("editor-mode"); setTimeout(fitWorkspaceToScreen, 0); }
+    async function selectWorkspaceContext(venueId, spaceId, floorplanId) {
+      if (venueId) { workspaceVenueSelect.value = venueId; await handleWorkspaceVenueChange(); }
+      if (spaceId) { workspaceSpaceSelect.value = spaceId; await handleWorkspaceSpaceChange(); }
+      if (floorplanId) { workspaceFloorplanSelect.value = floorplanId; await handleWorkspaceFloorplanChange(); }
+    }
+    function startNewLibraryLayout() {
+      if (!workspaceFloorplanRecord?.id) { setStatus("새 레이아웃을 만들 기본 도면을 선택해 주세요.", "warn"); return; }
+      resetWorkspaceLayout(); workspaceActiveLayout = null; if (workspaceNameInput) workspaceNameInput.value = ""; showLayoutEditor();
+    }
+    function typeLabel(type) { return layoutTypeOptions.find(([value]) => value === type)?.[1] || "기타"; }
+    async function loadLibraryObjects() {
+      libraryObjectsByLayout = new Map(); const ids = workspaceLayouts.map((row) => row.id).filter(Boolean); if (!ids.length) return;
+      const rows = await loggedSupabaseRequest("layout library objects", `venue_layout_objects?select=*&layout_id=in.(${ids.join(",")})&is_active=eq.true&order=sort_order.asc`).catch(() => []);
+      rows.forEach((row) => { const list = libraryObjectsByLayout.get(row.layout_id) || []; list.push(row); libraryObjectsByLayout.set(row.layout_id, list); });
+    }
+    function libraryPreview(layout) {
+      const objects = libraryObjectsByLayout.get(layout.id) || []; const width = Math.max(1, workspaceDrawingWidthMm); const height = Math.max(1, workspaceDrawingHeightMm);
+      const shapes = objects.map((row) => { const m = row.metadata || {}; const w = Number(m.widthMm) || Number(row.width) * width; const h = Number(m.heightMm) || Number(row.height) * height;
+        const x = Number.isFinite(Number(m.xMm)) ? Number(m.xMm) : Number(row.x) * width + w / 2; const y = Number.isFinite(Number(m.yMm)) ? Number(m.yMm) : Number(row.y) * height + h / 2;
+        const circle = row.object_type === "round_table" || row.object_type === "pillar"; return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#d4af3755" stroke="#9a7b16"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="40" fill="#2563eb33" stroke="#2563eb"/>`; }).join("");
+      const outline = workspaceOutlinePoints.length ? `<polygon points="${workspaceOutlinePoints.map((p)=>`${p.x},${p.y}`).join(" ")}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>` : "";
+      const fixed = workspaceObjects.filter(isWorkspaceBaseObject).map((object) => { const w=object.widthM*1000; const h=object.heightM*1000; const x=object.x; const y=object.y; const circle=getObjectDisplayShape(object)==="circle";
+        return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#64748b55" stroke="#475569"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${object.rotation||0} ${x} ${y})" fill="#64748b44" stroke="#475569"/>`; }).join("");
+      return `<svg viewBox="0 0 ${width} ${height}" aria-label="${escapeAttribute(layout.layout_name)} 미리보기">${outline}${fixed}${shapes}</svg>`;
+    }
+    function objectSummary(layoutId) {
+      const counts = new Map(); (libraryObjectsByLayout.get(layoutId) || []).forEach((row) => counts.set(row.label || objectLabels[row.object_type] || row.object_type, (counts.get(row.label || objectLabels[row.object_type] || row.object_type) || 0) + 1));
+      return [...counts.entries()].map(([name,count]) => `${name} × ${count}`).join(" · ") || "배치 기물 없음";
+    }
+    function renderLayoutLibrary() {
+      if (!libraryFilters || !libraryGrid) return;
+      libraryFilters.innerHTML = layoutTypeOptions.map(([value,label]) => `<button type="button" data-layout-filter="${value}" class="${libraryFilter===value?"active":""}">${label}</button>`).join("");
+      const rows = workspaceLayouts.filter((row) => libraryFilter === "all" || row.layout_type === libraryFilter);
+      libraryGrid.innerHTML = rows.length ? rows.map((row) => `<article class="layout-library-card" data-layout-id="${row.id}">${libraryPreview(row)}<h3>${escapeHtml(row.layout_name || "이름 없는 레이아웃")}</h3><p>${typeLabel(row.layout_type)}</p><p class="layout-library-card-meta">권장 ${row.min_people ?? "-"}~${row.max_people ?? "-"}명 · 최대 ${row.setup_capacity ?? "-"}명</p><p class="layout-library-card-meta">${escapeHtml(objectSummary(row.id))}</p><div class="layout-library-card-actions"><button data-action="open">열기</button><button data-action="edit">편집</button><button data-action="info">정보 수정</button><button data-action="duplicate">복제</button><button data-action="delete" class="danger-button">삭제</button></div></article>`).join("") : "<p>이 분류에 저장된 레이아웃이 없습니다.</p>";
+    }
+    async function handleLibraryAction(event) {
+      const button = event.target.closest("button[data-action]"); const card = event.target.closest("[data-layout-id]"); if (!card) return;
+      const layout = workspaceLayouts.find((row) => row.id === card.dataset.layoutId); if (!layout) return;
+      const action = button?.dataset.action || "open";
+      if (["open","edit"].includes(action)) { workspaceSavedLayoutSelect.value = layout.id; await loadWorkspaceLayoutById(layout.id); showLayoutEditor(); return; }
+      if (action === "info") { workspaceActiveLayout = layout; openLayoutInfoModal("info", false); return; }
+      if (action === "duplicate") { await duplicateLibraryLayout(layout); return; }
+      if (action === "delete") await deleteLibraryLayout(layout);
+    }
+    function nullableNumber(input) { return input.value === "" ? null : Number(input.value); }
+    function openLayoutInfoModal(mode, forceNew) {
+      if (!workspaceFloorplanRecord?.id) { setStatus("기본 도면을 먼저 선택해 주세요.", "warn"); return; }
+      libraryModalMode = mode; libraryModalForceNew = forceNew; const row = mode === "info" ? workspaceActiveLayout : workspaceActiveLayout;
+      librarySpaceInput.value = workspaceSpaceSelect?.selectedOptions?.[0]?.textContent || ""; libraryTypeInput.value = row?.layout_type || "";
+      libraryNameInput.value = forceNew ? `${row?.layout_name || workspaceNameInput?.value || "새 레이아웃"} - 복사본` : row?.layout_name || workspaceNameInput?.value || "";
+      libraryMinInput.value = row?.min_people ?? ""; libraryMaxInput.value = row?.max_people ?? ""; libraryCapacityInput.value = row?.setup_capacity ?? ""; libraryNotesInput.value = row?.layout_notes || "";
+      libraryModal.hidden = false; libraryNameInput.focus();
+    }
+    function closeLayoutInfoModal() { libraryModal.hidden = true; }
+    async function submitLayoutInfoModal(event) {
+      event.preventDefault(); if (!libraryTypeInput.value || !libraryNameInput.value.trim()) return;
+      const info = { layout_type: libraryTypeInput.value, layout_name: libraryNameInput.value.trim(), min_people: nullableNumber(libraryMinInput), max_people: nullableNumber(libraryMaxInput), setup_capacity: nullableNumber(libraryCapacityInput), layout_notes: libraryNotesInput.value.trim() || null };
+      if (libraryModalMode === "info" && workspaceActiveLayout?.id) {
+        const rows = await loggedSupabaseRequest("layout library info update", `venue_layouts?id=eq.${encodeURIComponent(workspaceActiveLayout.id)}&select=*`, { method:"PATCH", headers:{"Content-Type":"application/json",Prefer:"return=representation"}, body:JSON.stringify(info) });
+        workspaceActiveLayout = rows?.[0] || workspaceActiveLayout; closeLayoutInfoModal(); await loadWorkspaceSavedLayouts(); return;
+      }
+      pendingLayoutInfo = info; if (workspaceNameInput) workspaceNameInput.value = info.layout_name; closeLayoutInfoModal(); await saveWorkspaceLayout(libraryModalForceNew);
+    }
+    function cloneObjectPayload(row, layoutId) { return { layout_id:layoutId, object_type:row.object_type, label:row.label, x:row.x, y:row.y, width:row.width, height:row.height, rotation:row.rotation, seat_count:row.seat_count, style:row.style||{}, metadata:row.metadata||{}, sort_order:row.sort_order||0, is_active:true, object_type_id:row.object_type_id||null, memo:row.memo||"", is_locked:Boolean(row.is_locked) }; }
+    async function duplicateLibraryLayout(layout) {
+      const { id, created_at, updated_at, ...copy } = layout; copy.layout_name = `${layout.layout_name} - 복사본`; copy.is_active = true;
+      const rows = await loggedSupabaseRequest("layout library duplicate", "venue_layouts?select=*", {method:"POST",headers:{"Content-Type":"application/json",Prefer:"return=representation"},body:JSON.stringify(copy)}); const duplicate = rows?.[0]; if (!duplicate?.id) return;
+      const objects = libraryObjectsByLayout.get(layout.id) || []; if (objects.length) await loggedSupabaseRequest("layout library duplicate objects", "venue_layout_objects", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(objects.map((row)=>cloneObjectPayload(row,duplicate.id)))});
+      await loadWorkspaceSavedLayouts();
+    }
+    async function deleteLibraryLayout(layout) {
+      if (!window.confirm(`레이아웃 '${layout.layout_name}'만 삭제하시겠습니까?`)) return;
+      await loggedSupabaseRequest("layout library objects deactivate", `venue_layout_objects?layout_id=eq.${encodeURIComponent(layout.id)}`, {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:false})});
+      await loggedSupabaseRequest("layout library deactivate", `venue_layouts?id=eq.${encodeURIComponent(layout.id)}`, {method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({is_active:false})}); await loadWorkspaceSavedLayouts();
+    }
+
     async function handleWorkspaceFloorplanChange() {
       const row = workspaceFloorplans.find((item) => String(item.id) === String(workspaceFloorplanSelect?.value || ""));
       workspaceSourceRow = row || null;
@@ -1181,6 +1284,8 @@
         `venue_layouts?select=*&floorplan_id=eq.${encodeURIComponent(workspaceFloorplanRecord.id)}&is_active=eq.true&order=updated_at.desc`
       ).catch(() => []);
       renderWorkspaceSavedLayoutOptions();
+      await loadLibraryObjects();
+      renderLayoutLibrary();
     }
 
     async function loadWorkspaceLayoutById(layoutId) {
@@ -1269,6 +1374,7 @@
         await loadWorkspaceSavedLayouts();
         workspaceSavedLayoutSelect.value = workspaceActiveLayout.id;
         workspaceDirty = false;
+        pendingLayoutInfo = null;
         resetWorkspaceHistory();
         updateWorkspaceStatus("??λ맖");
         await reloadVenueLayouts?.();
@@ -1353,15 +1459,16 @@
 
     function buildWorkspaceLayoutPayload(layoutName) {
       const layoutOnlyObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
+      const info = pendingLayoutInfo || {};
       return {
         floorplan_id: workspaceFloorplanRecord.id,
         venue_id: workspaceSourceRow.venue_id || workspaceVenueSelect?.value || null,
         space_id: workspaceSourceRow.space_id || workspaceSpaceSelect?.value || null,
-        layout_name: layoutName,
-        layout_type: inferWorkspaceLayoutType(layoutName),
-        min_people: workspaceSourceRow.min_people ?? null,
-        max_people: workspaceSourceRow.max_people ?? null,
-        setup_capacity: layoutOnlyObjects.reduce((sum, object) => sum + Number(object.seatCount || 0), 0) || workspaceSourceRow.setup_capacity || null,
+        layout_name: info.layout_name || layoutName,
+        layout_type: info.layout_type || workspaceActiveLayout?.layout_type || inferWorkspaceLayoutType(layoutName),
+        min_people: info.min_people ?? workspaceActiveLayout?.min_people ?? null,
+        max_people: info.max_people ?? workspaceActiveLayout?.max_people ?? null,
+        setup_capacity: info.setup_capacity ?? workspaceActiveLayout?.setup_capacity ?? (layoutOnlyObjects.reduce((sum, object) => sum + Number(object.seatCount || 0), 0) || null),
         table_type: workspaceSourceRow.table_type || null,
         table_count: layoutOnlyObjects.filter((object) => /table/.test(object.objectType)).length || workspaceSourceRow.table_count || null,
         row_count: workspaceSourceRow.row_count ?? null,
@@ -1369,7 +1476,7 @@
         seats_per_table: workspaceSourceRow.seats_per_table ?? null,
         has_stage: workspaceObjects.some((object) => object.objectType === "stage") || Boolean(workspaceSourceRow.has_stage),
         has_buffet: workspaceObjects.some((object) => object.objectType === "buffet_table") || Boolean(workspaceSourceRow.has_buffet),
-        layout_notes: workspaceSourceRow.layout_notes || null,
+        layout_notes: info.layout_notes ?? workspaceActiveLayout?.layout_notes ?? null,
       };
     }
 

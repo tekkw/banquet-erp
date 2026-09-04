@@ -377,8 +377,8 @@
         </details>
 
         <div class="floorplan-v2-mode-switch" role="tablist" aria-label="도면 작업 선택">
-          <button id="floorplanV2BaseModeButton" class="active" type="button" role="tab" aria-selected="true">기본 도면 관리</button>
-          <button id="floorplanV2EventModeButton" type="button" role="tab" aria-selected="false">행사 레이아웃</button>
+          <button id="floorplanV2BaseModeButton" class="active" type="button" role="tab" aria-selected="true">기본 도면</button>
+          <button id="floorplanV2EventModeButton" type="button" role="tab" aria-selected="false">레이아웃 라이브러리</button>
         </div>
 
         <section id="floorplanV2BasePanel" class="floorplan-v2-panel" aria-label="기본 도면 관리">
@@ -392,6 +392,7 @@
             <select id="floorplanV2SavedSelect" aria-label="기본 도면 선택"><option value="">저장된 기본 도면</option></select>
           </div>
           <div id="floorplanV2Empty" class="floorplan-v2-empty">장소와 공간을 선택하거나 새 기본 도면을 만들어 주세요.</div>
+          <button id="floorplanV2CreateLayoutButton" class="primary-button floorplan-v2-create-layout" type="button" hidden>＋ 새 레이아웃 만들기</button>
           <div id="floorplanV2Wizard" class="floorplan-v2-wizard" hidden>
             <section class="floorplan-v2-form-card">
               <div class="floorplan-v2-form-heading">
@@ -452,14 +453,19 @@
           </div>
         </section>
 
-        <section id="floorplanV2EventPanel" class="layout-editor-workbench" aria-label="행사 레이아웃 편집기" hidden>
+        <section id="floorplanV2EventPanel" class="layout-editor-workbench library-mode" aria-label="레이아웃 라이브러리" hidden>
           <div class="layout-editor-heading">
             <div>
-              <h2>행사 레이아웃 · 실제 규격 배치</h2>
-              <p>V2 기본 도면 위에 실제 mm 규격의 기물을 배치합니다. 기존 고급 편집 기능도 그대로 사용할 수 있습니다.</p>
+              <h2>레이아웃 라이브러리</h2>
+              <p>선택 공간의 운영 레이아웃을 분류별로 비교하고 편집합니다.</p>
             </div>
             <span id="layoutWorkspaceStatusPill" class="layout-editor-status-pill">상태: 저장되지 않음</span>
           </div>
+          <section id="layoutLibraryPanel" class="layout-library-panel">
+            <div class="layout-library-actions"><button id="layoutLibraryCreateButton" class="primary-button" type="button">＋ 새 레이아웃 만들기</button></div>
+            <div id="layoutLibraryFilters" class="layout-library-filters" aria-label="레이아웃 분류 필터"></div>
+            <div id="layoutLibraryGrid" class="layout-library-grid"><p>장소, 공간과 기본 도면을 선택해 주세요.</p></div>
+          </section>
           <div class="layout-editor-toolbar">
             <div class="layout-editor-toolbar-row">
               <select id="layoutWorkspaceVenueSelect" aria-label="장소 선택"><option value="">장소를 선택하세요</option></select>
@@ -470,7 +476,8 @@
             <div class="layout-editor-toolbar-row tool-row">
               <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
               <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
-              <button id="layoutWorkspaceSaveButton" type="button">저장</button>
+              <button id="layoutWorkspaceBackLibraryButton" type="button">← 라이브러리</button>
+              <button id="layoutWorkspaceSaveButton" type="button">레이아웃 저장</button>
               <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
               <button id="layoutWorkspacePreviewButton" type="button">미리보기</button>
               <button id="layoutWorkspaceExportButton" type="button">PNG 내보내기</button>
@@ -699,6 +706,17 @@
             <span data-layout-status="cursor">X: - / Y: -</span>
           </footer>
         </section>
+
+        <div id="layoutLibrarySaveModal" class="layout-library-modal" hidden>
+          <form id="layoutLibrarySaveForm" class="layout-library-modal-card">
+            <h3 id="layoutLibraryModalTitle">레이아웃 저장</h3><label>공간<input id="layoutLibrarySpaceInput" type="text" disabled></label>
+            <label>분류<select id="layoutLibraryTypeInput" required><option value="">분류 선택</option><option value="school">스쿨식</option><option value="round">라운드식</option><option value="buffet">뷔페식</option><option value="t_shape">T-Shape</option><option value="u_shape">U-Shape</option><option value="hollow_square">ㅁ-Shape</option><option value="custom">기타</option></select></label>
+            <label>레이아웃 이름<input id="layoutLibraryNameInput" type="text" required></label>
+            <div class="layout-library-number-grid"><label>권장 최소 인원<input id="layoutLibraryMinInput" type="number" min="0"></label><label>권장 최대 인원<input id="layoutLibraryMaxInput" type="number" min="0"></label><label>최대 세팅 인원<input id="layoutLibraryCapacityInput" type="number" min="0"></label></div>
+            <label>메모<textarea id="layoutLibraryNotesInput" rows="3"></textarea></label>
+            <div class="floorplan-v2-actions"><button class="primary-button" type="submit">저장</button><button id="layoutLibraryModalCancelButton" type="button">취소</button></div>
+          </form>
+        </div>
 
         <details id="venueLayoutPanel" class="tab-panel asset-section venue-layout-section layout-collapsible-section" aria-label="저장된 도면과 레이아웃 이미지 관리">
           <summary class="layout-collapsible-summary">
@@ -1073,8 +1091,8 @@
   <script src="./src/eventOrder.js"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=floorplan-v2-fixed-structures"></script>
-<script src="./src/baseFloorplanWizard.js?v=floorplan-v2-fixed-structures"></script>
+<script src="./src/floorplanEditor.js?v=layout-library-v1"></script>
+<script src="./src/baseFloorplanWizard.js?v=layout-library-v1"></script>
   <script src="./src/aiAssistant.js"></script>
   <script>
     /*

@@ -92,6 +92,8 @@ for (const htmlFile of ["index.html", "event-order-preview.html"]) {
     "floorplanV2StructureTypes", "floorplanV2StructureProperties", "floorplanV2StructureNameInput",
     "floorplanV2StructureXInput", "floorplanV2StructureYInput", "floorplanV2StructureWidthInput",
     "floorplanV2StructureHeightInput", "floorplanV2StructureRotationInput", "floorplanV2StructureDeleteButton",
+    "floorplanV2CreateLayoutButton", "layoutLibraryPanel", "layoutLibraryFilters", "layoutLibraryGrid", "layoutLibrarySaveModal",
+    "layoutLibraryTypeInput", "layoutLibraryNameInput", "layoutLibraryMinInput", "layoutLibraryMaxInput", "layoutLibraryCapacityInput",
   ].forEach((id) => assert.match(html, new RegExp(`id=["']${id}["']`), `${htmlFile} contains #${id}`));
   assert.match(html, /src=["']\.\/src\/floorplanEditor\.js(?:\?[^"']+)?["']/);
   assert.match(html, /src=["']\.\/src\/baseFloorplanWizard\.js(?:\?[^"']+)?["']/);
@@ -121,5 +123,9 @@ assert.match(wizardSource, /venue_floorplan_objects\?select=\*&floorplan_id=.*is
 assert.match(wizardSource, /geometryVersion: 2, unit: "mm", coordinateAnchor: "center"/, "fixed structures persist millimeter metadata");
 assert.match(editorSource, /group\.dataset\.baseFloorplanObject = "true";[\s\S]*group\.setAttribute\("pointer-events", "none"\)/, "event layouts render base structures as non-interactive background objects");
 assert.match(editorSource, /"fixed_wall"/, "event workspace recognizes fixed walls as base structures");
+assert.match(editorSource, /\["school", "스쿨식"\][\s\S]*\["hollow_square", "ㅁ-Shape"\]/, "layout library uses stable category codes");
+assert.match(editorSource, /venue_layouts\?id=eq\..*method:"PATCH"/, "layout information updates the existing row");
+assert.match(editorSource, /venue_layout_objects\?layout_id=eq\./, "layout deletion is scoped to one layout");
+assert.match(editorSource, /libraryObjectsByLayout/, "layout cards aggregate and preview saved objects");
 
 console.log("Floorplan V2 geometry tests passed.");
