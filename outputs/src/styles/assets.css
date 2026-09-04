@@ -1124,6 +1124,16 @@ table {
 .floorplan-v2-directions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
 .floorplan-v2-directions button.active { border-color: var(--theme-gold); background: #fff8dc; color: var(--theme-navy); }
 .floorplan-v2-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.floorplan-v2-structures { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--theme-border); border-radius: 12px; background: #f8fafc; }
+.floorplan-v2-structure-heading { display: grid; gap: 3px; color: var(--theme-navy); }
+.floorplan-v2-structure-heading small, .floorplan-v2-structure-status { color: var(--theme-muted); font-size: 12px; line-height: 1.45; }
+.floorplan-v2-structure-types { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.floorplan-v2-structure-types button:last-child { grid-column: 1 / -1; }
+.floorplan-v2-structure-properties { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.floorplan-v2-structure-properties label:first-child, .floorplan-v2-structure-properties .danger-button { grid-column: 1 / -1; }
+.floorplan-v2-structure { cursor: move; }
+.floorplan-v2-structure.selected > :first-child { stroke: var(--theme-gold); stroke-width: 4px; }
+.floorplan-v2-structure-label { fill: #0f2a43; font-weight: 900; text-anchor: middle; dominant-baseline: middle; pointer-events: none; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
 .floorplan-v2-validation { padding: 11px 12px; border-radius: 10px; background: #fff8dc; color: #765600; font-weight: 800; }
 .floorplan-v2-validation.success { background: #e8f7ee; color: #166534; }
 .floorplan-v2-validation.error { background: #fff0f0; color: #b42318; }

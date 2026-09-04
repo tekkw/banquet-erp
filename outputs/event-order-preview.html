@@ -418,6 +418,24 @@
                 <div class="floorplan-v2-actions"><button id="floorplanV2AddWallButton" type="button">벽 추가</button><button id="floorplanV2AutoCloseButton" type="button">외곽선 자동 완성</button></div>
               </div>
               <div class="floorplan-v2-actions"><button id="floorplanV2UndoWallButton" type="button">마지막 벽 취소</button><button id="floorplanV2ResetButton" type="button">전체 초기화</button></div>
+              <section id="floorplanV2Structures" class="floorplan-v2-structures" aria-label="고정 구조물 편집">
+                <div class="floorplan-v2-structure-heading"><strong>고정 구조물</strong><small>기본 도면에 저장되며 행사 레이아웃에서는 이동할 수 없습니다.</small></div>
+                <div id="floorplanV2StructureTypes" class="floorplan-v2-structure-types">
+                  <button type="button" data-structure-type="pillar">기둥</button><button type="button" data-structure-type="door">출입문</button>
+                  <button type="button" data-structure-type="screen">스크린</button><button type="button" data-structure-type="fixed_wall">고정벽 / 파티션</button>
+                  <button type="button" data-structure-type="blocked_area">사용불가 영역</button>
+                </div>
+                <div id="floorplanV2StructureProperties" class="floorplan-v2-structure-properties" hidden>
+                  <label>이름<input id="floorplanV2StructureNameInput" type="text"></label>
+                  <label>X (mm)<input id="floorplanV2StructureXInput" type="number" step="1"></label>
+                  <label>Y (mm)<input id="floorplanV2StructureYInput" type="number" step="1"></label>
+                  <label>가로 (mm)<input id="floorplanV2StructureWidthInput" type="number" min="1" step="1"></label>
+                  <label>세로 (mm)<input id="floorplanV2StructureHeightInput" type="number" min="1" step="1"></label>
+                  <label>회전 (°)<input id="floorplanV2StructureRotationInput" type="number" step="1"></label>
+                  <button id="floorplanV2StructureDeleteButton" class="danger-button" type="button">구조물 삭제</button>
+                </div>
+                <div id="floorplanV2StructureStatus" class="floorplan-v2-structure-status">구조물 타입을 선택하면 캔버스 중앙에 추가됩니다.</div>
+              </section>
               <label class="layout-inline-check"><input id="floorplanV2LockedInput" type="checkbox"> 기본 도면 잠금</label>
               <small class="floorplan-v2-source-note">실제 mm 좌표가 원본이며, 확대·축소는 화면 표시만 변경합니다.</small>
               <div id="floorplanV2Validation" class="floorplan-v2-validation" aria-live="polite">외곽선을 만들어 주세요.</div>
@@ -1055,8 +1073,8 @@
   <script src="./src/eventOrder.js"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=floorplan-v2-phase2b"></script>
-<script src="./src/baseFloorplanWizard.js"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-v2-fixed-structures"></script>
+<script src="./src/baseFloorplanWizard.js?v=floorplan-v2-fixed-structures"></script>
   <script src="./src/aiAssistant.js"></script>
   <script>
     /*

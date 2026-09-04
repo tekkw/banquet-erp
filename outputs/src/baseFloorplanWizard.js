@@ -7,6 +7,14 @@
     right: { dx: 1, dy: 0 }, down: { dx: 0, dy: 1 },
     left: { dx: -1, dy: 0 }, up: { dx: 0, dy: -1 },
   };
+  const fixedStructureDefinitions = {
+    pillar: { label: "기둥", widthMm: 800, heightMm: 800, shape: "circle" },
+    door: { label: "출입문", widthMm: 1200, heightMm: 250, shape: "rect" },
+    screen: { label: "스크린", widthMm: 4000, heightMm: 250, shape: "rect" },
+    fixed_wall: { label: "고정벽 / 파티션", widthMm: 3000, heightMm: 150, shape: "rect" },
+    blocked_area: { label: "사용불가 영역", widthMm: 3000, heightMm: 2000, shape: "area" },
+  };
+  const fixedStructureTypes = new Set(Object.keys(fixedStructureDefinitions));
 
   function samePoint(a, b) { return Boolean(a && b && a.x === b.x && a.y === b.y); }
   function toMillimeters(meters) {
@@ -130,6 +138,30 @@
   function isFloorplanEditingLocked(floorplan, lockChecked) {
     return Boolean(floorplan?.id && floorplan.is_locked && lockChecked);
   }
+  function normalizeRotation(value) { return ((Number(value) || 0) % 360 + 360) % 360; }
+  function structureFromRow(row, bounds) {
+    const widthMm = Math.max(1, Math.round(Number(row?.metadata?.widthMm) || Number(row?.width || 0) * bounds.width));
+    const heightMm = Math.max(1, Math.round(Number(row?.metadata?.heightMm) || Number(row?.height || 0) * bounds.height));
+    return {
+      id: row.id || "", clientId: row.id || `structure_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+      objectTypeId: row.object_type_id || "", type: row.object_type, name: row.label || fixedStructureDefinitions[row.object_type]?.label || row.object_type,
+      xMm: Math.round(Number.isFinite(Number(row?.metadata?.xMm)) ? Number(row.metadata.xMm) : Number(row.x || 0) * bounds.width + widthMm / 2),
+      yMm: Math.round(Number.isFinite(Number(row?.metadata?.yMm)) ? Number(row.metadata.yMm) : Number(row.y || 0) * bounds.height + heightMm / 2),
+      widthMm, heightMm, rotation: normalizeRotation(row.rotation), metadata: row.metadata || {}, style: row.style || {},
+    };
+  }
+  function structureToPayload(structure, floorplanId, bounds, sortOrder) {
+    return {
+      floorplan_id: floorplanId, object_type: structure.type, object_type_id: structure.objectTypeId || null, label: structure.name,
+      x: Math.max(0, Math.min(1, (structure.xMm - structure.widthMm / 2) / bounds.width)),
+      y: Math.max(0, Math.min(1, (structure.yMm - structure.heightMm / 2) / bounds.height)),
+      width: Math.max(0.000001, Math.min(1, structure.widthMm / bounds.width)),
+      height: Math.max(0.000001, Math.min(1, structure.heightMm / bounds.height)), rotation: normalizeRotation(structure.rotation),
+      is_locked: true, style: structure.style || {}, sort_order: sortOrder, is_active: true,
+      metadata: { ...(structure.metadata || {}), geometryVersion: 2, unit: "mm", coordinateAnchor: "center",
+        xMm: Math.round(structure.xMm), yMm: Math.round(structure.yMm), widthMm: Math.round(structure.widthMm), heightMm: Math.round(structure.heightMm) },
+    };
+  }
 
   function createController() {
     const byId = (id) => document.getElementById(id);
@@ -145,16 +177,21 @@
     const validation = byId("floorplanV2Validation"); const saveButton = byId("floorplanV2SaveButton");
     const lockedInput = byId("floorplanV2LockedInput"); const lockStatus = byId("floorplanV2LockStatus");
     const zoomStatus = byId("floorplanV2ZoomStatus"); const nameInput = byId("floorplanV2NameInput");
+    const structureTypes = byId("floorplanV2StructureTypes"); const structureProperties = byId("floorplanV2StructureProperties");
+    const structureStatus = byId("floorplanV2StructureStatus"); const structureNameInput = byId("floorplanV2StructureNameInput");
+    const structureXInput = byId("floorplanV2StructureXInput"); const structureYInput = byId("floorplanV2StructureYInput");
+    const structureWidthInput = byId("floorplanV2StructureWidthInput"); const structureHeightInput = byId("floorplanV2StructureHeightInput");
+    const structureRotationInput = byId("floorplanV2StructureRotationInput"); const structureDeleteButton = byId("floorplanV2StructureDeleteButton");
     const methodInputs = [...document.querySelectorAll('input[name="floorplanV2Method"]')];
     const geometryControls = [...methodInputs, byId("floorplanV2WidthInput"), byId("floorplanV2HeightInput"),
       byId("floorplanV2BuildRectangleButton"), byId("floorplanV2LengthInput"), byId("floorplanV2AddWallButton"),
       byId("floorplanV2AutoCloseButton"), byId("floorplanV2UndoWallButton"), byId("floorplanV2ResetButton"),
       ...byId("floorplanV2Directions").querySelectorAll("button")].filter(Boolean);
     const storage = window.BANQUET_ERP_STORAGE.createStorageService({ supabaseConfig: window.BANQUET_ERP_CONSTANTS.supabaseConfig });
-    let venues = []; let spaces = []; let savedFloorplans = [];
+    let venues = []; let spaces = []; let savedFloorplans = []; let objectMasters = [];
     let currentFloorplan = null; let currentOutline = null;
     let points = [{ x: 0, y: 0 }]; let selectedDirection = "right"; let method = "rectangle"; let viewZoom = 1;
-    let transientMessage = "";
+    let transientMessage = ""; let fixedStructures = []; let selectedStructureId = ""; let structureDrag = null; let deletedStructureIds = [];
 
     function setMode(nextMode) {
       const base = nextMode === "base";
@@ -165,9 +202,10 @@
     async function initialize() {
       bindEvents(); setMode("base");
       try {
-        [venues, spaces] = await Promise.all([
+        [venues, spaces, objectMasters] = await Promise.all([
           storage.supabaseRequest("venues?select=id,venue_name&is_active=eq.true&order=venue_name.asc"),
           storage.supabaseRequest("venue_spaces?select=id,space_name,floor&is_active=eq.true&order=space_name.asc"),
+          storage.supabaseRequest("layout_object_types?select=*&is_active=eq.true&order=sort_order.asc").catch(() => []),
         ]);
         renderVenueOptions();
       } catch (error) { showMessage(error.message || "장소 정보를 불러오지 못했습니다.", "error"); }
@@ -186,6 +224,12 @@
       savedSelect.addEventListener("change", loadSelected);
       nameInput.addEventListener("input", () => { transientMessage = ""; renderState(); });
       lockedInput.addEventListener("change", () => { transientMessage = ""; render(); });
+      structureTypes?.querySelectorAll("button[data-structure-type]").forEach((button) => button.addEventListener("click", () => addFixedStructure(button.dataset.structureType)));
+      [structureNameInput, structureXInput, structureYInput, structureWidthInput, structureHeightInput, structureRotationInput]
+        .filter(Boolean).forEach((input) => input.addEventListener("input", updateSelectedStructure));
+      structureDeleteButton?.addEventListener("click", deleteSelectedStructure);
+      preview.addEventListener("pointermove", moveFixedStructure); preview.addEventListener("pointerup", endFixedStructureDrag);
+      preview.addEventListener("pointercancel", endFixedStructureDrag);
       methodInputs.forEach((input) => input.addEventListener("change", (event) => { if (!isEditingLocked()) { method = event.target.value; resetGeometry(); } }));
       byId("floorplanV2Directions").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
         if (isEditingLocked()) return;
@@ -208,17 +252,17 @@
       if ([...spaceSelect.options].some((option) => option.value === previousSpaceId)) spaceSelect.value = previousSpaceId;
     }
     function handleVenueChange() {
-      currentFloorplan = null; currentOutline = null; savedFloorplans = []; transientMessage = ""; renderSpaceOptions();
+      currentFloorplan = null; currentOutline = null; savedFloorplans = []; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; renderSpaceOptions();
       savedSelect.innerHTML = '<option value="">저장된 기본 도면</option>'; renderState();
     }
-    function handleSpaceChange() { currentFloorplan = null; currentOutline = null; transientMessage = ""; loadSaved(); renderState(); }
+    function handleSpaceChange() { currentFloorplan = null; currentOutline = null; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; loadSaved(); renderState(); }
     function setMethod(nextMethod) {
       method = nextMethod === "orthogonal_polygon" ? "orthogonal_polygon" : "rectangle";
       methodInputs.forEach((input) => { input.checked = input.value === method; });
       rectangleFields.hidden = method !== "rectangle"; polygonFields.hidden = method !== "orthogonal_polygon";
     }
     function openWizard() {
-      currentFloorplan = null; currentOutline = null; savedSelect.value = ""; nameInput.value = ""; lockedInput.checked = false;
+      currentFloorplan = null; currentOutline = null; fixedStructures = []; deletedStructureIds = []; selectedStructureId = ""; savedSelect.value = ""; nameInput.value = ""; lockedInput.checked = false;
       wizardTitle.textContent = "새 기본 도면"; setMethod("rectangle"); wizard.hidden = false; empty.hidden = true; resetGeometry(); nameInput.focus();
     }
     function closeWizard() { wizard.hidden = true; empty.hidden = false; transientMessage = ""; }
@@ -248,11 +292,68 @@
       if (isEditingLocked() || points.length <= 1) return;
       points = points.slice(0, -1); viewZoom = 1; transientMessage = ""; render();
     }
+    function selectedStructure() { return fixedStructures.find((item) => item.clientId === selectedStructureId) || null; }
+    function addFixedStructure(type) {
+      if (isEditingLocked() || !fixedStructureTypes.has(type)) return;
+      const bounds = boundsOf(points); if (bounds.width <= 0 || bounds.height <= 0) { showMessage("먼저 홀 외곽선을 만들어 주세요.", "error"); return; }
+      const definition = fixedStructureDefinitions[type];
+      const master = objectMasters.find((item) => item.object_type === type || (type === "fixed_wall" && item.object_type === "wall"));
+      const widthMm = Math.max(1, Math.round(Number(master?.default_width_m) * 1000 || definition.widthMm));
+      const heightMm = Math.max(1, Math.round(Number(master?.default_height_m) * 1000 || definition.heightMm));
+      const structure = { id: "", clientId: `structure_${Date.now()}_${Math.random().toString(16).slice(2)}`, objectTypeId: master?.id || "", type,
+        name: master?.object_name || definition.label, xMm: Math.round((bounds.minX + bounds.maxX) / 2), yMm: Math.round((bounds.minY + bounds.maxY) / 2),
+        widthMm, heightMm, rotation: 0, metadata: { display_shape: master?.display_shape || definition.shape }, style: {} };
+      fixedStructures.push(structure); selectedStructureId = structure.clientId; transientMessage = ""; render();
+    }
+    function updateSelectedStructure() {
+      const structure = selectedStructure(); if (!structure || isEditingLocked()) return;
+      structure.name = structureNameInput.value.trim() || fixedStructureDefinitions[structure.type]?.label || structure.type;
+      structure.xMm = Math.round(Number(structureXInput.value) || 0); structure.yMm = Math.round(Number(structureYInput.value) || 0);
+      structure.widthMm = Math.max(1, Math.round(Number(structureWidthInput.value) || 1)); structure.heightMm = Math.max(1, Math.round(Number(structureHeightInput.value) || 1));
+      structure.rotation = normalizeRotation(structureRotationInput.value); renderPreview(); renderStructureProperties();
+    }
+    function deleteSelectedStructure() {
+      const structure = selectedStructure(); if (!structure || isEditingLocked()) return;
+      if (structure.id) deletedStructureIds.push(structure.id);
+      fixedStructures = fixedStructures.filter((item) => item.clientId !== structure.clientId); selectedStructureId = ""; render();
+    }
+    function previewPoint(event) {
+      const point = preview.createSVGPoint(); point.x = event.clientX; point.y = event.clientY;
+      const matrix = preview.getScreenCTM(); return matrix ? point.matrixTransform(matrix.inverse()) : { x: 0, y: 0 };
+    }
+    function beginFixedStructureDrag(event, structure) {
+      if (isEditingLocked()) return; event.preventDefault(); event.stopPropagation(); selectedStructureId = structure.clientId;
+      const point = previewPoint(event); structureDrag = { pointerId: event.pointerId, clientId: structure.clientId, offsetX: point.x - structure.xMm, offsetY: point.y - structure.yMm };
+      preview.setPointerCapture?.(event.pointerId); render();
+    }
+    function moveFixedStructure(event) {
+      if (!structureDrag || event.pointerId !== structureDrag.pointerId || isEditingLocked()) return;
+      const structure = fixedStructures.find((item) => item.clientId === structureDrag.clientId); if (!structure) return;
+      const bounds = boundsOf(points); const point = previewPoint(event);
+      structure.xMm = Math.round(Math.max(bounds.minX, Math.min(bounds.maxX, point.x - structureDrag.offsetX)));
+      structure.yMm = Math.round(Math.max(bounds.minY, Math.min(bounds.maxY, point.y - structureDrag.offsetY)));
+      renderPreview(); renderStructureProperties();
+    }
+    function endFixedStructureDrag(event) {
+      if (!structureDrag || event.pointerId !== structureDrag.pointerId) return;
+      preview.releasePointerCapture?.(event.pointerId); structureDrag = null;
+    }
+    function renderStructureProperties() {
+      const structure = selectedStructure(); const locked = isEditingLocked();
+      structureProperties.hidden = !structure;
+      if (!structure) { structureStatus.textContent = fixedStructures.length ? `고정 구조물 ${fixedStructures.length}개` : "구조물 타입을 선택하면 캔버스 중앙에 추가됩니다."; return; }
+      structureNameInput.value = structure.name; structureXInput.value = structure.xMm; structureYInput.value = structure.yMm;
+      structureWidthInput.value = structure.widthMm; structureHeightInput.value = structure.heightMm; structureRotationInput.value = structure.rotation;
+      [structureNameInput, structureXInput, structureYInput, structureWidthInput, structureHeightInput, structureRotationInput, structureDeleteButton]
+        .forEach((control) => { control.disabled = locked; });
+      structureStatus.textContent = `${fixedStructureDefinitions[structure.type]?.label || structure.type} · ${(structure.widthMm / 1000).toFixed(3)}m × ${(structure.heightMm / 1000).toFixed(3)}m`;
+    }
     function setZoom(nextZoom) { viewZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number(nextZoom) || 1)); renderPreview(); renderState(); }
-    function render() { setMethod(method); renderPreview(); renderWalls(); renderState(); }
+    function render() { setMethod(method); renderPreview(); renderWalls(); renderState(); renderStructureProperties(); }
     function renderState() {
       const result = validate(points); const locked = isEditingLocked();
       geometryControls.forEach((control) => { control.disabled = locked; }); nameInput.disabled = locked;
+      structureTypes?.querySelectorAll("button").forEach((control) => { control.disabled = locked || !validate(points).valid; });
       lockStatus.textContent = locked ? "잠김 · 잠금 해제 후 편집" : lockedInput.checked ? "저장 시 잠금" : "편집 가능";
       lockStatus.classList.toggle("locked", locked || lockedInput.checked);
       if (!transientMessage) {
@@ -268,6 +369,20 @@
       preview.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
       const polygon = document.createElementNS(svgNs, isClosed(points) ? "polygon" : "polyline");
       polygon.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" ")); polygon.setAttribute("class", "floorplan-v2-outline"); preview.append(polygon);
+      fixedStructures.forEach((structure) => {
+        const group = document.createElementNS(svgNs, "g"); const selected = structure.clientId === selectedStructureId;
+        group.setAttribute("class", `floorplan-v2-structure${selected ? " selected" : ""}`); group.dataset.structureId = structure.clientId;
+        group.setAttribute("transform", `translate(${structure.xMm} ${structure.yMm}) rotate(${structure.rotation})`);
+        const definition = fixedStructureDefinitions[structure.type]; const shape = structure.metadata?.display_shape || definition?.shape;
+        const node = document.createElementNS(svgNs, shape === "circle" ? "ellipse" : "rect");
+        if (shape === "circle") { node.setAttribute("cx", "0"); node.setAttribute("cy", "0"); node.setAttribute("rx", String(structure.widthMm / 2)); node.setAttribute("ry", String(structure.heightMm / 2)); }
+        else { node.setAttribute("x", String(-structure.widthMm / 2)); node.setAttribute("y", String(-structure.heightMm / 2)); node.setAttribute("width", String(structure.widthMm)); node.setAttribute("height", String(structure.heightMm)); node.setAttribute("rx", structure.type === "blocked_area" ? "20" : "4"); }
+        const colors = structure.type === "blocked_area" ? ["rgba(239,68,68,.15)", "#dc2626"] : structure.type === "door" ? ["rgba(37,99,235,.18)", "#2563eb"] : ["rgba(100,116,139,.20)", "#475569"];
+        node.setAttribute("fill", colors[0]); node.setAttribute("stroke", colors[1]); node.setAttribute("stroke-width", "2.5"); node.setAttribute("vector-effect", "non-scaling-stroke"); group.append(node);
+        const text = document.createElementNS(svgNs, "text"); text.setAttribute("class", "floorplan-v2-structure-label"); text.setAttribute("style", `font-size:${Math.max(120, Math.min(260, structure.heightMm * .32))}px`); text.textContent = structure.name; group.append(text);
+        group.addEventListener("click", (event) => { event.stopPropagation(); selectedStructureId = structure.clientId; render(); });
+        group.addEventListener("pointerdown", (event) => beginFixedStructureDrag(event, structure)); preview.append(group);
+      });
       const bounds = boundsOf(points); const labelSize = Math.min(360, Math.max(110, Math.max(bounds.width, bounds.height) * 0.022));
       points.slice(1).forEach((point, index) => {
         const start = points[index]; const text = document.createElementNS(svgNs, "text");
@@ -304,12 +419,14 @@
     async function loadSelected() {
       const selected = savedFloorplans.find((row) => String(row.id) === savedSelect.value); if (!selected) return;
       try {
-        const rows = await storage.supabaseRequest(`venue_floorplan_objects?select=*&floorplan_id=eq.${encodeURIComponent(selected.id)}&object_type=eq.hall_outline&is_active=eq.true&order=updated_at.desc&limit=1`);
-        const outline = rows?.[0] || null; const storedPoints = outline?.metadata?.points;
+        const rows = await storage.supabaseRequest(`venue_floorplan_objects?select=*&floorplan_id=eq.${encodeURIComponent(selected.id)}&is_active=eq.true&order=sort_order.asc`);
+        const outline = rows?.find((row) => row.object_type === "hall_outline") || null; const storedPoints = outline?.metadata?.points;
         if (!Array.isArray(storedPoints) || !storedPoints.length) throw new Error("저장된 mm 외곽선 좌표가 없습니다.");
         const loadedPoints = storedPoints.map((point) => ({ x: Number(point.x), y: Number(point.y) }));
         if (loadedPoints.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) throw new Error("저장된 외곽선 좌표가 올바르지 않습니다.");
         currentFloorplan = selected; currentOutline = outline; points = loadedPoints; nameInput.value = selected.floorplan_name || "";
+        const loadedBounds = boundsOf(loadedPoints); fixedStructures = (rows || []).filter((row) => fixedStructureTypes.has(row.object_type)).map((row) => structureFromRow(row, loadedBounds));
+        deletedStructureIds = []; selectedStructureId = "";
         lockedInput.checked = Boolean(selected.is_locked); setMethod(outline?.metadata?.geometryType || parseNotes(selected.notes).geometry_type);
         wizardTitle.textContent = "기본 도면 확인 및 수정"; wizard.hidden = false; empty.hidden = true; viewZoom = 1; transientMessage = ""; render();
       } catch (error) { showMessage(error.message || "기본 도면을 불러오지 못했습니다.", "error"); }
@@ -335,6 +452,19 @@
         const outlineRows = await storage.supabaseRequest(currentOutline?.id ? `venue_floorplan_objects?id=eq.${encodeURIComponent(currentOutline.id)}&select=*` : "venue_floorplan_objects?select=*", {
           method: currentOutline?.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(outlinePayload),
         });
+        for (const [index, structure] of fixedStructures.entries()) {
+          const structurePayload = structureToPayload(structure, floorplan.id, bounds, index + 10);
+          const structureRows = await storage.supabaseRequest(structure.id ? `venue_floorplan_objects?id=eq.${encodeURIComponent(structure.id)}&select=*` : "venue_floorplan_objects?select=*", {
+            method: structure.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(structurePayload),
+          });
+          const savedStructure = structureRows?.[0]; if (savedStructure?.id) { structure.id = savedStructure.id; structure.clientId = savedStructure.id; }
+        }
+        for (const structureId of deletedStructureIds) {
+          await storage.supabaseRequest(`venue_floorplan_objects?id=eq.${encodeURIComponent(structureId)}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
+          });
+        }
+        deletedStructureIds = [];
         currentFloorplan = floorplan; currentOutline = outlineRows?.[0] || currentOutline; wizardTitle.textContent = "기본 도면 확인 및 수정";
         transientMessage = ""; await loadSaved(floorplan.id);
         window.dispatchEvent(new CustomEvent("banquet:base-floorplan-saved", { detail: { floorplanId: floorplan.id } }));
@@ -344,7 +474,7 @@
     return { initialize, setMode };
   }
 
-  window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY = { rectanglePoints, addWall, isClosed, segmentIntersection, hasSelfIntersection, autoClose, boundsOf, polygonArea, validate, viewBoxFor, toMillimeters, isFloorplanEditingLocked };
+  window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY = { rectanglePoints, addWall, isClosed, segmentIntersection, hasSelfIntersection, autoClose, boundsOf, polygonArea, validate, viewBoxFor, toMillimeters, isFloorplanEditingLocked, structureFromRow, structureToPayload, fixedStructureDefinitions };
   window.BANQUET_ERP_BASE_FLOORPLAN = { createController };
   const controller = createController(); controller?.initialize();
 })();

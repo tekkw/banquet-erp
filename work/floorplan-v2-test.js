@@ -15,6 +15,21 @@ assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: t
 assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: true }, false), false);
 assert.equal(geometry.isFloorplanEditingLocked({ id: "floorplan-1", is_locked: false }, true), false);
 
+const structureBounds = geometry.boundsOf(geometry.rectanglePoints(16200, 15000));
+const restoredPillar = geometry.structureFromRow({
+  id: "pillar-1", object_type: "pillar", label: "P1", x: 0.25, y: 0.2, width: 0.05, height: 0.06,
+  rotation: 15, metadata: { geometryVersion: 2, unit: "mm", xMm: 4200, yMm: 3600, widthMm: 900, heightMm: 700 },
+}, structureBounds);
+assert.deepEqual({ xMm: restoredPillar.xMm, yMm: restoredPillar.yMm, widthMm: restoredPillar.widthMm, heightMm: restoredPillar.heightMm },
+  { xMm: 4200, yMm: 3600, widthMm: 900, heightMm: 700 }, "fixed structures restore mm metadata before normalized fields");
+const pillarPayload = geometry.structureToPayload(restoredPillar, "floorplan-1", structureBounds, 10);
+assert.equal(pillarPayload.metadata.geometryVersion, 2);
+assert.equal(pillarPayload.metadata.unit, "mm");
+assert.equal(pillarPayload.metadata.xMm, 4200);
+assert.equal(pillarPayload.metadata.widthMm, 900);
+assert.equal(pillarPayload.is_locked, true);
+assert.equal(pillarPayload.x, (4200 - 450) / 16200);
+
 const rectangle = geometry.rectanglePoints(10000, 8000);
 assert.equal(geometry.validate(rectangle).valid, true);
 assert.deepEqual(geometry.boundsOf(rectangle), { minX: 0, minY: 0, maxX: 10000, maxY: 8000, width: 10000, height: 8000 });
@@ -73,10 +88,13 @@ for (const htmlFile of ["index.html", "event-order-preview.html"]) {
     "floorplanV2NewButton", "floorplanV2VenueSelect", "floorplanV2SpaceSelect", "floorplanV2NameInput",
     "floorplanV2Directions", "floorplanV2WallList", "floorplanV2UndoWallButton", "floorplanV2ResetButton",
     "floorplanV2AutoCloseButton", "floorplanV2ZoomInButton", "floorplanV2ZoomOutButton", "floorplanV2FitButton",
-    "floorplanV2LockedInput", "floorplanV2LockStatus", "floorplanV2EventPanel",
+    "floorplanV2LockedInput", "floorplanV2LockStatus", "floorplanV2EventPanel", "floorplanV2Structures",
+    "floorplanV2StructureTypes", "floorplanV2StructureProperties", "floorplanV2StructureNameInput",
+    "floorplanV2StructureXInput", "floorplanV2StructureYInput", "floorplanV2StructureWidthInput",
+    "floorplanV2StructureHeightInput", "floorplanV2StructureRotationInput", "floorplanV2StructureDeleteButton",
   ].forEach((id) => assert.match(html, new RegExp(`id=["']${id}["']`), `${htmlFile} contains #${id}`));
   assert.match(html, /src=["']\.\/src\/floorplanEditor\.js(?:\?[^"']+)?["']/);
-  assert.match(html, /src=["']\.\/src\/baseFloorplanWizard\.js["']/);
+  assert.match(html, /src=["']\.\/src\/baseFloorplanWizard\.js(?:\?[^"']+)?["']/);
   assert.ok(html.indexOf("floorplanEditor.js") < html.indexOf("baseFloorplanWizard.js"), "advanced editor remains loaded before V2 shell");
 }
 
@@ -99,5 +117,9 @@ assert.match(editorSource, /event\.shiftKey \? 500 : 100/, "keyboard movement us
 assert.match(editorSource, /zoomWorkspaceAtCenter\(2\)/, "zoom controls cover 100 to 200 percent");
 assert.match(editorSource, /zoomWorkspaceAtCenter\(0\.5\)/, "zoom controls cover 100 to 50 percent");
 assert.match(editorSource, /vector-effect", "non-scaling-stroke"/, "V2 hall outline remains a fixed display stroke while zooming");
+assert.match(wizardSource, /venue_floorplan_objects\?select=\*&floorplan_id=.*is_active=eq\.true&order=sort_order\.asc/, "base editor reloads outlines and fixed structures together");
+assert.match(wizardSource, /geometryVersion: 2, unit: "mm", coordinateAnchor: "center"/, "fixed structures persist millimeter metadata");
+assert.match(editorSource, /group\.dataset\.baseFloorplanObject = "true";[\s\S]*group\.setAttribute\("pointer-events", "none"\)/, "event layouts render base structures as non-interactive background objects");
+assert.match(editorSource, /"fixed_wall"/, "event workspace recognizes fixed walls as base structures");
 
 console.log("Floorplan V2 geometry tests passed.");

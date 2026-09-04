@@ -190,6 +190,7 @@
       calibration: "\uCD95\uCC99 \uBCF4\uC815",
       pillar: "\uAE30\uB465",
       screen: "\uC2A4\uD06C\uB9B0",
+      fixed_wall: "고정벽 / 파티션",
       allowed_area: "\uBC30\uCE58 \uAC00\uB2A5",
       blocked_area: "\uBC30\uCE58 \uAE08\uC9C0",
       seminar_table: "\uC138\uBBF8\uB098 \uD14C\uC774\uBE14",
@@ -208,6 +209,7 @@
       calibration: { fill: "rgba(212, 175, 55, 0.18)", stroke: "#d4af37" },
       pillar: { fill: "rgba(148, 163, 184, 0.22)", stroke: "#64748b" },
       screen: { fill: "rgba(59, 130, 246, 0.18)", stroke: "#2563eb" },
+      fixed_wall: { fill: "rgba(15, 23, 42, 0.72)", stroke: "#0f172a" },
       allowed_area: { fill: "rgba(22, 163, 74, 0.10)", stroke: "#16a34a" },
       blocked_area: { fill: "rgba(239, 68, 68, 0.12)", stroke: "#dc2626" },
       seminar_table: { fill: "rgba(37, 99, 235, 0.16)", stroke: "#2563eb" },
@@ -223,7 +225,7 @@
     const WORKSPACE_MIN_SCALE = 0.02;
     const WORKSPACE_MAX_SCALE = 8;
     const WORKSPACE_PAN_SPEED = 1;
-    const fixedObjectTypes = new Set(["door", "wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
+    const fixedObjectTypes = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
     function isWorkspaceBaseObject(object) {
       return Boolean(object?.metadata?.baseFloorplanObject) || fixedObjectTypes.has(object?.objectType);
     }
@@ -1927,7 +1929,7 @@
     }
 
     function getWorkspaceObjectLayerName(object) {
-      if (["door", "wall", "structure_area", "calibration", "pillar", "allowed_area", "blocked_area"].includes(object.objectType)) return "building";
+      if (["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "allowed_area", "blocked_area"].includes(object.objectType)) return "building";
       if (["screen", "stage"].includes(object.objectType)) return "fixed_facility";
       if (/^ai_/.test(object.objectType || "")) return "ai_recommendation";
       return "event_setup";
@@ -2114,12 +2116,17 @@
       group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0})`);
       group.setAttribute("opacity", String(getWorkspaceObjectOpacity(object)));
       group.dataset.instanceId = object.instanceId;
-      group.addEventListener("click", (event) => {
-        event.stopPropagation();
-        selectWorkspaceObject(object.instanceId);
-      });
-      group.addEventListener("pointerdown", (event) => startWorkspaceDrag(event, object.instanceId));
-      group.append(createWorkspaceObjectHitArea(object, x, y, width, height));
+      if (isWorkspaceBaseObject(object)) {
+        group.dataset.baseFloorplanObject = "true";
+        group.setAttribute("pointer-events", "none");
+      } else {
+        group.addEventListener("click", (event) => {
+          event.stopPropagation();
+          selectWorkspaceObject(object.instanceId);
+        });
+        group.addEventListener("pointerdown", (event) => startWorkspaceDrag(event, object.instanceId));
+      }
+      if (!isWorkspaceBaseObject(object)) group.append(createWorkspaceObjectHitArea(object, x, y, width, height));
       group.append(createWorkspaceObjectShape(object, x, y, width, height));
       return group;
     }
