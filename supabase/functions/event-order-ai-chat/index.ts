@@ -138,6 +138,8 @@ async function loadEventOrderData() {
     companyName: eventOrder.company_name,
     eventDateTime: eventOrder.event_datetime,
     venue: eventOrder.venue,
+    startDate: eventOrder.start_date,
+    endDate: eventOrder.end_date,
     color: eventOrder.color,
     mealTypes: eventOrder.meal_types,
     originalFilename: eventOrder.original_filename,
@@ -550,7 +552,217 @@ function normalizeIntentText(value: string) {
     .toLowerCase()
     .replace(/\s+/g, "");
 }
+function isBanquetReferenceSchedule(scheduleValue: unknown) {
+  const schedule = scheduleValue as Record<string, unknown>;
 
+  const venue = String(schedule.venue ?? "").replace(/\s+/g, "");
+  const content = String(schedule.content ?? "").replace(/\s+/g, "");
+
+  const isFirenzeBreakfast =
+    (venue.includes("피렌체") || content.includes("피렌체")) &&
+    content.includes("조식");
+
+  const isFrontSchedule =
+    venue.includes("프론트") || content.includes("프론트");
+
+  const isCheckInOut =
+    /체크인|체크아웃|checkin|checkout/i.test(content);
+
+  return isFirenzeBreakfast || (isFrontSchedule && isCheckInOut);
+}
+
+function hasBanquetOperationalSchedule(eventValue: unknown) {
+  const event = eventValue as Record<string, unknown>;
+
+  const schedules = Array.isArray(event.schedules)
+    ? event.schedules
+    : [];
+
+  return schedules.some((schedule) => {
+    if (isBanquetReferenceSchedule(schedule)) {
+      return false;
+    }
+
+    const row = schedule as Record<string, unknown>;
+
+    return Boolean(
+      String(row.content ?? "").trim() ||
+      String(row.venue ?? "").trim()
+    );
+  });
+}
+function extractRequestedSeatCount(eventValue: unknown) {
+  const event = eventValue as Record<string, unknown>;
+
+  const notes = Array.isArray(event.notes)
+    ? event.notes as Array<Record<string, unknown>>
+    : [];
+
+  const text = [
+    String(event.internalMemo ?? ""),
+    ...notes.map((note) => String(note.content ?? "")),
+  ].join("\n");
+
+  const patterns = [
+    /class\s*type[^0-9]{0,20}(\d{1,4})\s*석/i,
+    /class[^0-9]{0,20}(\d{1,4})\s*석/i,
+    /스쿨[^0-9]{0,20}(\d{1,4})\s*석/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+
+    if (match) {
+      return Number(match[1]);
+    }
+  }
+
+  return null;
+}
+
+function addSeatCheckToEvent(eventValue: unknown) {
+  const event = eventValue as Record<string, unknown>;
+
+  const schedules = Array.isArray(event.schedules)
+    ? event.schedules as Array<Record<string, unknown>>
+    : [];
+
+  const operationalPeople = schedules
+    .filter((schedule) => !isBanquetReferenceSchedule(schedule))
+    .map((schedule) => {
+      const match = String(schedule.people ?? "").match(/\d+/);
+      return match ? Number(match[0]) : 0;
+    })
+    .filter((people) => people > 0);
+
+  const attendees = operationalPeople.length
+    ? Math.max(...operationalPeople)
+    : null;
+
+  const requestedSeats = extractRequestedSeatCount(event);
+
+  const shortage =
+    attendees !== null && requestedSeats !== null
+      ? Math.max(attendees - requestedSeats, 0)
+      : null;
+
+  return {
+    ...event,
+    seatCheck: {
+      attendees,
+      requestedSeats,
+      shortage,
+      status:
+        shortage === null
+          ? "unknown"
+          : shortage > 0
+            ? "warning"
+            : "ok",
+    },
+  };
+}
+
+function filterEventDataByQuestionDate(
+  question: string,
+  eventData: unknown[],
+) {
+  const targetDate = resolveRequestedSingleDateKey(question, new Date());
+
+  if (!targetDate) {
+    return eventData;
+  }
+
+  return (Array.isArray(eventData) ? eventData : [])
+    .map((eventValue) => {
+      const event = eventValue as Record<string, unknown>;
+
+      const schedules = Array.isArray(event.schedules)
+        ? event.schedules as Array<Record<string, unknown>>
+        : [];
+
+      const calendarDates = Array.isArray(event.calendarDates)
+        ? event.calendarDates.map(String)
+        : [];
+      const normalizedCalendarDates = calendarDates
+    .map((date) => normalizeDateKey(date))
+    .filter(Boolean);
+
+      const startDate = normalizeDateKey(event.startDate);
+      const endDate = normalizeDateKey(event.endDate);
+      const eventDate = normalizeDateKey(event.eventDateTime);
+
+      const isSingleDayTargetEvent =
+         (normalizedCalendarDates.length === 1 &&
+         normalizedCalendarDates[0] === targetDate) ||
+         (startDate === targetDate && endDate === targetDate) ||
+         (!startDate && !endDate && eventDate === targetDate);
+      const matchingSchedules = schedules.filter((schedule) => {
+  const rawDate = String(schedule.date ?? "").trim();
+
+  // 2026-09-04 같은 완전한 날짜
+  const fullDate = normalizeDateKey(rawDate);
+
+  if (fullDate) {
+    return fullDate === targetDate;
+  }
+
+  // 09.04 / 09-04 / 09/04 같은 연도 없는 날짜
+  const partialDateMatch = rawDate.match(
+    /(\d{1,2})\s*[-./월]\s*(\d{1,2})/
+  );
+
+  if (partialDateMatch) {
+    const year = targetDate.slice(0, 4);
+    const month = String(Number(partialDateMatch[1])).padStart(2, "0");
+    const day = String(Number(partialDateMatch[2])).padStart(2, "0");
+
+    return `${year}-${month}-${day}` === targetDate;
+  }
+
+  // 스케줄 자체에 날짜가 없지만
+  // 행사 전체가 오늘 하루짜리 행사라면 스케줄을 유지
+  if (!rawDate && isSingleDayTargetEvent) {
+    return true;
+  }
+
+  return false;
+});
+
+      const matchesCalendar = calendarDates.some((date) => {
+        const normalized = normalizeDateKey(date);
+        return normalized === targetDate || date === targetDate;
+      });
+
+
+      const matchesRange =
+        Boolean(startDate) &&
+        Boolean(endDate) &&
+        startDate <= targetDate &&
+        targetDate <= endDate;
+
+      const matchesEventDate = eventDate === targetDate;
+
+      if (
+        !matchingSchedules.length &&
+        !matchesCalendar &&
+        !matchesRange &&
+        !matchesEventDate
+      ) {
+        return null;
+      }
+
+      return {
+        ...event,
+        schedules: matchingSchedules,
+        calendarDates: calendarDates.filter((date) => {
+          const normalized = normalizeDateKey(date);
+          return normalized === targetDate || date === targetDate;
+        }),
+        requestedDate: targetDate,
+      };
+    })
+    .filter(Boolean);
+}
 async function loadChatDataContext(question: string): Promise<ChatDataContext> {
   const intent = classifyChatQuestion(question);
   const shouldLoadKnowledge = true;
@@ -565,7 +777,25 @@ async function loadChatDataContext(question: string): Promise<ChatDataContext> {
     loadOperationalHistoryData(intent),
     shouldLoadKnowledge ? loadApprovedKnowledge() : Promise.resolve([]),
   ]);
+  const filteredEventData = intent.event
+  ? filterEventDataByQuestionDate(question, eventData)
+  : eventData;
+  const shouldFilterBanquetOperations =
+  /연회팀\s*운영|연회\s*운영|운영\s*대상|운영\s*관점|브리핑|운영\s*점검/.test(
+    normalizeIntentText(question),
+  );
 
+const operationalEventData =
+  intent.event && shouldFilterBanquetOperations
+    ? filteredEventData.filter((event) =>
+        hasBanquetOperationalSchedule(event)
+      )
+    : filteredEventData;
+const eventDataWithSeatCheck = intent.event
+  ? operationalEventData.map((event) =>
+      addSeatCheckToEvent(event)
+    )
+  : operationalEventData;
   if (intent.event) {
     ["event_orders", "event_calendar_dates", "event_schedules", "event_items", "event_notes"].forEach((source) => sources.add(source));
   }
@@ -589,7 +819,7 @@ async function loadChatDataContext(question: string): Promise<ChatDataContext> {
   const context = {
     intent,
     sources: Array.from(sources),
-    eventData,
+    eventData: eventDataWithSeatCheck,
     venueData,
     banquetAssets,
     recommendItems,
@@ -773,13 +1003,46 @@ function normalizeDateKey(value: unknown) {
   if (!match) return "";
   return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
 }
+function resolveRequestedSingleDateKey(question: string, now = new Date()) {
+  const today = getKoreaDateKey(now);
 
+  if (/오늘/.test(question)) return today;
+  if (/내일/.test(question)) return addDaysKey(today, 1);
+  if (/모레/.test(question)) return addDaysKey(today, 2);
+  if (/어제/.test(question)) return addDaysKey(today, -1);
+
+  const fullDateMatch = question.match(
+    /(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일/
+  );
+
+  if (fullDateMatch) {
+    const defaultYear = Number(today.slice(0, 4));
+    const year = Number(fullDateMatch[1] || defaultYear);
+    const month = Number(fullDateMatch[2]);
+    const day = Number(fullDateMatch[3]);
+
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const isoDateMatch = question.match(
+    /\b(\d{4})[-./](\d{1,2})[-./](\d{1,2})\b/
+  );
+
+  if (isoDateMatch) {
+    return `${isoDateMatch[1]}-${isoDateMatch[2].padStart(2, "0")}-${isoDateMatch[3].padStart(2, "0")}`;
+  }
+
+  return "";
+}
 function resolveEventDateFilter(question: string, now: Date): ((dateKey: string) => boolean) | null {
   const koreaNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
   const year = koreaNow.getFullYear();
   const month = koreaNow.getMonth() + 1;
-  const today = `${year}-${String(month).padStart(2, "0")}-${String(koreaNow.getDate()).padStart(2, "0")}`;
-  if (/오늘/.test(question)) return (dateKey) => dateKey === today;
+  const requestedDate = resolveRequestedSingleDateKey(question, now);
+
+  if (requestedDate) {
+    return (dateKey) => dateKey === requestedDate;
+  }
   const monthMatch = question.match(/(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월/);
   if (monthMatch) {
     const requestedYear = Number(monthMatch[1] || year);
@@ -826,6 +1089,11 @@ function buildChatSystemPrompt() {
     '너는 여수 베네치아 호텔 연회팀 전용 "연회장 AI 비서"다.',
     "",
     "일반 대화에서는 질문 의도에 따라 선택적으로 조회된 Supabase 업무 DB와 승인된 운영 지식만 사용한다.",
+     "eventData에 seatCheck가 있으면 좌석 인원 판단은 반드시 seatCheck 계산값을 최우선으로 사용한다.",
+    "seatCheck.status가 warning이거나 seatCheck.shortage가 1 이상이면 반드시 좌석 부족 가능성 또는 좌석수 확인 필요로 표시하며, 최종 요약에서 정상·문제없음·점검 통과라고 뒤집지 않는다.",
+    "seatCheck.status가 ok일 때만 좌석수 문제가 없다고 판단하고, unknown이면 임의로 정상이라고 추정하지 않는다.",
+    "커피브레이크, 다과, 세팅 전환 등 추가 업무가 있으면 추가 인력 필요 여부를 검토 대상으로 표시하되, 별도의 확정 기준이 없는 한 추가 인원 수를 임의로 산정하지 않는다.",
+    "예를 들어 기본 인력 1명 행사에 커피브레이크가 있다고 해서 자동으로 +1명 또는 2명으로 확정하지 말고, '추가 인력 검토 필요'로만 표시한다.",
     "ai_interviews.answer 원문은 일반 답변의 근거로 사용하지 않는다. ai_interviews는 출처 추적용 학습 로그다.",
     "운영 노하우는 approvedKnowledge, 즉 ai_knowledge.status='approved'인 데이터만 사용한다.",
     "",
@@ -848,6 +1116,7 @@ function buildChatSystemPrompt() {
     "- recommendItems: banquet_recommend_items",
     "- operationalHistoryData: asset_transactions, event_operation_results, event_incidents, event_staff_results, ai_recommendation_feedback, ai_knowledge_versions",
     "- approvedKnowledge: ai_knowledge(status='approved')",
+   
   ].join("\n");
 }
 async function supabaseSelect(table: string, query: string) {
