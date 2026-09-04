@@ -96,8 +96,10 @@
       workspaceForwardButton,
       workspaceBackwardButton,
       workspaceSendBackButton,
+      workspaceRotate90Button,
       workspaceDuplicateButton,
       workspaceDeleteButton,
+      workspaceNameInput,
       workspaceNewButton,
       workspaceSaveButton,
       workspaceSaveAsButton,
@@ -222,6 +224,9 @@
     const WORKSPACE_MAX_SCALE = 8;
     const WORKSPACE_PAN_SPEED = 1;
     const fixedObjectTypes = new Set(["door", "wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
+    function isWorkspaceBaseObject(object) {
+      return Boolean(object?.metadata?.baseFloorplanObject) || fixedObjectTypes.has(object?.objectType);
+    }
     const defaultObjectTypes = [
       { object_name: "\uAE30\uB465", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "pillar", default_width_m: 0.8, default_height_m: 0.8, default_seat_count: null, display_shape: "circle", can_resize: true, can_rotate: false, is_active: true },
       { object_name: "\uBB38", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "door", default_width_m: 1.2, default_height_m: 0.25, default_seat_count: null, display_shape: "rect", can_resize: true, can_rotate: true, is_active: true },
@@ -255,6 +260,8 @@
     let workspaceSourceRow = null;
     let workspaceSourceFile = null;
     let workspaceFloorplanRecord = null;
+    let workspaceOutlinePoints = [];
+    let workspaceGeometryOffset = { x: 0, y: 0 };
     let workspaceActiveLayout = null;
     let workspaceDirty = false;
     let workspaceSaveStatus = "";
@@ -493,6 +500,7 @@
       workspaceSpaceSelect?.addEventListener("change", handleWorkspaceSpaceChange);
       workspaceFloorplanSelect?.addEventListener("change", handleWorkspaceFloorplanChange);
       workspaceSavedLayoutSelect?.addEventListener("change", () => loadWorkspaceLayoutById(workspaceSavedLayoutSelect.value));
+      workspaceNameInput?.addEventListener("input", markWorkspaceDirty);
       workspaceSvg?.addEventListener("click", (event) => {
         if (workspaceSuppressCanvasClick) {
           workspaceSuppressCanvasClick = false;
@@ -528,8 +536,8 @@
       workspacePreviewModal?.addEventListener("click", (event) => {
         if (event.target === workspacePreviewModal) closeWorkspacePreview();
       });
-      workspaceZoomInButton?.addEventListener("click", () => zoomWorkspaceAtCenter(1.18));
-      workspaceZoomOutButton?.addEventListener("click", () => zoomWorkspaceAtCenter(1 / 1.18));
+      workspaceZoomInButton?.addEventListener("click", () => zoomWorkspaceAtCenter(2));
+      workspaceZoomOutButton?.addEventListener("click", () => zoomWorkspaceAtCenter(0.5));
       workspaceFitButton?.addEventListener("click", fitWorkspaceToScreen);
       workspaceActualSizeButton?.addEventListener("click", setWorkspaceActualSize);
       workspaceCenterButton?.addEventListener("click", centerWorkspaceView);
@@ -651,6 +659,7 @@
       workspaceForwardButton?.addEventListener("click", () => moveWorkspaceLayer("forward"));
       workspaceBackwardButton?.addEventListener("click", () => moveWorkspaceLayer("backward"));
       workspaceSendBackButton?.addEventListener("click", () => moveWorkspaceLayer("back"));
+      workspaceRotate90Button?.addEventListener("click", rotateWorkspaceObject90);
       workspaceDuplicateButton?.addEventListener("click", duplicateWorkspaceObject);
       workspaceDeleteButton?.addEventListener("click", deleteSelectedWorkspaceObject);
       window.addEventListener("keydown", (event) => {
@@ -663,9 +672,23 @@
           }
         }
         if (!workspaceSvg || !workspaceSelectedId) return;
+        const active = document.activeElement;
+        if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) return;
+        if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+          const object = findWorkspaceObject(workspaceSelectedId);
+          if (!object || isWorkspaceBaseObject(object)) return;
+          event.preventDefault();
+          pushWorkspaceHistory();
+          const distance = event.shiftKey ? 500 : 100;
+          if (event.key === "ArrowLeft") object.x = clampNumber(object.x - distance, 0, workspaceSize.width);
+          if (event.key === "ArrowRight") object.x = clampNumber(object.x + distance, 0, workspaceSize.width);
+          if (event.key === "ArrowUp") object.y = clampNumber(object.y - distance, 0, workspaceSize.height);
+          if (event.key === "ArrowDown") object.y = clampNumber(object.y + distance, 0, workspaceSize.height);
+          markWorkspaceDirty();
+          renderWorkspace();
+          return;
+        }
         if (event.key === "Delete" || event.key === "Backspace") {
-          const active = document.activeElement;
-          if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) return;
           deleteSelectedWorkspaceObject();
         }
       });
@@ -963,11 +986,20 @@
       setSelectLoading(workspaceFloorplanSelect, "기본 도면을 불러오는 중입니다.");
       setSelectLoading(workspaceSavedLayoutSelect, "저장된 레이아웃을 불러오는 중입니다.");
       try {
-        const rows = await loggedSupabaseRequest(
+        const [geometryRows, imageRows] = await Promise.all([
+          loggedSupabaseRequest(
+            "workspace geometry venue_floorplans select",
+            `venue_floorplans?select=*&is_active=eq.true&venue_id=eq.${encodeURIComponent(venueId)}&space_id=eq.${encodeURIComponent(spaceId)}&order=updated_at.desc`
+          ).catch(() => []),
+          loggedSupabaseRequest(
           "workspace venue_layout_images select",
           `venue_layout_images?select=*,files(*),venues(venue_name),venue_spaces(space_name)&is_active=eq.true&venue_id=eq.${encodeURIComponent(venueId)}&space_id=eq.${encodeURIComponent(spaceId)}&order=created_at.desc`
-        ) || [];
-        workspaceFloorplans = rows.filter(isBaseFloorplanRow);
+          ).catch(() => []),
+        ]);
+        workspaceFloorplans = [
+          ...(geometryRows || []).map((row) => ({ ...row, _workspaceSourceKind: "geometry" })),
+          ...(imageRows || []).filter(isBaseFloorplanRow).map((row) => ({ ...row, _workspaceSourceKind: "image" })),
+        ];
         workspaceLayouts = [];
         renderWorkspaceFloorplanOptions();
         renderWorkspaceSavedLayoutOptions();
@@ -994,7 +1026,9 @@
       workspaceFloorplanSelect.append(new Option("기본 도면을 선택하세요", ""));
       workspaceFloorplans.forEach((row) => {
         const file = Array.isArray(row.files) ? row.files[0] : row.files;
-        const label = [row.layout_type || "기본도면", file?.original_filename].filter(Boolean).join(" / ");
+        const label = row._workspaceSourceKind === "geometry"
+          ? `${row.floorplan_name || "V2 기본도면"}${row.is_locked ? " · 잠금" : ""}`
+          : [row.layout_type || "기본도면", file?.original_filename].filter(Boolean).join(" / ");
         workspaceFloorplanSelect.append(new Option(label, row.id));
       });
     }
@@ -1007,7 +1041,7 @@
       }
       workspaceSavedLayoutSelect.append(new Option("저장된 레이아웃", ""));
       workspaceLayouts.forEach((row) => {
-        const label = [row.layout_type || "레이아웃", row.min_people == null ? "" : `${row.min_people}명~${row.max_people || ""}`].filter(Boolean).join(" / ");
+        const label = [row.layout_name || row.layout_type || "레이아웃", row.min_people == null ? "" : `${row.min_people}명~${row.max_people || ""}`].filter(Boolean).join(" / ");
         workspaceSavedLayoutSelect.append(new Option(label, row.id));
       });
     }
@@ -1016,12 +1050,12 @@
       const row = workspaceFloorplans.find((item) => String(item.id) === String(workspaceFloorplanSelect?.value || ""));
       workspaceSourceRow = row || null;
       workspaceSourceFile = Array.isArray(row?.files) ? row.files[0] : row?.files;
-      workspaceFloorplanRecord = null;
+      workspaceFloorplanRecord = row?._workspaceSourceKind === "geometry" ? row : null;
       workspaceActiveLayout = null;
       workspaceLayouts = [];
       resetWorkspaceLayout();
       renderWorkspaceBackground(row);
-      if (!row || !workspaceSourceFile?.id) {
+      if (!row || (row._workspaceSourceKind !== "geometry" && !workspaceSourceFile?.id)) {
         renderWorkspaceSavedLayoutOptions();
         return;
       }
@@ -1034,6 +1068,16 @@
     function renderWorkspaceBackground(row) {
       if (!workspaceBackgroundLayer) return;
       workspaceBackgroundLayer.innerHTML = "";
+      workspaceOutlinePoints = [];
+      workspaceGeometryOffset = { x: 0, y: 0 };
+      if (row?._workspaceSourceKind === "geometry") {
+        workspaceGrid = true;
+        workspaceShowFloorplan = true;
+        if (workspaceViewGridInput) workspaceViewGridInput.checked = true;
+        if (workspaceViewFloorplanInput) workspaceViewFloorplanInput.checked = true;
+        renderWorkspace();
+        return;
+      }
       const file = Array.isArray(row?.files) ? row.files[0] : row?.files;
       if (!file?.public_url) {
         workspaceGrid = true;
@@ -1060,29 +1104,66 @@
       setTimeout(fitWorkspaceToScreen, 0);
     }
 
+    function applyWorkspaceHallOutline(outline) {
+      const points = Array.isArray(outline?.metadata?.points) ? outline.metadata.points : [];
+      const validPoints = points
+        .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+      workspaceOutlinePoints = validPoints;
+      if (!validPoints.length || !workspaceBackgroundLayer) return;
+      const xs = validPoints.map((point) => point.x);
+      const ys = validPoints.map((point) => point.y);
+      const minX = Math.min(...xs); const minY = Math.min(...ys);
+      const maxX = Math.max(...xs); const maxY = Math.max(...ys);
+      workspaceGeometryOffset = { x: -minX, y: -minY };
+      workspaceDrawingWidthMm = Math.max(1000, maxX - minX);
+      workspaceDrawingHeightMm = Math.max(1000, maxY - minY);
+      syncWorkspaceSizeFromDrawing();
+      syncWorkspaceDrawingInputs();
+      const polygon = document.createElementNS(svgNs, "polygon");
+      polygon.dataset.referenceFloorplan = "true";
+      polygon.setAttribute("points", validPoints.map((point) => `${point.x + workspaceGeometryOffset.x},${point.y + workspaceGeometryOffset.y}`).join(" "));
+      polygon.setAttribute("fill", outline?.style?.fill || "rgba(212,175,55,0.06)");
+      polygon.setAttribute("stroke", outline?.style?.stroke || "#0f2a43");
+      polygon.setAttribute("stroke-width", String(outline?.style?.strokeWidthPx || 2.5));
+      polygon.setAttribute("vector-effect", "non-scaling-stroke");
+      polygon.setAttribute("stroke-linejoin", "round");
+      polygon.setAttribute("pointer-events", "none");
+      workspaceBackgroundLayer.append(polygon);
+    }
+
     async function loadWorkspaceFloorplanState() {
-      if (!workspaceSourceFile?.id) return;
-      workspaceFloorplanRecord = await loggedSupabaseRequest(
-        "workspace venue_floorplans select",
-        `venue_floorplans?select=*&file_id=eq.${encodeURIComponent(workspaceSourceFile.id)}&is_active=eq.true&limit=1`
-      ).then((rows) => rows?.[0] || null).catch(() => null);
+      const isGeometryFloorplan = workspaceSourceRow?._workspaceSourceKind === "geometry";
+      if (!isGeometryFloorplan && !workspaceSourceFile?.id) return;
+      if (!isGeometryFloorplan) {
+        workspaceFloorplanRecord = await loggedSupabaseRequest(
+          "workspace venue_floorplans select",
+          `venue_floorplans?select=*&file_id=eq.${encodeURIComponent(workspaceSourceFile.id)}&is_active=eq.true&limit=1`
+        ).then((rows) => rows?.[0] || null).catch(() => null);
+      }
       applyWorkspaceFloorplanSettings(workspaceFloorplanRecord || workspaceSourceRow);
 
       if (!workspaceFloorplanRecord?.id) {
-        workspaceObjects = workspaceObjects.filter((object) => !fixedObjectTypes.has(object.objectType));
+        workspaceObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
         renderWorkspace();
         return;
       }
 
-      const fixedObjects = await loggedSupabaseRequest(
+      const floorplanRows = await loggedSupabaseRequest(
         "workspace venue_floorplan_objects select",
         `venue_floorplan_objects?select=*&floorplan_id=eq.${encodeURIComponent(workspaceFloorplanRecord.id)}&is_active=eq.true&order=sort_order.asc`
-      ).then((rows) => (rows || []).map(dbObjectToWorkspaceObject)).catch(() => []);
+      ).catch(() => []);
+      const outline = (floorplanRows || []).find((row) => row.object_type === "hall_outline" && row.metadata?.unit === "mm");
+      applyWorkspaceHallOutline(outline);
+      const fixedObjects = (floorplanRows || [])
+        .filter((row) => row.object_type !== "hall_outline")
+        .map(dbObjectToWorkspaceObject)
+        .map((object) => ({ ...object, locked: true, metadata: { ...(object.metadata || {}), baseFloorplanObject: true } }));
       workspaceCalibration = null;
       fixedObjects.filter((object) => object.objectType === "calibration").forEach(applyWorkspaceCalibrationFromObject);
       workspaceObjects = [
         ...fixedObjects,
-        ...workspaceObjects.filter((object) => !fixedObjectTypes.has(object.objectType)),
+        ...workspaceObjects.filter((object) => !isWorkspaceBaseObject(object)),
       ];
       renderWorkspace();
     }
@@ -1102,7 +1183,8 @@
 
     async function loadWorkspaceLayoutById(layoutId) {
       workspaceActiveLayout = workspaceLayouts.find((layout) => String(layout.id) === String(layoutId || "")) || null;
-      const fixedObjects = workspaceObjects.filter((object) => fixedObjectTypes.has(object.objectType));
+      if (workspaceNameInput) workspaceNameInput.value = workspaceActiveLayout?.layout_name || "";
+      const fixedObjects = workspaceObjects.filter(isWorkspaceBaseObject);
       if (!workspaceActiveLayout?.id) {
         workspaceObjects = fixedObjects;
         workspaceSelectedId = "";
@@ -1130,22 +1212,26 @@
         setStatus("?꾨㈃ ?덉씠?꾩썐 ??μ? 愿由ъ옄留??ъ슜?????덉뒿?덈떎.", "warn");
         return;
       }
-      if (!workspaceSourceRow || !workspaceSourceFile?.id) {
+      if (!workspaceSourceRow || (!workspaceFloorplanRecord?.id && !workspaceSourceFile?.id)) {
         setStatus("저장할 기본 도면을 먼저 선택해주세요.", "warn");
         return;
       }
-      const layoutName = forceNew || !workspaceActiveLayout?.id
-        ? window.prompt("저장할 레이아웃명을 입력해주세요.", workspaceActiveLayout?.layout_name || "새 레이아웃")
-        : workspaceActiveLayout.layout_name;
-      if (!layoutName) return;
+      const layoutName = workspaceNameInput?.value?.trim() || workspaceActiveLayout?.layout_name || "";
+      if (!layoutName) {
+        setStatus("저장할 레이아웃명을 입력해주세요.", "warn");
+        workspaceNameInput?.focus();
+        return;
+      }
       workspaceSaveButton.disabled = true;
       workspaceSaveAsButton.disabled = true;
       updateWorkspaceStatus("저장 중");
       try {
-        workspaceFloorplanRecord = await upsertWorkspaceFloorplan();
-        const fixedObjects = workspaceObjects.filter((object) => fixedObjectTypes.has(object.objectType));
-        const layoutOnlyObjects = workspaceObjects.filter((object) => !fixedObjectTypes.has(object.objectType));
-        await replaceObjects("venue_floorplan_objects", "floorplan_id", workspaceFloorplanRecord.id, fixedObjects.map(workspaceObjectToDbShape));
+        const fixedObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+        const layoutOnlyObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
+        if (workspaceSourceRow?._workspaceSourceKind !== "geometry") {
+          workspaceFloorplanRecord = await upsertWorkspaceFloorplan();
+          await replaceObjects("venue_floorplan_objects", "floorplan_id", workspaceFloorplanRecord.id, fixedObjects.map(workspaceObjectToDbShape));
+        }
         const layoutPayload = buildWorkspaceLayoutPayload(layoutName);
         const layoutRows = (!forceNew && workspaceActiveLayout?.id)
           ? await loggedSupabaseRequest("workspace venue_layouts update", `venue_layouts?id=eq.${encodeURIComponent(workspaceActiveLayout.id)}&select=*`, {
@@ -1264,7 +1350,7 @@
     }
 
     function buildWorkspaceLayoutPayload(layoutName) {
-      const layoutOnlyObjects = workspaceObjects.filter((object) => !fixedObjectTypes.has(object.objectType));
+      const layoutOnlyObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
       return {
         floorplan_id: workspaceFloorplanRecord.id,
         venue_id: workspaceSourceRow.venue_id || workspaceVenueSelect?.value || null,
@@ -1317,6 +1403,13 @@
         can_rotate: true,
         metadata: {
           ...(object.metadata || {}),
+          geometryVersion: 2,
+          unit: "mm",
+          coordinateAnchor: "center",
+          xMm: Math.round(object.x),
+          yMm: Math.round(object.y),
+          widthMm: Math.round(object.widthM * 1000),
+          heightMm: Math.round(object.heightM * 1000),
           object_type_id: object.masterObjectId || null,
           default_width_m: object.widthM,
           default_height_m: object.heightM,
@@ -1328,8 +1421,8 @@
     }
 
     function dbObjectToWorkspaceObject(row) {
-      const widthM = Math.max(0.1, Number(row.metadata?.default_width_m) || (Number(row.width || 0.05) * workspaceSize.width / workspaceMeterScale));
-      const heightM = Math.max(0.1, Number(row.metadata?.default_height_m) || (Number(row.height || 0.05) * workspaceSize.height / workspaceMeterScale));
+      const widthM = Math.max(0.1, Number(row.metadata?.widthMm) / 1000 || Number(row.metadata?.default_width_m) || (Number(row.width || 0.05) * workspaceSize.width / workspaceMeterScale));
+      const heightM = Math.max(0.1, Number(row.metadata?.heightMm) / 1000 || Number(row.metadata?.default_height_m) || (Number(row.height || 0.05) * workspaceSize.height / workspaceMeterScale));
       const widthPx = widthM * workspaceMeterScale;
       const heightPx = heightM * workspaceMeterScale;
       const object = {
@@ -1337,8 +1430,8 @@
         masterObjectId: row.object_type_id || row.metadata?.object_type_id || "",
         objectType: row.object_type,
         label: row.label || objectLabels[row.object_type] || row.object_type,
-        x: clampNumber(Number(row.x || 0) * workspaceSize.width + widthPx / 2, 0, workspaceSize.width),
-        y: clampNumber(Number(row.y || 0) * workspaceSize.height + heightPx / 2, 0, workspaceSize.height),
+        x: clampNumber(Number.isFinite(Number(row.metadata?.xMm)) ? Number(row.metadata.xMm) : Number(row.x || 0) * workspaceSize.width + widthPx / 2, 0, workspaceSize.width),
+        y: clampNumber(Number.isFinite(Number(row.metadata?.yMm)) ? Number(row.metadata.yMm) : Number(row.y || 0) * workspaceSize.height + heightPx / 2, 0, workspaceSize.height),
         widthM,
         heightM,
         rotation: Number(row.rotation || 0),
@@ -1546,7 +1639,7 @@
     }
 
     async function upsertWorkspaceVenueLayoutImage(fileId, existingId) {
-      const layoutOnlyObjects = workspaceObjects.filter((object) => !fixedObjectTypes.has(object.objectType));
+      const layoutOnlyObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
       const payload = {
         file_id: fileId,
         venue_id: workspaceSourceRow?.venue_id || workspaceVenueSelect?.value || null,
@@ -2615,7 +2708,7 @@
 
     function canWorkspaceEditObject(object) {
       if (!object) return false;
-      return !object.locked;
+      return !object.locked && !isWorkspaceBaseObject(object);
     }
 
     function renderWorkspaceProperties() {
@@ -2635,7 +2728,7 @@
         workspaceDimensionLabelInput,
       ];
       const inputs = [workspaceLabelInput, workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput, workspaceSeatCountInput, workspaceZIndexInput, workspaceOpacityInput, ...wallInputs];
-      const buttons = [workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton, workspaceDuplicateButton, workspaceDeleteButton];
+      const buttons = [workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton, workspaceRotate90Button, workspaceDuplicateButton, workspaceDeleteButton];
       inputs.concat(buttons).forEach((el) => {
         if (el) el.disabled = !object;
       });
@@ -2660,6 +2753,9 @@
         if (workspaceDimensionPositionSelect) workspaceDimensionPositionSelect.value = "auto";
         if (workspaceDimensionLabelInput) workspaceDimensionLabelInput.value = "";
         return;
+      }
+      if (isWorkspaceBaseObject(object)) {
+        inputs.concat(buttons).forEach((el) => { if (el) el.disabled = true; });
       }
       const isWallLike = ["wall", "calibration"].includes(object.objectType);
       [workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput].forEach((input) => {
@@ -2821,13 +2917,13 @@
 
     function duplicateWorkspaceObject() {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object) return;
+      if (!object || isWorkspaceBaseObject(object)) return;
       pushWorkspaceHistory();
       const copy = {
         ...object,
         instanceId: crypto.randomUUID ? crypto.randomUUID() : `object_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-        x: clampNumber(object.x + 24, 0, workspaceSize.width),
-        y: clampNumber(object.y + 24, 0, workspaceSize.height),
+        x: clampNumber(object.x + 200, 0, workspaceSize.width),
+        y: clampNumber(object.y + 200, 0, workspaceSize.height),
         zIndex: getWorkspaceMaxZIndex() + 1,
       };
       workspaceObjects.push(copy);
@@ -2836,8 +2932,18 @@
       renderWorkspace();
     }
 
+    function rotateWorkspaceObject90() {
+      const object = findWorkspaceObject(workspaceSelectedId);
+      if (!object || isWorkspaceBaseObject(object)) return;
+      pushWorkspaceHistory();
+      object.rotation = normalizeDegrees(Number(object.rotation || 0) + 90);
+      markWorkspaceDirty();
+      renderWorkspace();
+    }
+
     function deleteSelectedWorkspaceObject() {
-      if (!workspaceSelectedId) return;
+      const object = findWorkspaceObject(workspaceSelectedId);
+      if (!object || isWorkspaceBaseObject(object)) return;
       pushWorkspaceHistory();
       workspaceObjects = workspaceObjects.filter((object) => object.instanceId !== workspaceSelectedId);
       workspaceSelectedId = "";
@@ -2903,7 +3009,7 @@
       }
       pushWorkspaceHistory();
       workspaceObjects = useCurrentFloorplan
-        ? workspaceObjects.filter((object) => fixedObjectTypes.has(object.objectType))
+        ? workspaceObjects.filter(isWorkspaceBaseObject)
         : [];
       workspaceShowFloorplan = useCurrentFloorplan;
       workspaceGrid = !useCurrentFloorplan;
@@ -2911,6 +3017,7 @@
       if (workspaceViewGridInput) workspaceViewGridInput.checked = workspaceGrid;
       workspaceSelectedId = "";
       workspaceActiveLayout = layoutName ? { layout_name: layoutName.trim() || "???덉씠?꾩썐" } : null;
+      if (workspaceNameInput) workspaceNameInput.value = workspaceActiveLayout?.layout_name || "";
       if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = "";
       workspaceDirty = false;
       updateWorkspaceStatus("??λ릺吏 ?딆쓬");

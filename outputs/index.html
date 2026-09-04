@@ -376,11 +376,69 @@
           </div>
         </details>
 
-        <section class="layout-editor-workbench" aria-label="도면 레이아웃 편집기">
+        <div class="floorplan-v2-mode-switch" role="tablist" aria-label="도면 작업 선택">
+          <button id="floorplanV2BaseModeButton" class="active" type="button" role="tab" aria-selected="true">기본 도면 관리</button>
+          <button id="floorplanV2EventModeButton" type="button" role="tab" aria-selected="false">행사 레이아웃</button>
+        </div>
+
+        <section id="floorplanV2BasePanel" class="floorplan-v2-panel" aria-label="기본 도면 관리">
+          <header class="floorplan-v2-header">
+            <div><span class="eyebrow">Floorplan Editor V2</span><h2>기본 도면 관리</h2><p>실제 길이를 입력해 홀 외곽을 mm 좌표로 만듭니다.</p></div>
+            <button id="floorplanV2NewButton" class="primary-button" type="button">새 기본 도면</button>
+          </header>
+          <div class="floorplan-v2-selector-row">
+            <select id="floorplanV2VenueSelect" aria-label="장소"><option value="">장소를 선택하세요</option></select>
+            <select id="floorplanV2SpaceSelect" aria-label="공간"><option value="">공간을 선택하세요</option></select>
+            <select id="floorplanV2SavedSelect" aria-label="기본 도면 선택"><option value="">저장된 기본 도면</option></select>
+          </div>
+          <div id="floorplanV2Empty" class="floorplan-v2-empty">장소와 공간을 선택하거나 새 기본 도면을 만들어 주세요.</div>
+          <div id="floorplanV2Wizard" class="floorplan-v2-wizard" hidden>
+            <section class="floorplan-v2-form-card">
+              <div class="floorplan-v2-form-heading">
+                <h3 id="floorplanV2WizardTitle">새 기본 도면</h3>
+                <span id="floorplanV2LockStatus" class="floorplan-v2-lock-status">편집 가능</span>
+              </div>
+              <label>도면 이름<input id="floorplanV2NameInput" type="text" placeholder="예: 부라노홀 기본 도면"></label>
+              <fieldset><legend>작성 방법</legend>
+                <label><input type="radio" name="floorplanV2Method" value="rectangle" checked> 사각형</label>
+                <label><input type="radio" name="floorplanV2Method" value="orthogonal_polygon"> 직각 다각형</label>
+              </fieldset>
+              <div id="floorplanV2RectangleFields" class="floorplan-v2-dimensions">
+                <label>가로<input id="floorplanV2WidthInput" type="number" min="0.1" step="0.1" value="10"> m</label>
+                <label>세로<input id="floorplanV2HeightInput" type="number" min="0.1" step="0.1" value="8"> m</label>
+                <button id="floorplanV2BuildRectangleButton" type="button">미리보기 만들기</button>
+              </div>
+              <div id="floorplanV2PolygonFields" hidden>
+                <strong id="floorplanV2WallNumber">현재 벽 0</strong>
+                <div id="floorplanV2Directions" class="floorplan-v2-directions" aria-label="벽 방향">
+                  <button type="button" data-direction="right" class="active">→ 오른쪽</button><button type="button" data-direction="down">↓ 아래</button>
+                  <button type="button" data-direction="left">← 왼쪽</button><button type="button" data-direction="up">↑ 위</button>
+                </div>
+                <label>길이<input id="floorplanV2LengthInput" type="number" min="0.1" step="0.1" value="1"> m</label>
+                <div class="floorplan-v2-actions"><button id="floorplanV2AddWallButton" type="button">벽 추가</button><button id="floorplanV2AutoCloseButton" type="button">외곽선 자동 완성</button></div>
+              </div>
+              <div class="floorplan-v2-actions"><button id="floorplanV2UndoWallButton" type="button">마지막 벽 취소</button><button id="floorplanV2ResetButton" type="button">전체 초기화</button></div>
+              <label class="layout-inline-check"><input id="floorplanV2LockedInput" type="checkbox"> 기본 도면 잠금</label>
+              <small class="floorplan-v2-source-note">실제 mm 좌표가 원본이며, 확대·축소는 화면 표시만 변경합니다.</small>
+              <div id="floorplanV2Validation" class="floorplan-v2-validation" aria-live="polite">외곽선을 만들어 주세요.</div>
+              <div class="floorplan-v2-actions"><button id="floorplanV2SaveButton" class="primary-button" type="button" disabled>저장</button><button id="floorplanV2CancelButton" type="button">취소</button></div>
+            </section>
+            <section class="floorplan-v2-preview-card">
+              <div class="floorplan-v2-preview-toolbar" aria-label="도면 보기 조절">
+                <strong>실제 비율 미리보기</strong>
+                <span><button id="floorplanV2ZoomOutButton" type="button" aria-label="축소">－</button><button id="floorplanV2FitButton" type="button">화면 맞춤</button><button id="floorplanV2ZoomInButton" type="button" aria-label="확대">＋</button><output id="floorplanV2ZoomStatus">자동 맞춤</output></span>
+              </div>
+              <svg id="floorplanV2Preview" viewBox="-1000 -1000 12000 10000" preserveAspectRatio="xMidYMid meet" role="img" aria-label="기본 도면 미리보기"></svg>
+              <div class="floorplan-v2-wall-table-wrap"><table><thead><tr><th>#</th><th>방향</th><th>길이</th><th>끝 좌표(m)</th></tr></thead><tbody id="floorplanV2WallList"></tbody></table></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="floorplanV2EventPanel" class="layout-editor-workbench" aria-label="행사 레이아웃 편집기" hidden>
           <div class="layout-editor-heading">
             <div>
-              <h2>도면 레이아웃 편집기</h2>
-              <p>기본 도면 위에 테이블, 문, 기둥, 무대 등의 오브젝트를 배치하고 레이아웃을 저장합니다.</p>
+              <h2>행사 레이아웃 · 실제 규격 배치</h2>
+              <p>V2 기본 도면 위에 실제 mm 규격의 기물을 배치합니다. 기존 고급 편집 기능도 그대로 사용할 수 있습니다.</p>
             </div>
             <span id="layoutWorkspaceStatusPill" class="layout-editor-status-pill">상태: 저장되지 않음</span>
           </div>
@@ -392,6 +450,7 @@
               <select id="layoutWorkspaceSavedLayoutSelect" aria-label="저장된 레이아웃 불러오기"><option value="">저장된 레이아웃</option></select>
             </div>
             <div class="layout-editor-toolbar-row tool-row">
+              <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
               <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
               <button id="layoutWorkspaceSaveButton" type="button">저장</button>
               <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
@@ -606,6 +665,7 @@
                 <button id="layoutWorkspaceForwardButton" type="button" disabled>앞으로</button>
                 <button id="layoutWorkspaceBackwardButton" type="button" disabled>뒤로</button>
                 <button id="layoutWorkspaceSendBackButton" type="button" disabled>맨 뒤로</button>
+                <button id="layoutWorkspaceRotate90Button" type="button" disabled>90° 회전</button>
                 <button id="layoutWorkspaceDuplicateButton" type="button" disabled>복제</button>
                 <button id="layoutWorkspaceDeleteButton" type="button" disabled>삭제</button>
               </div>
@@ -995,7 +1055,8 @@
   <script src="./src/eventOrder.js"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
-  <script src="./src/floorplanEditor.js"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-v2-phase2b"></script>
+<script src="./src/baseFloorplanWizard.js"></script>
   <script src="./src/aiAssistant.js"></script>
   <script>
     /*
@@ -1149,6 +1210,8 @@
     const layoutWorkspaceBackwardButton = document.querySelector("#layoutWorkspaceBackwardButton");
     const layoutWorkspaceSendBackButton = document.querySelector("#layoutWorkspaceSendBackButton");
     const layoutWorkspaceDuplicateButton = document.querySelector("#layoutWorkspaceDuplicateButton");
+    const layoutWorkspaceRotate90Button = document.querySelector("#layoutWorkspaceRotate90Button");
+    const layoutWorkspaceNameInput = document.querySelector("#layoutWorkspaceNameInput");
     const layoutWorkspaceDeleteButton = document.querySelector("#layoutWorkspaceDeleteButton");
     const layoutWorkspaceNewButton = document.querySelector("#layoutWorkspaceNewButton");
     const layoutWorkspaceSaveButton = document.querySelector("#layoutWorkspaceSaveButton");
@@ -1519,6 +1582,8 @@
         workspaceBackwardButton: layoutWorkspaceBackwardButton,
         workspaceSendBackButton: layoutWorkspaceSendBackButton,
         workspaceDuplicateButton: layoutWorkspaceDuplicateButton,
+        workspaceRotate90Button: layoutWorkspaceRotate90Button,
+        workspaceNameInput: layoutWorkspaceNameInput,
         workspaceDeleteButton: layoutWorkspaceDeleteButton,
         workspaceNewButton: layoutWorkspaceNewButton,
         workspaceSaveButton: layoutWorkspaceSaveButton,
