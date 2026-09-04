@@ -437,8 +437,8 @@
         <section id="floorplanV2EventPanel" class="layout-editor-workbench" aria-label="행사 레이아웃 편집기" hidden>
           <div class="layout-editor-heading">
             <div>
-              <h2>행사 레이아웃 · 고급 편집</h2>
-              <p>기존 도면 위에 테이블, 문, 기둥, 무대 등의 오브젝트를 배치합니다. 기존 고급 기능은 그대로 유지됩니다.</p>
+              <h2>행사 레이아웃 · 실제 규격 배치</h2>
+              <p>V2 기본 도면 위에 실제 mm 규격의 기물을 배치합니다. 기존 고급 편집 기능도 그대로 사용할 수 있습니다.</p>
             </div>
             <span id="layoutWorkspaceStatusPill" class="layout-editor-status-pill">상태: 저장되지 않음</span>
           </div>
@@ -450,6 +450,7 @@
               <select id="layoutWorkspaceSavedLayoutSelect" aria-label="저장된 레이아웃 불러오기"><option value="">저장된 레이아웃</option></select>
             </div>
             <div class="layout-editor-toolbar-row tool-row">
+              <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
               <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
               <button id="layoutWorkspaceSaveButton" type="button">저장</button>
               <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
@@ -664,6 +665,7 @@
                 <button id="layoutWorkspaceForwardButton" type="button" disabled>앞으로</button>
                 <button id="layoutWorkspaceBackwardButton" type="button" disabled>뒤로</button>
                 <button id="layoutWorkspaceSendBackButton" type="button" disabled>맨 뒤로</button>
+                <button id="layoutWorkspaceRotate90Button" type="button" disabled>90° 회전</button>
                 <button id="layoutWorkspaceDuplicateButton" type="button" disabled>복제</button>
                 <button id="layoutWorkspaceDeleteButton" type="button" disabled>삭제</button>
               </div>
@@ -1053,7 +1055,7 @@
   <script src="./src/eventOrder.js"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-v2-phase2b"></script>
 <script src="./src/baseFloorplanWizard.js"></script>
   <script src="./src/aiAssistant.js"></script>
   <script>
@@ -1208,6 +1210,8 @@
     const layoutWorkspaceBackwardButton = document.querySelector("#layoutWorkspaceBackwardButton");
     const layoutWorkspaceSendBackButton = document.querySelector("#layoutWorkspaceSendBackButton");
     const layoutWorkspaceDuplicateButton = document.querySelector("#layoutWorkspaceDuplicateButton");
+    const layoutWorkspaceRotate90Button = document.querySelector("#layoutWorkspaceRotate90Button");
+    const layoutWorkspaceNameInput = document.querySelector("#layoutWorkspaceNameInput");
     const layoutWorkspaceDeleteButton = document.querySelector("#layoutWorkspaceDeleteButton");
     const layoutWorkspaceNewButton = document.querySelector("#layoutWorkspaceNewButton");
     const layoutWorkspaceSaveButton = document.querySelector("#layoutWorkspaceSaveButton");
@@ -1578,6 +1582,8 @@
         workspaceBackwardButton: layoutWorkspaceBackwardButton,
         workspaceSendBackButton: layoutWorkspaceSendBackButton,
         workspaceDuplicateButton: layoutWorkspaceDuplicateButton,
+        workspaceRotate90Button: layoutWorkspaceRotate90Button,
+        workspaceNameInput: layoutWorkspaceNameInput,
         workspaceDeleteButton: layoutWorkspaceDeleteButton,
         workspaceNewButton: layoutWorkspaceNewButton,
         workspaceSaveButton: layoutWorkspaceSaveButton,

@@ -7,6 +7,7 @@ require("../outputs/src/baseFloorplanWizard.js");
 const geometry = window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY;
 const wizardSource = fs.readFileSync(path.join(__dirname, "..", "outputs", "src", "baseFloorplanWizard.js"), "utf8");
 const assetStyles = fs.readFileSync(path.join(__dirname, "..", "outputs", "src", "styles", "assets.css"), "utf8");
+const editorSource = fs.readFileSync(path.join(__dirname, "..", "outputs", "src", "floorplanEditor.js"), "utf8");
 
 assert.equal(geometry.toMillimeters("12"), 12000);
 assert.equal(geometry.toMillimeters("0.0014"), 1);
@@ -74,7 +75,7 @@ for (const htmlFile of ["index.html", "event-order-preview.html"]) {
     "floorplanV2AutoCloseButton", "floorplanV2ZoomInButton", "floorplanV2ZoomOutButton", "floorplanV2FitButton",
     "floorplanV2LockedInput", "floorplanV2LockStatus", "floorplanV2EventPanel",
   ].forEach((id) => assert.match(html, new RegExp(`id=["']${id}["']`), `${htmlFile} contains #${id}`));
-  assert.match(html, /src=["']\.\/src\/floorplanEditor\.js["']/);
+  assert.match(html, /src=["']\.\/src\/floorplanEditor\.js(?:\?[^"']+)?["']/);
   assert.match(html, /src=["']\.\/src\/baseFloorplanWizard\.js["']/);
   assert.ok(html.indexOf("floorplanEditor.js") < html.indexOf("baseFloorplanWizard.js"), "advanced editor remains loaded before V2 shell");
 }
@@ -90,5 +91,13 @@ assert.match(wizardSource, /if \(isEditingLocked\(\) \|\| points\.length <= 1\) 
 assert.match(wizardSource, /strokeWidthPx: 2\.5/, "hall outlines store a display stroke, not wall thickness");
 assert.doesNotMatch(wizardSource, /strokeWidthMm/, "hall outlines do not imply physical wall thickness");
 assert.match(assetStyles, /\.floorplan-v2-outline \{[^}]*stroke-width: 2\.5px;[^}]*vector-effect: non-scaling-stroke;/, "outline stays thin while zooming");
+assert.match(editorSource, /geometryVersion: 2,[\s\S]*xMm: Math\.round\(object\.x\),[\s\S]*widthMm: Math\.round\(object\.widthM \* 1000\)/, "layout objects persist millimeter source coordinates");
+assert.match(editorSource, /Number\.isFinite\(Number\(row\.metadata\?\.xMm\)\)/, "V2 reload prefers millimeter coordinates");
+assert.match(editorSource, /object\.rotation = normalizeDegrees\(Number\(object\.rotation \|\| 0\) \+ 90\)/, "objects rotate in 90 degree steps");
+assert.match(editorSource, /object\.x \+ 200/, "duplicates use a 200mm offset");
+assert.match(editorSource, /event\.shiftKey \? 500 : 100/, "keyboard movement uses 100mm and Shift+500mm steps");
+assert.match(editorSource, /zoomWorkspaceAtCenter\(2\)/, "zoom controls cover 100 to 200 percent");
+assert.match(editorSource, /zoomWorkspaceAtCenter\(0\.5\)/, "zoom controls cover 100 to 50 percent");
+assert.match(editorSource, /vector-effect", "non-scaling-stroke"/, "V2 hall outline remains a fixed display stroke while zooming");
 
 console.log("Floorplan V2 geometry tests passed.");
