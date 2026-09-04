@@ -268,7 +268,7 @@
       preview.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
       const polygon = document.createElementNS(svgNs, isClosed(points) ? "polygon" : "polyline");
       polygon.setAttribute("points", points.map((point) => `${point.x},${point.y}`).join(" ")); polygon.setAttribute("class", "floorplan-v2-outline"); preview.append(polygon);
-      const bounds = boundsOf(points); const labelSize = Math.min(600, Math.max(160, Math.max(bounds.width, bounds.height) * 0.035));
+      const bounds = boundsOf(points); const labelSize = Math.min(360, Math.max(110, Math.max(bounds.width, bounds.height) * 0.022));
       points.slice(1).forEach((point, index) => {
         const start = points[index]; const text = document.createElementNS(svgNs, "text");
         text.setAttribute("x", String((start.x + point.x) / 2)); text.setAttribute("y", String((start.y + point.y) / 2 - labelSize * 0.45));
@@ -330,7 +330,7 @@
         });
         const floorplan = floorplanRows?.[0]; if (!floorplan?.id) throw new Error("기본 도면 저장 결과를 확인하지 못했습니다.");
         const outlinePayload = { floorplan_id: floorplan.id, object_type: "hall_outline", label: floorplanName, x: 0, y: 0, width: 1, height: 1, rotation: 0,
-          is_locked: lockedInput.checked, style: { stroke: "#0f2a43", fill: "rgba(212,175,55,0.12)", strokeWidthMm: 120 },
+          is_locked: lockedInput.checked, style: { stroke: "#0f2a43", fill: "rgba(212,175,55,0.06)", strokeWidthPx: 2.5 },
           metadata: { geometryVersion: 2, geometryType: method, unit: "mm", points: points.map((point) => ({ x: point.x, y: point.y })) }, sort_order: 0 };
         const outlineRows = await storage.supabaseRequest(currentOutline?.id ? `venue_floorplan_objects?id=eq.${encodeURIComponent(currentOutline.id)}&select=*` : "venue_floorplan_objects?select=*", {
           method: currentOutline?.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(outlinePayload),

@@ -1132,9 +1132,9 @@ table {
 .floorplan-v2-preview-toolbar button { min-width: 38px; padding: 7px 9px; }
 .floorplan-v2-preview-toolbar output { min-width: 76px; color: var(--theme-muted); font-size: 12px; font-weight: 800; text-align: right; }
 #floorplanV2Preview { display: block; width: 100%; min-height: 420px; border: 1px solid var(--theme-border); border-radius: 12px; background: linear-gradient(#eef2f6 1px, transparent 1px), linear-gradient(90deg, #eef2f6 1px, transparent 1px), #fff; background-size: 24px 24px; }
-.floorplan-v2-outline { fill: rgba(212, 175, 55, .14); stroke: #0f2a43; stroke-width: 120; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-polyline.floorplan-v2-outline { fill: none; stroke: #b7791f; stroke-dasharray: 500 260; }
-.floorplan-v2-measure { fill: #0f2a43; font-weight: 900; text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 80px; }
+.floorplan-v2-outline { fill: rgba(212, 175, 55, .06); stroke: #0f2a43; stroke-width: 2.5px; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+polyline.floorplan-v2-outline { fill: none; stroke: #b7791f; stroke-dasharray: 8px 6px; }
+.floorplan-v2-measure { fill: #334155; font-weight: 800; text-anchor: middle; paint-order: stroke; stroke: #fff; stroke-width: 2px; vector-effect: non-scaling-stroke; }
 .floorplan-v2-point { fill: #fff; stroke: #0f2a43; stroke-width: 3px; vector-effect: non-scaling-stroke; }
 .floorplan-v2-point.current { fill: var(--theme-gold); }
 .floorplan-v2-wall-table-wrap { max-height: 230px; margin-top: 12px; overflow: auto; }

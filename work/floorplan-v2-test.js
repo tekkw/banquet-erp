@@ -6,6 +6,7 @@ global.document = { getElementById: () => null };
 require("../outputs/src/baseFloorplanWizard.js");
 const geometry = window.BANQUET_ERP_FLOORPLAN_V2_GEOMETRY;
 const wizardSource = fs.readFileSync(path.join(__dirname, "..", "outputs", "src", "baseFloorplanWizard.js"), "utf8");
+const assetStyles = fs.readFileSync(path.join(__dirname, "..", "outputs", "src", "styles", "assets.css"), "utf8");
 
 assert.equal(geometry.toMillimeters("12"), 12000);
 assert.equal(geometry.toMillimeters("0.0014"), 1);
@@ -86,5 +87,8 @@ assert.match(wizardSource, /method: currentFloorplan\?\.id \? "PATCH" : "POST"/,
 assert.match(wizardSource, /unit: "mm", points:/, "millimeter points are the stored geometry source of truth");
 assert.match(wizardSource, /geometryControls\.forEach\(\(control\) => \{ control\.disabled = locked; \}\)/, "locked plans disable geometry controls");
 assert.match(wizardSource, /if \(isEditingLocked\(\) \|\| points\.length <= 1\) return;/, "locked plans block wall undo");
+assert.match(wizardSource, /strokeWidthPx: 2\.5/, "hall outlines store a display stroke, not wall thickness");
+assert.doesNotMatch(wizardSource, /strokeWidthMm/, "hall outlines do not imply physical wall thickness");
+assert.match(assetStyles, /\.floorplan-v2-outline \{[^}]*stroke-width: 2\.5px;[^}]*vector-effect: non-scaling-stroke;/, "outline stays thin while zooming");
 
 console.log("Floorplan V2 geometry tests passed.");
