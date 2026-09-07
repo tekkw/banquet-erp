@@ -193,6 +193,7 @@
     let currentFloorplan = null; let currentOutline = null;
     let points = [{ x: 0, y: 0 }]; let selectedDirection = "right"; let method = "rectangle"; let viewZoom = 1;
     let transientMessage = ""; let fixedStructures = []; let selectedStructureId = ""; let structureDrag = null; let deletedStructureIds = [];
+    let floorplanLoadVersion = 0; let isFloorplanLoading = false;
 
     function setMode(nextMode) {
       const base = nextMode === "base";
@@ -258,10 +259,10 @@
       if ([...spaceSelect.options].some((option) => option.value === previousSpaceId)) spaceSelect.value = previousSpaceId;
     }
     function handleVenueChange() {
-      currentFloorplan = null; currentOutline = null; savedFloorplans = []; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; renderSpaceOptions();
+      floorplanLoadVersion += 1; isFloorplanLoading = false; currentFloorplan = null; currentOutline = null; savedFloorplans = []; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; renderSpaceOptions();
       savedSelect.innerHTML = '<option value="">저장된 기본 도면</option>'; renderState();
     }
-    function handleSpaceChange() { currentFloorplan = null; currentOutline = null; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; loadSaved(); renderState(); }
+    function handleSpaceChange() { floorplanLoadVersion += 1; isFloorplanLoading = false; currentFloorplan = null; currentOutline = null; fixedStructures = []; selectedStructureId = ""; transientMessage = ""; loadSaved(); renderState(); }
     function setMethod(nextMethod) {
       method = nextMethod === "orthogonal_polygon" ? "orthogonal_polygon" : "rectangle";
       methodInputs.forEach((input) => { input.checked = input.value === method; });
@@ -359,14 +360,14 @@
     function renderState() {
       const result = validate(points); const locked = isEditingLocked();
       geometryControls.forEach((control) => { control.disabled = locked; }); nameInput.disabled = locked;
-      structureTypes?.querySelectorAll("button").forEach((control) => { control.disabled = locked || !validate(points).valid; });
+      structureTypes?.querySelectorAll("button").forEach((control) => { control.disabled = locked || isFloorplanLoading || !validate(points).valid; });
       lockStatus.textContent = locked ? "잠김 · 잠금 해제 후 편집" : lockedInput.checked ? "저장 시 잠금" : "편집 가능";
       lockStatus.classList.toggle("locked", locked || lockedInput.checked);
       if (!transientMessage) {
         validation.textContent = locked ? "잠긴 기본 도면입니다. 편집하려면 잠금을 해제하세요." : result.message;
         validation.className = `floorplan-v2-validation${result.valid ? " success" : ""}${locked ? " locked" : ""}`;
       }
-      saveButton.disabled = locked || !result.valid || !venueSelect.value || !spaceSelect.value || !nameInput.value.trim();
+      saveButton.disabled = isFloorplanLoading || locked || !result.valid || !venueSelect.value || !spaceSelect.value || !nameInput.value.trim();
       if (createLayoutButton) createLayoutButton.hidden = !currentFloorplan?.id;
       byId("floorplanV2WallNumber").textContent = `현재 벽 ${Math.max(0, points.length - 1)}`;
       zoomStatus.textContent = viewZoom === 1 ? "자동 맞춤" : `${Math.round(viewZoom * 100)}%`;
@@ -425,8 +426,11 @@
     }
     async function loadSelected() {
       const selected = savedFloorplans.find((row) => String(row.id) === savedSelect.value); if (!selected) return;
+      const loadVersion = ++floorplanLoadVersion; isFloorplanLoading = true; fixedStructures = []; selectedStructureId = "";
+      showMessage("기본 도면과 고정 구조물을 불러오는 중입니다."); render();
       try {
         const rows = await storage.supabaseRequest(`venue_floorplan_objects?select=*&floorplan_id=eq.${encodeURIComponent(selected.id)}&is_active=eq.true&order=sort_order.asc`);
+        if (loadVersion !== floorplanLoadVersion || savedSelect.value !== String(selected.id)) return;
         const outline = rows?.find((row) => row.object_type === "hall_outline") || null; const storedPoints = outline?.metadata?.points;
         if (!Array.isArray(storedPoints) || !storedPoints.length) throw new Error("저장된 mm 외곽선 좌표가 없습니다.");
         const loadedPoints = storedPoints.map((point) => ({ x: Number(point.x), y: Number(point.y) }));
@@ -436,10 +440,12 @@
         deletedStructureIds = []; selectedStructureId = "";
         lockedInput.checked = Boolean(selected.is_locked); setMethod(outline?.metadata?.geometryType || parseNotes(selected.notes).geometry_type);
         wizardTitle.textContent = "기본 도면 확인 및 수정"; wizard.hidden = false; empty.hidden = true; viewZoom = 1; transientMessage = ""; render();
-      } catch (error) { showMessage(error.message || "기본 도면을 불러오지 못했습니다.", "error"); }
+      } catch (error) { if (loadVersion === floorplanLoadVersion) showMessage(error.message || "기본 도면을 불러오지 못했습니다.", "error"); }
+      finally { if (loadVersion === floorplanLoadVersion) { isFloorplanLoading = false; render(); } }
     }
     async function save() {
       const result = validate(points); const floorplanName = nameInput.value.trim();
+      if (isFloorplanLoading) { showMessage("기본 도면 로딩이 끝난 뒤 저장해 주세요.", "error"); return; }
       if (!venueSelect.value || !spaceSelect.value || !floorplanName || !result.valid || isEditingLocked()) {
         showMessage("장소, 공간, 도면 이름과 닫힌 외곽선을 확인해 주세요.", "error"); return;
       }

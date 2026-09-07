@@ -121,6 +121,10 @@ assert.match(editorSource, /zoomWorkspaceAtCenter\(0\.5\)/, "zoom controls cover
 assert.match(editorSource, /vector-effect", "non-scaling-stroke"/, "V2 hall outline remains a fixed display stroke while zooming");
 assert.match(wizardSource, /venue_floorplan_objects\?select=\*&floorplan_id=.*is_active=eq\.true&order=sort_order\.asc/, "base editor reloads outlines and fixed structures together");
 assert.match(wizardSource, /geometryVersion: 2, unit: "mm", coordinateAnchor: "center"/, "fixed structures persist millimeter metadata");
+assert.match(wizardSource, /const loadVersion = \+\+floorplanLoadVersion; isFloorplanLoading = true;/, "floorplan loads are versioned before async structure reads");
+assert.match(wizardSource, /loadVersion !== floorplanLoadVersion \|\| savedSelect\.value !== String\(selected\.id\)/, "stale floorplan responses cannot overwrite the current structures");
+assert.match(wizardSource, /control\.disabled = locked \|\| isFloorplanLoading/, "fixed structures cannot be added while a floorplan is loading");
+assert.match(wizardSource, /if \(isFloorplanLoading\) \{ showMessage\("기본 도면 로딩이 끝난 뒤 저장해 주세요\./, "floorplans cannot be saved while structures are loading");
 assert.match(editorSource, /group\.dataset\.baseFloorplanObject = "true";[\s\S]*group\.setAttribute\("pointer-events", "none"\)/, "event layouts render base structures as non-interactive background objects");
 assert.match(editorSource, /"fixed_wall"/, "event workspace recognizes fixed walls as base structures");
 assert.match(editorSource, /\["school", "스쿨식"\][\s\S]*\["hollow_square", "ㅁ-Shape"\]/, "layout library uses stable category codes");
