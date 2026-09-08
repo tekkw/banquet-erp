@@ -541,6 +541,34 @@
   gap: 10px;
 }
 
+.operations-status-grid { display:grid !important; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-top:18px; }
+.erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .operations-status-grid { display:grid !important; }
+.operation-status-heading { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.operation-status-heading h2 { margin:4px 0 0; }
+.operation-status-card { border:1px solid #dbe3ee; border-radius:16px; background:#fff; overflow:hidden; box-shadow:0 8px 22px rgba(15,23,42,.05); }
+.operation-status-card summary { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:92px; padding:18px; cursor:pointer; list-style:none; }
+.operation-status-card summary::-webkit-details-marker { display:none; }
+.operation-status-card summary span { display:grid; gap:5px; }
+.operation-status-card summary small { color:#64748b; font-size:15px; }
+.operation-status-card summary strong { color:#0f172a; font-size:28px; }
+.operation-status-card summary em { margin-left:auto; padding:5px 8px; border-radius:999px; background:#fff7ed; color:#c2410c; font-size:12px; font-style:normal; }
+.operation-status-card summary i { color:#64748b; font-style:normal; transition:transform .15s ease; }
+.operation-status-card[open] summary i { transform:rotate(180deg); }
+.operation-status-card ul { display:grid; gap:8px; margin:0; padding:0 18px 18px; list-style:none; }
+.operation-status-card li { display:flex; gap:9px; padding-top:9px; border-top:1px solid #eef2f7; color:#475569; font-size:14px; }
+.operation-status-card li time,.operation-status-card li strong { flex:0 0 auto; color:#0f172a; }
+.operation-status-card li span { min-width:0; }
+.setup-status-card { border-color:#fed7aa; }
+.operation-status-empty { color:#94a3b8 !important; }
+.daily-briefing-dialog { width:min(580px,calc(100vw - 28px)); border:0; border-radius:20px; padding:26px; box-shadow:0 28px 75px rgba(15,23,42,.3); }
+.daily-briefing-dialog::backdrop { background:rgba(15,23,42,.48); }
+.daily-briefing-dialog h2 { margin:6px 0 16px; }
+.daily-briefing-dialog section { margin-top:16px; padding:14px; border-radius:12px; background:#f8fafc; }
+.daily-briefing-dialog section h3 { margin:0 0 8px; font-size:16px; }
+.daily-briefing-dialog section ul { margin:0; padding-left:20px; }
+.daily-briefing-dialog form { display:flex; justify-content:flex-end; margin-top:20px; }
+@media (max-width:700px) { .operations-status-grid { grid-template-columns:1fr; } .operation-status-heading { align-items:flex-start; } .operation-status-heading .secondary-button { padding:8px 10px; } }
+
 .weekday-event-card {
   min-height: 108px;
 }

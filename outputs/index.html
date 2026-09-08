@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=ai-interview-review-20260711">
+  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-operations-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -80,12 +80,10 @@
           </button>
           <button class="dashboard-widget" type="button" data-dashboard-target="ai">
             <span class="widget-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/></svg><span class="widget-code">AI</span></span>
-            <strong>AI 추천 보기</strong>
-            <small>AI가 분석한 운영 포인트를 확인하세요.</small>
+            <strong>AI 비서</strong>
+            <small>연회 운영 정보를 확인하고 AI와 대화하세요.</small>
           </button>
         </div>
-
-        <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
 
         <section class="dashboard-operations-row" aria-label="운영 일정과 월간 캘린더">
           <article class="today-operations-card" aria-label="오늘 운영 일정">
@@ -157,17 +155,13 @@
           </article>
         </section>
 
-        <section class="weekly-events-grid" aria-label="주간 행사 요약">
-          <article class="weekday-event-card"><strong>월</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>화</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>수</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>목</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>금</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>토</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
-          <article class="weekday-event-card"><strong>일</strong><ul><li class="empty-weekday-event">행사 없음</li></ul></article>
+        <section class="operations-status-grid" aria-label="운영 현황">
+          <div class="operation-status-loading">운영 현황을 불러오는 중입니다.</div>
         </section>
 
-        <aside class="ai-chat-panel" aria-label="연회장 AI 비서">
+        <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
+
+        <aside class="ai-chat-panel" aria-label="연회장 AI 비서" hidden>
           <div class="ai-chat-header">
             <div>
               <h2>연회장 AI 비서</h2>
@@ -186,6 +180,10 @@
           </form>
           <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰"></section>
         </aside>
+        <dialog id="dailyBriefingDialog" class="daily-briefing-dialog" aria-labelledby="dailyBriefingTitle">
+          <div id="dailyBriefingContent"></div>
+          <form method="dialog"><button class="primary-button" value="confirm">확인</button></form>
+        </dialog>
       </section>
       </section>
 
@@ -1378,6 +1376,7 @@
     let similarEventsExpanded = false;
     let uploadedOriginalFile = null;
     let savedEvents = [];
+    let eventsLoaded = false;
     let banquetAssets = [];
     let venueDirectoryCache = null;
     let calendarDate = new Date();
@@ -3342,6 +3341,7 @@
         const rows = await fetchEventRowsFromSupabase();
         savedEvents = rows.map(mapDatabaseEvent);
         await enrichEventsForOperationBoard(savedEvents);
+        eventsLoaded = true;
         renderCalendar();
       } catch (error) {
         console.error(error);
@@ -3578,9 +3578,10 @@
 
     function renderDashboardOverview() {
       renderTodayOperations();
-      renderWeeklyEventCards();
+      renderOperationStatusCards();
       renderDashboardMonthWidget();
       window.BANQUET_ERP_OPERATION_BOARD?.render({ events: savedEvents });
+      renderDailyBriefing();
     }
 
     function renderTodayOperations() {
@@ -3679,44 +3680,40 @@
       return index >= 0 ? index : 100;
     }
 
-    function renderWeeklyEventCards() {
-      const grid = document.querySelector(".weekly-events-grid");
+    function renderOperationStatusCards() {
+      const grid = document.querySelector(".operations-status-grid");
       if (!grid) return;
-
       const today = new Date();
-      const weekStart = new Date(today);
-      const day = weekStart.getDay();
-      weekStart.setDate(weekStart.getDate() - ((day + 6) % 7));
-      const labels = ["월", "화", "수", "목", "금", "토", "일"];
+      const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+      const todayEvents = getEventsForDate(formatDateKey(today));
+      const tomorrowEvents = getEventsForDate(formatDateKey(tomorrow));
+      const setupBlocks = window.BANQUET_ERP_OPERATION_BOARD?.buildAutoBlocks(savedEvents, formatDateKey(today)).filter((block) => block.type === "next_setup") || [];
+      const eventRows = (events) => events.length ? events.map((eventItem) => `<li><time>${escapeHtml(getDashboardEventTime(eventItem))}</time><span>${escapeHtml(eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력")} / ${escapeHtml(getDashboardEventTitle(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</span></li>`).join("") : '<li class="operation-status-empty">등록된 행사가 없습니다.</li>';
+      const setupRows = setupBlocks.length ? setupBlocks.map((block) => `<li><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(block.eventName)} 종료<br>→ ${block.next ? `${escapeHtml(block.next.name)} · ${escapeHtml(block.next.layoutType || "형태 미지정")} · ${escapeHtml(block.next.people || "-")}명` : "다음 행사 없음"}</span></li>`).join("") : '<li class="operation-status-empty">세팅 변경이 없습니다.</li>';
+      grid.innerHTML = `<div class="operation-status-heading"><div><span class="eyebrow">Operations Status</span><h2>운영 현황</h2></div><button class="secondary-button" type="button" data-briefing-open>오늘 브리핑 다시 보기</button></div>
+        ${renderStatusCard("오늘 행사", todayEvents.length, eventRows(todayEvents), "today")}
+        ${renderStatusCard("내일 행사", tomorrowEvents.length, eventRows(tomorrowEvents), "tomorrow")}
+        ${renderStatusCard("세팅 변경", setupBlocks.length, setupRows, "setup", setupBlocks.length > 0)} `;
+      grid.querySelector("[data-briefing-open]")?.addEventListener("click", () => renderDailyBriefing(true));
+    }
 
-      grid.innerHTML = "";
-      labels.forEach((label, index) => {
-        const date = new Date(weekStart);
-        date.setDate(weekStart.getDate() + index);
-        const dateKey = formatDateKey(date);
-        const card = document.createElement("button");
-        card.type = "button";
-        card.className = "weekday-event-card";
-        card.addEventListener("click", () => goToCalendarDate(dateKey));
-        const title = document.createElement("strong");
-        title.textContent = label;
-        const dateLabel = document.createElement("span");
-        dateLabel.className = "weekday-event-date";
-        dateLabel.textContent = `${date.getMonth() + 1}.${date.getDate()}`;
-        const events = getEventsForDate(dateKey);
-        const count = document.createElement("span");
-        count.className = events.length ? "weekday-event-count" : "weekday-event-count empty-weekday-event";
-        count.textContent = events.length ? `행사 ${events.length}건` : "행사 없음";
-        const dots = document.createElement("span");
-        dots.className = "weekday-event-dots";
-        events.slice(0, 5).forEach((eventItem) => {
-          const dot = document.createElement("i");
-          dot.className = `weekday-event-dot event-color-${normalizeEventColorKey(eventItem.color)}`;
-          dots.append(dot);
-        });
-        card.append(title, dateLabel, count, dots);
-        grid.append(card);
-      });
+    function renderStatusCard(label, count, rows, kind, needsAttention = false) {
+      return `<details class="operation-status-card ${kind === "setup" ? "setup-status-card" : ""}"><summary><span><small>${escapeHtml(label)}</small><strong>${count}건</strong></span>${needsAttention ? '<em>확인 필요</em>' : ""}<i aria-hidden="true">⌄</i></summary><ul>${rows}</ul></details>`;
+    }
+
+    function renderDailyBriefing(force = false) {
+      const dialog = document.querySelector("#dailyBriefingDialog");
+      const content = document.querySelector("#dailyBriefingContent");
+      if (!dialog || !content || dialog.open || (!force && !eventsLoaded)) return;
+      const today = new Date(); const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+      const todayKey = formatDateKey(today); const tomorrowEvents = getEventsForDate(formatDateKey(tomorrow));
+      const setupBlocks = window.BANQUET_ERP_OPERATION_BOARD?.buildAutoBlocks(savedEvents, todayKey).filter((block) => block.type === "next_setup") || [];
+      const userKey = currentUser?.id || currentUser?.label || "user";
+      const seenKey = `banquet-erp-daily-briefing:${userKey}:${todayKey}`;
+      if (!force && localStorage.getItem(seenKey)) return;
+      content.innerHTML = `<span class="eyebrow">Daily Banquet Briefing</span><h2 id="dailyBriefingTitle">${today.getMonth() + 1}월 ${today.getDate()}일 오늘의 연회 브리핑</h2><p class="daily-briefing-count">오늘 등록 행사: <strong>${getEventsForDate(todayKey).length}건</strong></p><section><h3>내일 주요 일정</h3><ul>${tomorrowEvents.length ? tomorrowEvents.slice(0, 6).map((eventItem) => `<li>${escapeHtml(eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력")} ${escapeHtml(getDashboardEventTime(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</li>`).join("") : "<li>등록된 일정이 없습니다.</li>"}</ul></section><section><h3>오늘 준비할 사항</h3><ul>${setupBlocks.length ? setupBlocks.map((block) => `<li>${escapeHtml(block.venue)} · ${block.next ? `${escapeHtml(block.next.name)} 사전 세팅` : "다음 세팅 확인"}</li>`).join("") : "<li>추가 준비 사항이 없습니다.</li>"}</ul></section><section><h3>운영 체크</h3><p>세팅 변경 ${setupBlocks.length}건</p></section>`;
+      localStorage.setItem(seenKey, "shown");
+      dialog.showModal();
     }
 
     function goToCalendarDate(dateKey) {

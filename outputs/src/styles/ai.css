@@ -896,7 +896,6 @@ select {
     font-size: 16px;
   }
 
-  .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .weekly-events-grid,
   .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .dashboard-ai-summary-card,
   .erp-shell[data-active-page="home"]:not([data-active-target="ai"]) .ai-chat-panel {
     display: none !important;
