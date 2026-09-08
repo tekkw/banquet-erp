@@ -20,21 +20,27 @@ assert(html.includes('renderStatusCard("세팅 변경"'));
 assert(operationBoard.includes('<button type="button" data-board-cancel>취소</button>'));
 assert(!operationBoard.includes('<button value="cancel">취소</button>'));
 assert(html.includes('id="weeklySetupWidget"'));
-assert(html.includes('dashboardWidgets.js?v=dashboard-widgets-v6'));
+assert(html.includes('dashboardWidgets.js?v=dashboard-widgets-v7'));
 assert(dashboardWidgets.includes('banquet-erp-dashboard-layout-v1'));
-assert(dashboardWidgets.includes('data-widget-up'));
-assert(dashboardWidgets.includes('data-widget-down'));
 assert(dashboardWidgets.includes('data-widget-hide'));
+assert(dashboardWidgets.includes('widget-resize-handle'));
+assert(dashboardWidgets.includes('data-widget-col-delta'));
+assert(dashboardWidgets.includes('data-widget-row-delta'));
 assert(dashboardWidgets.includes("reorderLayout"));
+assert(dashboardWidgets.includes("resizeLayout"));
 assert(widgetStyles.includes('@media (max-width:768px)'));
 assert(widgetStyles.includes('grid-template-columns:minmax(0,1fr)'));
 assert(widgetStyles.includes('@media (max-width:360px)'));
-assert(widgetStyles.includes('grid-auto-rows:42px'));
-assert(widgetStyles.includes('[data-widget-size="small"] { grid-column:span 4; grid-row:span 4; }'));
-assert(widgetStyles.includes('[data-widget-size="medium"] { grid-column:span 6; grid-row:span 6; }'));
-assert(widgetStyles.includes('[data-widget-size="large"] { grid-column:1/-1; grid-row:span 9; }'));
+assert(widgetStyles.includes('grid-auto-rows:48px'));
+assert(widgetStyles.includes('grid-column:span var(--col-span,6)'));
+assert(widgetStyles.includes('grid-row:span var(--row-span,6)'));
 assert(widgetStyles.includes('grid-template-columns:repeat(2,minmax(0,1fr))'));
 assert(widgetStyles.includes('.dashboard-widget-shell.is-dragging'));
+assert(widgetStyles.includes('../../assets/sidebar/sidebar-hotel.jpg'));
+assert(fs.existsSync('outputs/assets/sidebar/sidebar-hotel.jpg'));
+assert(widgetStyles.includes('background-size:cover'));
+assert(widgetStyles.includes('background-position:center bottom'));
+assert(!widgetStyles.includes('content:"VENEZIA"'));
 assert(dashboardWidgets.includes('button.dataset.quickAction = "layouts"'));
 const widgetContext = { window: {}, document: { readyState: "loading", addEventListener() {} }, localStorage: { getItem() { return null; }, setItem() {} }, Intl, Date, Map, JSON };
 vm.createContext(widgetContext);
@@ -42,15 +48,20 @@ vm.runInContext(dashboardWidgets, widgetContext);
 const reordered = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.reorderLayout([{ id: "a" }, { id: "b" }, { id: "c" }], "a", "c");
 assert.strictEqual(reordered.map((item) => item.id).join(","), "b,c,a");
 const normalized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.normalize([
-  { id: "weekly-setup", visible: false, size: "large" },
+  { id: "weekly-setup", visible: false, colSpan: 9, rowSpan: 8 },
   null,
   { id: "unknown", visible: false, size: "small" },
-  { id: "quick", visible: true, size: "invalid" },
+  { id: "quick", visible: true, colSpan: 1, rowSpan: 1 },
   { id: "weekly-setup", visible: true, size: "small" },
 ]);
 assert.strictEqual(normalized.length, 6, "저장 레이아웃은 알려진 위젯마다 한 항목만 유지해야 한다");
 assert.strictEqual(normalized.map((item) => item.id).join(","), "weekly-setup,quick,today-operations,mini-calendar,operations-status,today-board");
-assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[0])), { id: "weekly-setup", visible: true, size: "small" });
-assert.strictEqual(normalized[1].size, "small", "잘못된 크기는 위젯 기본값으로 복원해야 한다");
-assert(dashboardWidgets.includes('clearPointerDrag(); clearDragFeedback();'), "네이티브 드래그 시작 시 포인터 폴백을 해제해야 한다");
+assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[0])), { id: "weekly-setup", visible: true, colSpan: 4, rowSpan: 5 });
+assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[1])), { id: "quick", visible: true, colSpan: 3, rowSpan: 3 });
+const resized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.resizeLayout(normalized, "today-board", { colSpan: 2, rowSpan: 30 });
+assert.strictEqual(resized.find((item) => item.id === "today-board").colSpan, 6, "위젯별 최소 가로 span을 지켜야 한다");
+assert.strictEqual(resized.find((item) => item.id === "today-board").rowSpan, 12, "최대 세로 span을 지켜야 한다");
+assert(dashboardWidgets.includes('function handleDragStart(event)'));
+assert(dashboardWidgets.includes('clearPointerDrag();'));
+assert(dashboardWidgets.includes('clearDragFeedback();'));
 console.log("dashboard-overview-v1 tests passed");
