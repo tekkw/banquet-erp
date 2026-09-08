@@ -85,6 +85,8 @@
           </button>
         </div>
 
+        <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
+
         <section class="dashboard-operations-row" aria-label="운영 일정과 월간 캘린더">
           <article class="today-operations-card" aria-label="오늘 운영 일정">
             <div class="section-heading">
@@ -1094,6 +1096,7 @@
 <script src="./src/floorplanEditor.js?v=layout-library-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=layout-library-v1-race-fix"></script>
   <script src="./src/aiAssistant.js"></script>
+  <script src="./src/operationBoard.js?v=login-briefing-v1"></script>
   <script>
     /*
      * 역할:
@@ -3338,11 +3341,21 @@
       try {
         const rows = await fetchEventRowsFromSupabase();
         savedEvents = rows.map(mapDatabaseEvent);
+        await enrichEventsForOperationBoard(savedEvents);
         renderCalendar();
       } catch (error) {
         console.error(error);
         setStatus("Supabase Database에서 행사 데이터를 불러오지 못했습니다.", "warn");
       }
+    }
+
+    async function enrichEventsForOperationBoard(events) {
+      await Promise.all((events || []).map((eventItem) => resolveAndApplyVenueInfo(eventItem).catch(() => null)));
+      const layouts = await supabaseRequest("venue_layouts?select=id,space_id,layout_name,layout_type,min_people,max_people,is_active&is_active=eq.true").catch(() => []);
+      (events || []).forEach((eventItem) => {
+        const spaceIds = new Set(eventItem.venueSpaceIds || []);
+        eventItem.venueLayouts = (layouts || []).filter((layout) => spaceIds.has(layout.space_id));
+      });
     }
 
     async function fetchEventRowsFromSupabase() {
@@ -3567,6 +3580,7 @@
       renderTodayOperations();
       renderWeeklyEventCards();
       renderDashboardMonthWidget();
+      window.BANQUET_ERP_OPERATION_BOARD?.render({ events: savedEvents });
     }
 
     function renderTodayOperations() {
