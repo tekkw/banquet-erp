@@ -3,6 +3,7 @@
   const TYPES = { start: "행사 시작", lunch: "중식", dinner: "석식", coffee: "커피브레이크", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
   const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#c2410c", "#be123c", "#4f46e5", "#15803d", "#a16207"];
   let root;
+  let weeklyRoot;
   let currentEvents = [];
   let state = loadState();
   let remoteStatus = "idle";
@@ -161,6 +162,7 @@
   }
   function render({ events = currentEvents } = {}) {
     root = root || document.getElementById("todayOperationBoard");
+    weeklyRoot = weeklyRoot || document.getElementById("weeklySetupWidget");
     if (!root) return;
     currentEvents = events;
     hydrateRemote();
@@ -173,8 +175,8 @@
       <div class="operation-briefing-counts"><span>오늘 행사 <strong>${todayEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
       <div class="operation-board-title"><h3>오늘 운영보드</h3><small>완료 상태와 직접 작업은 새로고침 후에도 유지됩니다.</small></div>
       <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">오늘 표시할 운영 일정이 없습니다. 직접 작업을 추가할 수 있습니다.</p>'}</div>
-      ${renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents))}
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>`;
+    if (weeklyRoot) weeklyRoot.innerHTML = renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents));
     bindEvents();
   }
   function renderWeeklySetupSection(tasks) {
@@ -192,8 +194,8 @@
     const dialog = root.querySelector(".operation-dialog");
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
-    root.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
-    root.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
+    weeklyRoot?.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
+    weeklyRoot?.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
     root.querySelectorAll("[data-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-key]").dataset.key; state.completions[key] = input.checked; const block = allBlocks().find((x) => x.key === key); if (block) block.completed = input.checked; const manual = state.manual.find((x) => x.key === key); if (manual) manual.completed = input.checked; saveState(); if (block) syncItem(block); render(); });
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
     root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = state.manual.find((x) => x.key === key); state.manual = state.manual.filter((x) => x.key !== key); delete state.completions[key]; saveState(); if (remoteStatus === "ready" && item) remoteRequest(`operation_board_items?board_date=eq.${item.date}&item_key=eq.${encodeURIComponent(key)}`, { method: "DELETE" }).catch(console.error); render(); });
