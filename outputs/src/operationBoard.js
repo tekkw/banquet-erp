@@ -97,8 +97,8 @@
     return ranked[0]?.score ? ranked[0].layout.layout_name : "추천 레이아웃 없음";
   }
   function loadState() {
-    try { return { completions: {}, manual: [], checklist: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
-    catch { return { completions: {}, manual: [], checklist: [] }; }
+    try { return { completions: {}, plans: {}, manual: [], checklist: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+    catch { return { completions: {}, plans: {}, manual: [], checklist: [] }; }
   }
   function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   async function remoteRequest(path, options = {}) {
@@ -119,6 +119,7 @@
       ]);
       (items || []).forEach((row) => {
         state.completions[row.item_key] = !!row.is_completed;
+        if (row.metadata?.plannedDate) state.plans[row.item_key] = row.metadata.plannedDate;
         if (row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, title: row.title, memo: row.memo || "", completed: !!row.is_completed }];
       });
       state.checklist = (checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }));
@@ -127,7 +128,7 @@
   }
   function syncItem(item) {
     if (remoteStatus !== "ready") return;
-    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" ? "next_setup" : "auto", item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { spaceKey: item.spaceId } };
+    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type } };
     remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) }).catch(console.error);
   }
   function syncChecklist(item, removed = false) {
@@ -139,6 +140,24 @@
   function allBlocks() {
     const today = dateKey();
     return [...buildAutoBlocks(currentEvents, today), ...state.manual.filter((x) => x.date === today)].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
+  }
+  function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
+  function weekEnd(today) { const date = new Date(`${today}T12:00:00`); date.setDate(date.getDate() + (7 - date.getDay()) % 7); return dateKey(date); }
+  function buildWeeklySetupTasks(events, today = dateKey()) {
+    const sunday = weekEnd(today); const tasks = new Map();
+    (events || []).forEach((event) => {
+      const eventDate = eventDates(event).filter((day) => day >= today && day <= sunday).sort()[0];
+      if (!eventDate) return;
+      const spaces = event.venueSpaces?.length ? event.venueSpaces : [{ id: spaceKey({}, event), spaceName: event.venue || "장소 미입력" }];
+      spaces.forEach((space) => {
+        const key = `weekly-setup:${event.id}:${space.id}`; if (tasks.has(key)) return;
+        const priorEnd = (events || []).filter((other) => other.id !== event.id && (other.venueSpaceIds || []).includes(space.id)).flatMap((other) => eventDates(other)).filter((day) => day < eventDate).sort().pop();
+        const suggested = priorEnd || addDays(eventDate, -4); const plannedDate = state.plans[key] || (suggested < today ? today : suggested);
+        const layoutType = inferLayoutType(event); const layouts = (event.venueLayouts || []).filter((layout) => !layout.space_id || layout.space_id === space.id);
+        tasks.set(key, { key, kind: "weekly_setup", type: "weekly_setup", eventOrderId: event.id, spaceId: space.id, venue: space.spaceName || event.venue || "장소 미입력", date: today, eventDate, plannedDate, title: event.eventName || "행사", people: event.guestCount || "", layoutType, recommendation: recommendLayout(layouts, layoutType, event.guestCount), completed: !!state.completions[key] });
+      });
+    });
+    return [...tasks.values()].sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.eventDate.localeCompare(b.eventDate));
   }
   function render({ events = currentEvents } = {}) {
     root = root || document.getElementById("todayOperationBoard");
@@ -154,8 +173,14 @@
       <div class="operation-briefing-counts"><span>오늘 행사 <strong>${todayEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
       <div class="operation-board-title"><h3>오늘 운영보드</h3><small>완료 상태와 직접 작업은 새로고침 후에도 유지됩니다.</small></div>
       <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">오늘 표시할 운영 일정이 없습니다. 직접 작업을 추가할 수 있습니다.</p>'}</div>
-      <dialog class="operation-dialog"><form method="dialog" data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button value="cancel">취소</button><button class="primary-button" value="save">저장</button></div></form></dialog>`;
+      ${renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents))}
+      <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>`;
     bindEvents();
+  }
+  function renderWeeklySetupSection(tasks) {
+    const active = tasks.filter((item) => !item.completed); const completed = tasks.filter((item) => item.completed);
+    const row = (item) => `<article class="weekly-setup-item" data-setup-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-setup-complete ${item.completed ? "checked" : ""}><span><strong>${escapeHtml(item.venue)}</strong><small>${escapeHtml(item.eventDate)} · ${escapeHtml(item.title)} · ${escapeHtml(item.people || "-")}명</small><small>${escapeHtml(item.layoutType || "형태 미지정")} · ${escapeHtml(item.recommendation)}</small></span></label><label class="setup-plan-date">세팅 예정일<input type="date" data-setup-date min="${dateKey()}" max="${weekEnd(dateKey())}" value="${escapeHtml(item.plannedDate)}"></label></article>`;
+    return `<section class="weekly-setup-section"><div class="operation-board-title"><div><span class="eyebrow">Weekly Setup</span><h3>이번 주 세팅 할 일</h3></div><strong>${active.length}건</strong></div><div class="weekly-setup-group"><h4>오늘 해야 함</h4>${active.filter((item) => item.plannedDate <= dateKey()).map(row).join("") || "<p>오늘 예정된 세팅이 없습니다.</p>"}</div><div class="weekly-setup-group"><h4>이번 주 예정</h4>${active.filter((item) => item.plannedDate > dateKey()).map(row).join("") || "<p>예정된 세팅이 없습니다.</p>"}</div><details class="completed-setup-list"><summary>완료한 세팅 보기 (${completed.length})</summary>${completed.map(row).join("") || "<p>완료한 세팅이 없습니다.</p>"}</details></section>`;
   }
   function renderBlock(block) {
     const checklist = block.type === "next_setup" ? state.checklist.filter((x) => x.parentKey === block.key) : [];
@@ -163,6 +188,12 @@
   }
   function bindEvents() {
     root.querySelector("[data-board-add]").onclick = () => openDialog();
+    root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
+    const dialog = root.querySelector(".operation-dialog");
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
+    dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
+    root.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
+    root.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
     root.querySelectorAll("[data-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-key]").dataset.key; state.completions[key] = input.checked; const block = allBlocks().find((x) => x.key === key); if (block) block.completed = input.checked; const manual = state.manual.find((x) => x.key === key); if (manual) manual.completed = input.checked; saveState(); if (block) syncItem(block); render(); });
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
     root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = state.manual.find((x) => x.key === key); state.manual = state.manual.filter((x) => x.key !== key); delete state.completions[key]; saveState(); if (remoteStatus === "ready" && item) remoteRequest(`operation_board_items?board_date=eq.${item.date}&item_key=eq.${encodeURIComponent(key)}`, { method: "DELETE" }).catch(console.error); render(); });
@@ -170,10 +201,11 @@
     root.querySelectorAll("[data-check-item]").forEach((input) => input.onchange = () => { const item = state.checklist.find((x) => x.id === input.closest("[data-item-id]").dataset.itemId); if (item) { item.completed = input.checked; syncChecklist(item); } saveState(); render(); });
     root.querySelectorAll("[data-delete-item]").forEach((button) => button.onclick = () => { const id = button.closest("[data-item-id]").dataset.itemId; const item = state.checklist.find((x) => x.id === id); state.checklist = state.checklist.filter((x) => x.id !== id); saveState(); if (item) syncChecklist(item, true); render(); });
   }
+  function closeDialog() { const dialog = root.querySelector(".operation-dialog"); dialog.querySelector("form").reset(); dialog.close(); }
   function openDialog(item) {
     const dialog = root.querySelector(".operation-dialog"); const form = dialog.querySelector("form"); form.reset();
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
-    dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); if (event.submitter?.value !== "save") { dialog.close(); return; } const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); dialog.close(); render(); };
+    dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, buildAutoBlocks, recommendLayout, _setStateForTest(value) { state = value; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, manual: [], checklist: [], ...value }; } };
 })();

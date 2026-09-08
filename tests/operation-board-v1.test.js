@@ -51,4 +51,15 @@ const next = board.buildAutoBlocks(nextFixture, today).find((item) => item.type 
 assert(next, "종료 공간에는 다음 세팅 블록이 있어야 한다");
 assert.strictEqual(next.next.name, "다음 행사");
 assert.strictEqual(next.next.recommendation, "스쿨 120");
+
+board._setStateForTest({ completions: {}, plans: {}, manual: [], checklist: [] });
+const weeklyEvents = [
+  { id: "previous", eventName: "앞 행사", calendarDates: ["2026-09-08"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }] },
+  { id: "setup-target", eventName: "주간 행사", calendarDates: ["2026-09-10"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }], guestCount: 100, internalMemo: "스쿨식", venueLayouts: layouts.map((layout) => ({ ...layout, space_id: "space-f" })) },
+];
+const weekly = board.buildWeeklySetupTasks(weeklyEvents, today);
+const targetTasks = weekly.filter((item) => item.eventOrderId === "setup-target" && item.spaceId === "space-f");
+assert.strictEqual(targetTasks.length, 1, "같은 행사와 공간은 하나의 세팅 할 일만 생성해야 한다");
+assert.strictEqual(targetTasks[0].plannedDate, today, "앞 행사 종료일을 세팅 예정일로 우선 추천해야 한다");
+assert.strictEqual(targetTasks[0].recommendation, "스쿨 120", "같은 공간의 레이아웃을 추천해야 한다");
 console.log("operation-board-v1 tests passed");

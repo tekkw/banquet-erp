@@ -78,7 +78,22 @@
 .operation-dialog form,.operation-dialog label { display:grid; gap:8px; }
 .operation-dialog form { gap:14px; }
 .operation-dialog input,.operation-dialog textarea { box-sizing:border-box; width:100%; border:1px solid #cbd5e1; border-radius:9px; padding:10px; font:inherit; }
+.weekly-setup-section { margin-top:22px; padding-top:20px; border-top:1px solid #e2e8f0; }
+.weekly-setup-group { display:grid; gap:8px; margin-top:14px; }
+.weekly-setup-group h4 { margin:0; color:#334155; }
+.weekly-setup-group>p,.completed-setup-list>p { margin:0; padding:12px; border-radius:10px; background:#f8fafc; color:#94a3b8; }
+.weekly-setup-item { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px; border:1px solid #e2e8f0; border-radius:11px; background:#fff; }
+.weekly-setup-item>label:first-child { display:flex; align-items:flex-start; gap:10px; min-width:0; }
+.weekly-setup-item input[type="checkbox"] { width:19px; height:19px; accent-color:#0f766e; }
+.weekly-setup-item span { display:grid; gap:3px; min-width:0; }
+.weekly-setup-item small { color:#64748b; }
+.setup-plan-date { display:grid; gap:4px; flex:0 0 auto; color:#64748b; font-size:12px; }
+.setup-plan-date input { border:1px solid #cbd5e1; border-radius:8px; padding:7px; font:inherit; }
+.completed-setup-list { margin-top:16px; border-top:1px dashed #cbd5e1; padding-top:12px; }
+.completed-setup-list summary { cursor:pointer; color:#475569; font-weight:700; }
+.completed-setup-list .weekly-setup-item { margin-top:8px; opacity:.7; }
 @media (max-width:700px) { .operation-board { padding:15px; } .operation-briefing-counts { grid-template-columns:repeat(2,minmax(0,1fr)); } .operation-time-group { grid-template-columns:52px 1fr; gap:8px; } .operation-block { flex-wrap:wrap; } .operation-block-actions { width:100%; justify-content:flex-end; } }
+@media (max-width:700px) { .weekly-setup-item { align-items:stretch; flex-direction:column; } .setup-plan-date { grid-template-columns:auto 1fr; align-items:center; } }
 
 .similar-event-title {
   display: flex;
