@@ -20,7 +20,7 @@ assert(html.includes('renderStatusCard("세팅 변경"'));
 assert(operationBoard.includes('<button type="button" data-board-cancel>취소</button>'));
 assert(!operationBoard.includes('<button value="cancel">취소</button>'));
 assert(html.includes('id="weeklySetupWidget"'));
-assert(html.includes('dashboardWidgets.js?v=dashboard-widgets-v4'));
+assert(html.includes('dashboardWidgets.js?v=dashboard-widgets-v5'));
 assert(dashboardWidgets.includes('banquet-erp-dashboard-layout-v1'));
 assert(dashboardWidgets.includes('data-widget-up'));
 assert(dashboardWidgets.includes('data-widget-down'));
@@ -34,4 +34,16 @@ vm.createContext(widgetContext);
 vm.runInContext(dashboardWidgets, widgetContext);
 const reordered = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.reorderLayout([{ id: "a" }, { id: "b" }, { id: "c" }], "a", "c");
 assert.strictEqual(reordered.map((item) => item.id).join(","), "b,c,a");
+const normalized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.normalize([
+  { id: "weekly-setup", visible: false, size: "large" },
+  null,
+  { id: "unknown", visible: false, size: "small" },
+  { id: "quick", visible: true, size: "invalid" },
+  { id: "weekly-setup", visible: true, size: "small" },
+]);
+assert.strictEqual(normalized.length, 6, "저장 레이아웃은 알려진 위젯마다 한 항목만 유지해야 한다");
+assert.strictEqual(normalized.map((item) => item.id).join(","), "weekly-setup,quick,today-operations,mini-calendar,operations-status,today-board");
+assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[0])), { id: "weekly-setup", visible: true, size: "small" });
+assert.strictEqual(normalized[1].size, "small", "잘못된 크기는 위젯 기본값으로 복원해야 한다");
+assert(dashboardWidgets.includes('pointerDragId = ""; pointerDragTargetId = ""; event.dataTransfer.setData'), "네이티브 드래그 시작 시 포인터 폴백을 해제해야 한다");
 console.log("dashboard-overview-v1 tests passed");
