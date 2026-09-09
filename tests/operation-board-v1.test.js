@@ -52,6 +52,16 @@ assert(next, "종료 공간에는 다음 세팅 블록이 있어야 한다");
 assert.strictEqual(next.next.name, "다음 행사");
 assert.strictEqual(next.next.recommendation, "스쿨 120");
 
+const searchWindowFixture = [
+  nextFixture[0],
+  { ...nextFixture[1], id: "outside-window", eventName: "31일 뒤 행사", calendarDates: ["2026-10-09"], schedule: [{ date: "2026-10-09", time: "09:00", content: "행사 시작", venue: "페스타" }] },
+  { ...nextFixture[1], id: "other-space", eventName: "다른 공간 행사", calendarDates: ["2026-09-09"], venueSpaceIds: ["space-other"], schedule: [{ date: "2026-09-09", time: "09:00", content: "행사 시작", venue: "다른 공간", spaceId: "space-other" }] },
+];
+const noNextIn30Days = board.buildAutoBlocks(searchWindowFixture, today).find((item) => item.type === "next_setup");
+assert(noNextIn30Days, "행사 종료 공간에는 다음 세팅 블록이 유지되어야 한다");
+assert.strictEqual(noNextIn30Days.next, null, "30일 밖 행사와 다른 공간 행사는 다음 행사로 선택하면 안 된다");
+assert(fs.readFileSync("outputs/src/operationBoard.js", "utf8").includes("30일 이내 예정된 다음 행사가 없습니다."));
+
 board._setStateForTest({ completions: {}, plans: {}, manual: [], checklist: [] });
 const weeklyEvents = [
   { id: "previous", eventName: "앞 행사", calendarDates: ["2026-09-08"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }] },
