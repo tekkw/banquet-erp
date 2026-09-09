@@ -65,6 +65,43 @@
   --density-gap-sm: 8px;
   --density-gap-md: 12px;
   --density-gap-lg: 16px;
+
+  /* Shared dark ERP theme */
+  --app-bg: #06111F;
+  --sidebar-bg: #071A31;
+  --surface-primary: #102A40;
+  --surface-secondary: #0D2235;
+  --surface-elevated: #132F46;
+  --surface-input: #081A2B;
+  --calendar-day-bg: #0B1C2B;
+  --calendar-day-hover: #123149;
+  --border: rgba(150, 180, 205, 0.18);
+  --border-strong: rgba(150, 180, 205, 0.30);
+  --text-primary: #F4F7FA;
+  --text-muted: #96A9BA;
+  --accent-gold: #D6B35A;
+  --accent-blue: #4C8DFF;
+  --accent-mint: #49C7A3;
+
+  color-scheme: dark;
+  --bg: var(--app-bg);
+  --surface: var(--surface-secondary);
+  --line: var(--border);
+  --line-strong: var(--border-strong);
+  --text: var(--text-primary);
+  --muted: var(--text-muted);
+  --brand: var(--accent-mint);
+  --brand-dark: #72D6BA;
+  --theme-bg: var(--app-bg);
+  --theme-card: var(--surface-secondary);
+  --theme-border: var(--border);
+  --theme-text: var(--text-primary);
+  --theme-muted: var(--text-muted);
+  --theme-gold: var(--accent-gold);
+  --theme-navy: var(--surface-primary);
+  --theme-navy-dark: var(--sidebar-bg);
+  --theme-soft-navy: var(--surface-elevated);
+  --theme-gold-soft: rgba(214, 179, 90, 0.12);
 }
 
 /* ERP page routing layer.

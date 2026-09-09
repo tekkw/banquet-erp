@@ -1,0 +1,501 @@
+/*
+ * Shared dark theme layer for ERP pages.
+ * This file intentionally overrides presentation only. Feature geometry,
+ * event colors, handlers, and data behavior remain owned by their modules.
+ */
+
+body,
+.erp-shell,
+.erp-workspace,
+.erp-page {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+.erp-shell {
+  min-height: calc(100vh - 154px);
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 18px;
+  padding: 18px 24px 32px;
+}
+
+.erp-workspace,
+.erp-page,
+.tab-panel {
+  min-width: 0;
+}
+
+.erp-page h1,
+.erp-page h2,
+.erp-page h3,
+.erp-page h4,
+.erp-page strong,
+.erp-page label {
+  color: var(--text-primary);
+}
+
+.erp-page p,
+.erp-page small,
+.erp-page .subtle,
+.erp-page .eyebrow {
+  color: var(--text-muted);
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) :where(input, select, textarea) {
+  color-scheme: dark;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) :where(input, select, textarea)::placeholder {
+  color: color-mix(in srgb, var(--text-muted) 74%, transparent);
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) :where(input, select, textarea):focus {
+  border-color: var(--accent-gold);
+  outline: 2px solid color-mix(in srgb, var(--accent-gold) 22%, transparent);
+  outline-offset: 1px;
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) button:not(.danger-button):not(.calendar-event-bar):not(.event-pill) {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) button:not(.danger-button):hover {
+  border-color: color-mix(in srgb, var(--accent-gold) 54%, transparent);
+  background: #173A55;
+}
+
+:is(#calendarPage, #assetsPage, #layoutsPage, #aiPage) .primary-button {
+  border-color: color-mix(in srgb, var(--accent-blue) 64%, transparent) !important;
+  background: #285EAC !important;
+  color: #FFFFFF !important;
+}
+
+/* Dashboard surface hierarchy and mini-calendar cells */
+.dashboard-widget-shell[data-widget-id="today-board"] > .operation-board,
+.dashboard-widget-shell[data-widget-id="weekly-setup"] > .operation-board {
+  background: var(--surface-primary);
+}
+
+.dashboard-widget-shell[data-widget-id="operations-status"] > .operations-status-grid,
+.dashboard-widget-shell[data-widget-id="mini-calendar"] > .dashboard-month-card,
+.dashboard-widget-shell[data-widget-id="quick"] > .dashboard-widget-grid {
+  background: var(--surface-secondary);
+}
+
+.dashboard-widget-shell .mini-day {
+  min-height: 31px;
+  border: 1px solid var(--border);
+  background: var(--calendar-day-bg);
+}
+
+.dashboard-widget-shell button.mini-day:hover {
+  border-color: var(--border-strong);
+  background: var(--calendar-day-hover);
+}
+
+.dashboard-widget-shell .mini-day.selected {
+  border-color: var(--accent-gold);
+  background: var(--accent-gold);
+  color: #142238;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 35%, transparent);
+}
+
+.dashboard-widget-shell .mini-day.outside {
+  border-color: rgba(150, 180, 205, 0.08);
+  background: rgba(8, 26, 43, 0.58);
+}
+
+/* Calendar */
+#calendarPage {
+  padding: 0;
+}
+
+#calendarPage .calendar-section {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 14px 36px rgba(0, 5, 15, 0.18);
+}
+
+#calendarPage .calendar-header {
+  border-bottom: 1px solid var(--border);
+}
+
+#calendarPage .calendar-title {
+  color: var(--text-primary);
+}
+
+#calendarPage .export-panel,
+#calendarPage .calendar-save-settings {
+  border: 1px solid var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+#calendarPage .export-field label {
+  color: var(--text-muted);
+}
+
+#calendarPage .calendar-grid {
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--border);
+}
+
+#calendarPage .weekday {
+  border-color: var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-muted);
+}
+
+#calendarPage .calendar-week {
+  gap: 0;
+  background: var(--border);
+}
+
+#calendarPage .calendar-day {
+  border: 1px solid var(--border);
+  background: var(--calendar-day-bg);
+  color: var(--text-primary);
+}
+
+#calendarPage .calendar-day:hover {
+  border-color: var(--border-strong);
+  background: var(--calendar-day-hover);
+}
+
+#calendarPage .calendar-day.outside {
+  background: #081723;
+  color: rgba(150, 169, 186, 0.44);
+}
+
+#calendarPage .calendar-day.today {
+  border-color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 11%, var(--calendar-day-bg));
+}
+
+#calendarPage .calendar-day.today .day-number {
+  background: var(--accent-gold);
+  color: #142238;
+}
+
+#calendarPage .calendar-day.selected {
+  border-color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--calendar-day-bg));
+}
+
+#calendarPage .calendar-event-bar,
+#calendarPage .event-pill {
+  border-color: rgba(255, 255, 255, 0.22);
+  box-shadow: 0 4px 12px rgba(0, 5, 15, 0.26);
+}
+
+#calendarPage .event-pill-name,
+#calendarPage .event-pill-type,
+#calendarPage .calendar-overflow-count {
+  color: #FFFFFF;
+}
+
+/* Assets */
+#assetsPage .asset-section {
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 14px 36px rgba(0, 5, 15, 0.18);
+}
+
+#assetsPage .asset-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-primary);
+}
+
+#assetsPage .asset-form {
+  grid-template-columns: minmax(140px, 2fr) 54px minmax(110px, 1fr) 60px minmax(140px, 1.2fr) 112px 110px auto auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-primary);
+}
+
+#assetsPage .asset-image-picker {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+#assetsPage .asset-image-preview,
+#assetsPage .asset-no-image {
+  border-color: var(--border-strong);
+  background: var(--calendar-day-bg);
+  color: var(--text-muted);
+}
+
+#assetsPage .asset-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  background: var(--surface-secondary);
+}
+
+#assetsPage .asset-table {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+#assetsPage .asset-table th {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: #C9D5DE;
+}
+
+#assetsPage .asset-table td {
+  border: 1px solid var(--border);
+  background: var(--calendar-day-bg);
+  color: var(--text-primary);
+}
+
+#assetsPage .asset-table tbody tr:nth-child(even) td {
+  background: #0D2436;
+}
+
+#assetsPage .asset-table tbody tr:hover td {
+  background: var(--calendar-day-hover);
+}
+
+#assetsPage .asset-actions .danger-button {
+  border-color: rgba(238, 155, 155, 0.42);
+  background: rgba(157, 36, 36, 0.18);
+  color: #FFB4B4;
+}
+
+/* Space and layout */
+#layoutsPage {
+  color: var(--text-primary);
+}
+
+#layoutsPage .space-layout-page-header,
+#layoutsPage .layout-collapsible-section,
+#layoutsPage .floorplan-v2-panel,
+#layoutsPage .layout-editor-workbench,
+#layoutsPage .venue-layout-section {
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 14px 36px rgba(0, 5, 15, 0.14);
+}
+
+#layoutsPage .space-layout-page-header,
+#layoutsPage .floorplan-v2-panel {
+  border-radius: 14px;
+}
+
+#layoutsPage .layout-collapsible-summary,
+#layoutsPage .asset-header,
+#layoutsPage .layout-editor-heading,
+#layoutsPage .layout-editor-toolbar,
+#layoutsPage .layout-editor-statusbar {
+  border-color: var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+#layoutsPage .floorplan-v2-mode-switch {
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+}
+
+#layoutsPage .floorplan-v2-mode-switch button.active,
+#layoutsPage .layout-library-filters button.active,
+#layoutsPage .layout-editor-toolbar button.is-active {
+  border-color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-elevated));
+  color: var(--accent-gold);
+}
+
+#layoutsPage .asset-form,
+#layoutsPage .floorplan-v2-form-card,
+#layoutsPage .floorplan-v2-preview-card,
+#layoutsPage .layout-editor-properties,
+#layoutsPage .layout-editor-palette,
+#layoutsPage .layout-library-card,
+#layoutsPage .layout-library-modal-card {
+  border: 1px solid var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+#layoutsPage .layout-library-base-card {
+  background: linear-gradient(135deg, var(--surface-primary), color-mix(in srgb, var(--accent-gold) 7%, var(--surface-primary)));
+}
+
+#layoutsPage .floorplan-v2-empty,
+#layoutsPage .floorplan-v2-structures,
+#layoutsPage .layout-floorplan-info,
+#layoutsPage .object-type-live-preview,
+#layoutsPage .asset-image-picker,
+#layoutsPage .asset-image-preview,
+#layoutsPage .asset-no-image {
+  border-color: var(--border);
+  background: var(--calendar-day-bg);
+  color: var(--text-muted);
+}
+
+#layoutsPage .asset-table-wrap,
+#layoutsPage .floorplan-v2-wall-table-wrap {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-secondary);
+}
+
+#layoutsPage :where(.asset-table th, .floorplan-v2-wall-table-wrap th) {
+  border-color: var(--border);
+  background: var(--surface-elevated);
+  color: #C9D5DE;
+}
+
+#layoutsPage :where(.asset-table td, .floorplan-v2-wall-table-wrap td) {
+  border-color: var(--border);
+  background: var(--calendar-day-bg);
+  color: var(--text-primary);
+}
+
+#layoutsPage .layout-view-menu[open],
+#layoutsPage .layout-view-menu label,
+#layoutsPage .layout-new-options,
+#layoutsPage .layout-preview-body {
+  border-color: var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+/* Keep technical drawing surfaces light for precise geometry work. */
+#layoutsPage #floorplanV2Preview,
+#layoutsPage .layout-editor-canvas-svg,
+.floorplan-canvas-wrap,
+#floorplanEditorCanvas {
+  color-scheme: light;
+  background-color: #FFFFFF;
+}
+
+/* AI assistant */
+#aiPage .ai-assistant-page {
+  background: var(--app-bg);
+  color: var(--text-primary);
+}
+
+#aiPage .ai-page-header,
+#aiPage .ai-conversation-panel,
+#aiPage .ai-main-panel,
+#aiPage .ai-reference-card {
+  border: 1px solid var(--border);
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 14px 36px rgba(0, 5, 15, 0.16);
+}
+
+#aiPage .ai-page-header {
+  border-radius: 14px;
+}
+
+#aiPage .ai-page-bot-icon {
+  border-color: color-mix(in srgb, var(--accent-gold) 70%, transparent);
+  background: var(--surface-primary);
+  color: var(--accent-gold);
+}
+
+#aiPage .ai-mode-tabs,
+#aiPage .ai-panel-heading,
+#aiPage .ai-page-chat-form {
+  border-color: var(--border);
+  background: var(--surface-primary);
+}
+
+#aiPage .ai-mode-tabs button {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+#aiPage .ai-mode-tabs button.active {
+  border-color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 13%, var(--surface-elevated));
+  color: var(--accent-gold);
+}
+
+#aiPage .ai-main-scroll,
+#aiPage .ai-page-messages {
+  background: var(--calendar-day-bg);
+}
+
+#aiPage .ai-conversation-item,
+#aiPage .ai-reference-list > *,
+#aiPage .ai-knowledge-summary-card,
+#aiPage .ai-knowledge-summary-row,
+#aiPage .ai-learning-stats > div,
+#aiPage .ai-question-candidate,
+#aiPage .ai-knowledge-row,
+#aiPage .ai-direct-teach-section,
+#aiPage .ai-follow-up-question {
+  border-color: var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+#aiPage .ai-conversation-item:hover,
+#aiPage .ai-conversation-item.active {
+  border-color: color-mix(in srgb, var(--accent-gold) 52%, transparent);
+  background: #173A55;
+}
+
+#aiPage .ai-page-message.assistant .ai-page-bubble {
+  border: 1px solid var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+}
+
+#aiPage .ai-page-message.user .ai-page-bubble {
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, transparent);
+  background: #173A55;
+  color: #F7FAFC;
+}
+
+#aiPage .ai-page-message.error .ai-page-bubble {
+  border-color: rgba(220, 38, 38, 0.38);
+  background: rgba(127, 29, 29, 0.28);
+  color: #FFC5C5;
+}
+
+#aiPage .ai-page-chat-form textarea {
+  border-color: var(--border-strong);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+#aiPage .ai-reference-empty,
+#aiPage .ai-conversation-list:empty::after {
+  color: var(--text-muted);
+}
+
+@media (max-width: 768px) {
+  .erp-shell {
+    min-height: 100vh;
+    display: block;
+    padding: 12px 12px 88px;
+  }
+
+  #calendarPage .calendar-section,
+  #assetsPage .asset-section {
+    padding: 14px;
+  }
+}
