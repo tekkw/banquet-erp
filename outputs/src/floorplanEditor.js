@@ -242,6 +242,10 @@
     function isWorkspaceBaseObject(object) {
       return Boolean(object?.metadata?.baseFloorplanObject) || fixedObjectTypes.has(object?.objectType);
     }
+
+    function isWorkspaceFixedMaster(master) {
+      return fixedObjectTypes.has(master?.object_type) || /고정/.test(String(master?.category || ""));
+    }
     const defaultObjectTypes = [
       { object_name: "\uAE30\uB465", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "pillar", default_width_m: 0.8, default_height_m: 0.8, default_seat_count: null, display_shape: "circle", can_resize: true, can_rotate: false, is_active: true },
       { object_name: "\uBB38", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "door", default_width_m: 1.2, default_height_m: 0.25, default_seat_count: null, display_shape: "rect", can_resize: true, can_rotate: true, is_active: true },
@@ -417,6 +421,7 @@
       const keyword = String(searchInput?.value || "").trim().toLowerCase();
       const rows = layoutObjectTypes
         .filter((item) => item.is_active !== false)
+        .filter((item) => !isWorkspace || (workspaceEditMode === "base" ? isWorkspaceFixedMaster(item) : !isWorkspaceFixedMaster(item)))
         .filter((item) => {
           if (!keyword) return true;
           return [item.object_name, item.category, item.object_type, item.memo]
@@ -540,8 +545,8 @@
       workspaceNewModal?.addEventListener("click", (event) => {
         if (event.target === workspaceNewModal) closeWorkspaceNewLayoutModal();
       });
-      workspaceSaveButton?.addEventListener("click", () => openLayoutInfoModal("save", false));
-      workspaceSaveAsButton?.addEventListener("click", () => openLayoutInfoModal("save", true));
+      workspaceSaveButton?.addEventListener("click", () => workspaceEditMode === "base" ? saveWorkspaceBaseFloorplan() : openLayoutInfoModal("save", false));
+      workspaceSaveAsButton?.addEventListener("click", () => workspaceEditMode === "base" ? saveWorkspaceBaseFloorplan() : openLayoutInfoModal("save", true));
       libraryCreateButton?.addEventListener("click", startNewLibraryLayout);
       document.getElementById("floorplanV2EventModeButton")?.addEventListener("click", showLayoutLibrary);
       workspaceBackLibraryButton?.addEventListener("click", showLayoutLibrary);
@@ -746,6 +751,16 @@
         return;
       }
       workspaceDraftShape = null;
+      workspaceSelectedId = "";
+      if (workspaceNameInput) {
+        workspaceNameInput.value = workspaceEditMode === "base"
+          ? (workspaceFloorplanRecord?.floorplan_name || "")
+          : (workspaceActiveLayout?.layout_name || "");
+        workspaceNameInput.placeholder = workspaceEditMode === "base" ? "기본 도면 이름" : "행사 레이아웃 이름";
+      }
+      if (workspaceSaveButton) workspaceSaveButton.textContent = workspaceEditMode === "base" ? "기본도면 저장" : "레이아웃 저장";
+      if (workspaceSaveAsButton) workspaceSaveAsButton.hidden = workspaceEditMode === "base";
+      renderObjectLibrary();
       renderWorkspace();
       updateWorkspaceStatusbar();
     }
@@ -1082,7 +1097,15 @@
     }
     function startNewLibraryLayout() {
       if (!workspaceFloorplanRecord?.id) { setStatus("새 레이아웃을 만들 기본 도면을 선택해 주세요.", "warn"); return; }
-      resetWorkspaceLayout(); workspaceActiveLayout = null; if (workspaceNameInput) workspaceNameInput.value = ""; showLayoutEditor();
+      workspaceObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+      workspaceSelectedId = "";
+      workspaceActiveLayout = null;
+      workspaceDirty = false;
+      resetWorkspaceHistory();
+      setWorkspaceEditMode("layout");
+      if (workspaceNameInput) workspaceNameInput.value = "";
+      updateWorkspaceStatus("저장되지 않음");
+      showLayoutEditor();
     }
     function typeLabel(type) { return layoutTypeOptions.find(([value]) => value === type)?.[1] || "기타"; }
     async function loadLibraryObjects() {
@@ -1108,13 +1131,34 @@
       if (!libraryFilters || !libraryGrid) return;
       libraryFilters.innerHTML = layoutTypeOptions.map(([value,label]) => `<button type="button" data-layout-filter="${value}" class="${libraryFilter===value?"active":""}">${label}</button>`).join("");
       const rows = workspaceLayouts.filter((row) => libraryFilter === "all" || row.layout_type === libraryFilter);
-      libraryGrid.innerHTML = rows.length ? rows.map((row) => `<article class="layout-library-card" data-layout-id="${row.id}">${libraryPreview(row)}<h3>${escapeHtml(row.layout_name || "이름 없는 레이아웃")}</h3><p>${typeLabel(row.layout_type)}</p><p class="layout-library-card-meta">권장 ${row.min_people ?? "-"}~${row.max_people ?? "-"}명 · 최대 ${row.setup_capacity ?? "-"}명</p><p class="layout-library-card-meta">${escapeHtml(objectSummary(row.id))}</p><div class="layout-library-card-actions"><button data-action="open">열기</button><button data-action="edit">편집</button><button data-action="info">정보 수정</button><button data-action="duplicate">복제</button><button data-action="delete" class="danger-button">삭제</button></div></article>`).join("") : "<p>이 분류에 저장된 레이아웃이 없습니다.</p>";
+      if (!workspaceFloorplanRecord?.id) {
+        libraryGrid.innerHTML = "<p>장소, 공간과 기본 도면을 선택해 주세요.</p>";
+        return;
+      }
+      const baseName = workspaceFloorplanRecord.floorplan_name || "기본 도면";
+      const baseSize = `${formatDecimal(workspaceDrawingWidthMm / 1000, 2)}m × ${formatDecimal(workspaceDrawingHeightMm / 1000, 2)}m`;
+      const children = rows.length
+        ? rows.map((row) => `<article class="layout-library-card layout-library-child" data-layout-id="${row.id}">${libraryPreview(row)}<h3>${escapeHtml(row.layout_name || "이름 없는 레이아웃")}</h3><p>${typeLabel(row.layout_type)}</p><p class="layout-library-card-meta">권장 ${row.min_people ?? "-"}~${row.max_people ?? "-"}명 · 최대 ${row.setup_capacity ?? "-"}명</p><p class="layout-library-card-meta">${escapeHtml(objectSummary(row.id))}</p><div class="layout-library-card-actions"><button data-action="open">레이아웃 열기</button><button data-action="info">정보 수정</button><button data-action="duplicate">복제</button><button data-action="delete" class="danger-button">삭제</button></div></article>`).join("")
+        : '<p class="layout-library-empty-child">저장된 운영 레이아웃이 없습니다.</p>';
+      libraryGrid.innerHTML = `<section class="layout-library-folder" data-floorplan-id="${workspaceFloorplanRecord.id}"><article class="layout-library-card layout-library-base-card">${libraryPreview({ id: "", layout_name: baseName })}<div><span class="layout-library-folder-label">기본 도면</span><h3>${escapeHtml(baseName)}</h3><p class="layout-library-card-meta">${baseSize} · 고정 구조물 ${workspaceObjects.filter(isWorkspaceBaseObject).length}개</p></div><div class="layout-library-card-actions"><button data-floorplan-action="open-base">기본도면 열기</button><button class="primary-button" data-floorplan-action="create-layout">이 도면으로 레이아웃 만들기</button></div></article><div class="layout-library-children"><div class="layout-library-children-heading"><strong>저장된 레이아웃 ${rows.length}개</strong></div>${children}</div></section>`;
     }
     async function handleLibraryAction(event) {
+      const floorplanButton = event.target.closest("button[data-floorplan-action]");
+      if (floorplanButton) {
+        if (floorplanButton.dataset.floorplanAction === "open-base") {
+          workspaceObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+          workspaceActiveLayout = null;
+          setWorkspaceEditMode("base");
+          showLayoutEditor();
+        } else if (floorplanButton.dataset.floorplanAction === "create-layout") {
+          startNewLibraryLayout();
+        }
+        return;
+      }
       const button = event.target.closest("button[data-action]"); const card = event.target.closest("[data-layout-id]"); if (!card) return;
       const layout = workspaceLayouts.find((row) => row.id === card.dataset.layoutId); if (!layout) return;
       const action = button?.dataset.action || "open";
-      if (["open","edit"].includes(action)) { workspaceSavedLayoutSelect.value = layout.id; await loadWorkspaceLayoutById(layout.id); showLayoutEditor(); return; }
+      if (["open","edit"].includes(action)) { workspaceSavedLayoutSelect.value = layout.id; await loadWorkspaceLayoutById(layout.id); setWorkspaceEditMode("layout"); showLayoutEditor(); return; }
       if (action === "info") { workspaceActiveLayout = layout; openLayoutInfoModal("info", false); return; }
       if (action === "duplicate") { await duplicateLibraryLayout(layout); return; }
       if (action === "delete") await deleteLibraryLayout(layout);
@@ -1387,6 +1431,64 @@
         workspaceSaveButton.disabled = false;
         workspaceSaveAsButton.disabled = false;
       }
+    }
+
+    async function saveWorkspaceBaseFloorplan() {
+      if (!workspaceFloorplanRecord?.id) {
+        setStatus("저장할 기본 도면을 먼저 선택해주세요.", "warn");
+        return;
+      }
+      const name = workspaceNameInput?.value?.trim() || workspaceFloorplanRecord.floorplan_name || "기본 도면";
+      workspaceSaveButton.disabled = true;
+      updateWorkspaceStatus("저장 중");
+      try {
+        const rows = await loggedSupabaseRequest("workspace base floorplan update", `venue_floorplans?id=eq.${encodeURIComponent(workspaceFloorplanRecord.id)}&select=*`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify({ floorplan_name: name, actual_width: workspaceDrawingWidthMm / 1000, actual_height: workspaceDrawingHeightMm / 1000 }),
+        });
+        workspaceFloorplanRecord = rows?.[0] || workspaceFloorplanRecord;
+        const structures = workspaceObjects.filter(isWorkspaceBaseObject).map(workspaceObjectToDbShape);
+        await replaceFloorplanStructures(workspaceFloorplanRecord.id, structures);
+        workspaceDirty = false;
+        resetWorkspaceHistory();
+        updateWorkspaceStatus("저장됨");
+        setStatus("기본 도면과 고정 구조물을 저장했습니다.");
+        await loadWorkspaceFloorplanState();
+        renderLayoutLibrary();
+      } catch (error) {
+        console.error("workspace base floorplan save failed:", error);
+        updateWorkspaceStatus("저장 실패");
+        setStatus(error.message || "기본 도면 저장에 실패했습니다.", "error");
+      } finally {
+        workspaceSaveButton.disabled = false;
+      }
+    }
+
+    async function replaceFloorplanStructures(floorplanId, objects) {
+      await loggedSupabaseRequest("venue_floorplan_objects structures delete", `venue_floorplan_objects?floorplan_id=eq.${encodeURIComponent(floorplanId)}&object_type=neq.hall_outline`, { method: "DELETE" });
+      if (!objects.length) return;
+      const rows = objects.map((object, index) => ({
+        floorplan_id: floorplanId,
+        object_type: object.object_type,
+        label: object.label,
+        object_type_id: isUuid(object.object_type_id || object.metadata?.object_type_id) ? (object.object_type_id || object.metadata?.object_type_id) : null,
+        x: roundValue(object.x),
+        y: roundValue(object.y),
+        width: roundValue(object.width),
+        height: roundValue(object.height),
+        rotation: Number(object.rotation || 0),
+        memo: object.memo || null,
+        is_locked: true,
+        metadata: object.metadata || {},
+        sort_order: index + 1,
+        is_active: true,
+      }));
+      await loggedSupabaseRequest("venue_floorplan_objects structures insert", "venue_floorplan_objects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rows),
+      });
     }
 
     async function upsertWorkspaceFloorplan() {
@@ -1832,6 +1934,8 @@
 
     function addWorkspaceObjectFromMaster(master, point) {
       if (!master) return;
+      if (workspaceEditMode === "layout" && isWorkspaceFixedMaster(master)) return;
+      if (workspaceEditMode === "base" && !isWorkspaceFixedMaster(master)) return;
       pushWorkspaceHistory();
       const center = point || { x: workspaceSize.width / 2, y: workspaceSize.height / 2 };
       const object = {
@@ -1847,7 +1951,8 @@
         rotation: 0,
         seatCount: Number(master.default_seat_count || 0),
         zIndex: getWorkspaceMaxZIndex() + 1,
-        locked: false,
+        locked: workspaceEditMode === "layout" ? false : true,
+        metadata: workspaceEditMode === "base" ? { baseFloorplanObject: true } : {},
       };
       workspaceObjects.push(object);
       selectWorkspaceObject(object.instanceId);
@@ -2223,7 +2328,7 @@
       group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0})`);
       group.setAttribute("opacity", String(getWorkspaceObjectOpacity(object)));
       group.dataset.instanceId = object.instanceId;
-      if (isWorkspaceBaseObject(object)) {
+      if (!canWorkspaceEditObject(object)) {
         group.dataset.baseFloorplanObject = "true";
         group.setAttribute("pointer-events", "none");
       } else {
@@ -2233,7 +2338,7 @@
         });
         group.addEventListener("pointerdown", (event) => startWorkspaceDrag(event, object.instanceId));
       }
-      if (!isWorkspaceBaseObject(object)) group.append(createWorkspaceObjectHitArea(object, x, y, width, height));
+      if (canWorkspaceEditObject(object)) group.append(createWorkspaceObjectHitArea(object, x, y, width, height));
       group.append(createWorkspaceObjectShape(object, x, y, width, height));
       return group;
     }
@@ -2294,8 +2399,10 @@
       box.setAttribute("stroke-dasharray", `${8 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)} ${5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)}`);
       box.setAttribute("pointer-events", "none");
       group.append(box);
-      group.append(createWorkspaceResizeHandle(object, width, height));
-      group.append(createWorkspaceRotateHandle(object, height));
+      if (canWorkspaceEditObject(object)) {
+        group.append(createWorkspaceResizeHandle(object, width, height));
+        group.append(createWorkspaceRotateHandle(object, height));
+      }
       workspaceSelectionLayer.append(group);
     }
 
@@ -2510,6 +2617,8 @@
       workspaceSuppressCanvasClick = true;
       workspaceSelectedId = object.instanceId;
       renderWorkspaceProperties();
+      if (workspaceSelectionLayer) workspaceSelectionLayer.innerHTML = "";
+      renderWorkspaceSelection();
       updateWorkspaceStatusbar();
       pushWorkspaceHistory();
       const point = getWorkspaceSvgPoint(event);
@@ -2533,7 +2642,7 @@
       event.preventDefault();
       event.stopPropagation();
       const object = findWorkspaceObject(instanceId);
-      if (!object || object.locked || !canWorkspaceEditObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       logWorkspacePointerDown(event, { type: "resize-handle", object, target: event.target }, "resize");
       workspaceSelectedId = instanceId;
       renderWorkspaceProperties();
@@ -2555,7 +2664,7 @@
       event.preventDefault();
       event.stopPropagation();
       const object = findWorkspaceObject(instanceId);
-      if (!object || object.locked || !canWorkspaceEditObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       logWorkspacePointerDown(event, { type: "rotation-handle", object, target: event.target }, "rotate");
       workspaceSelectedId = instanceId;
       renderWorkspaceProperties();
@@ -2606,7 +2715,7 @@
         return;
       }
       const object = findWorkspaceObject(workspaceDragState.instanceId);
-      if (!object || object.locked || !canWorkspaceEditObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       const point = getWorkspaceSvgPoint(event);
       if (workspaceDragState.mode === "resize") {
         const nextWidth = workspaceDragState.startWidthM + ((point.x - workspaceDragState.startX) / workspaceMeterScale);
@@ -2822,6 +2931,7 @@
 
     function canWorkspaceEditObject(object) {
       if (!object) return false;
+      if (workspaceEditMode === "base") return isWorkspaceBaseObject(object) && !workspaceFloorplanRecord?.is_locked;
       return !object.locked && !isWorkspaceBaseObject(object);
     }
 
@@ -2868,7 +2978,7 @@
         if (workspaceDimensionLabelInput) workspaceDimensionLabelInput.value = "";
         return;
       }
-      if (isWorkspaceBaseObject(object)) {
+      if (!canWorkspaceEditObject(object)) {
         inputs.concat(buttons).forEach((el) => { if (el) el.disabled = true; });
       }
       const isWallLike = ["wall", "calibration"].includes(object.objectType);
@@ -2917,7 +3027,7 @@
 
     function updateSelectedWorkspaceObjectFromInputs() {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       object.label = workspaceLabelInput.value.trim() || object.label;
       object.x = clampNumber(toWorkspaceNumber(workspaceXInput.value, object.x), 0, workspaceSize.width);
@@ -2937,7 +3047,7 @@
 
     function updateSelectedWorkspaceWallFromInputs(sourceInput = null) {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || !["wall", "calibration"].includes(object.objectType)) return;
+      if (!object || !canWorkspaceEditObject(object) || !["wall", "calibration"].includes(object.objectType)) return;
       const previous = JSON.stringify(object.metadata || {});
       pushWorkspaceHistory();
       const metadata = migrateLegacyWallMetadata(object);
@@ -3019,7 +3129,7 @@
 
     function moveWorkspaceLayer(mode) {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       if (mode === "front") object.zIndex = getWorkspaceMaxZIndex() + 1;
       if (mode === "forward") object.zIndex += 1;
@@ -3031,7 +3141,7 @@
 
     function duplicateWorkspaceObject() {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || isWorkspaceBaseObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       const copy = {
         ...object,
@@ -3048,7 +3158,7 @@
 
     function rotateWorkspaceObject90() {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || isWorkspaceBaseObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       object.rotation = normalizeDegrees(Number(object.rotation || 0) + 90);
       markWorkspaceDirty();
@@ -3057,7 +3167,7 @@
 
     function deleteSelectedWorkspaceObject() {
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || isWorkspaceBaseObject(object)) return;
+      if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       workspaceObjects = workspaceObjects.filter((object) => object.instanceId !== workspaceSelectedId);
       workspaceSelectedId = "";
@@ -3329,6 +3439,15 @@
     function applyWorkspaceSnap(value) {
       const unit = getWorkspaceGridDrawingUnit();
       return workspaceSnap && workspaceGrid ? Math.round(value / unit) * unit : value;
+    }
+
+    function applyWorkspaceSnapPoint(point) {
+      if (!workspaceSnap || !workspaceGrid) return point;
+      const millimeters = workspacePointToMillimeters(point);
+      return workspaceMillimetersToPoint({
+        x: snapToGrid(millimeters.x, workspaceGridSizeMm),
+        y: snapToGrid(millimeters.y, workspaceGridSizeMm),
+      });
     }
 
     function getWorkspaceSnappedPoint(event) {
