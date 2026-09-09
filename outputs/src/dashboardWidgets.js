@@ -8,12 +8,12 @@
     large: { colSpan: 12, rowSpan: 9 },
   };
   const definitions = [
-    { id: "quick", name: "빠른 메뉴", selector: ".dashboard-widget-grid", colSpan: 4, rowSpan: 4, minColSpan: 3, minRowSpan: 3 },
-    { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 6, rowSpan: 6, minColSpan: 5, minRowSpan: 5 },
+    { id: "today-board", name: "오늘 운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6 },
+    { id: "weekly-setup", name: "이번 주 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 4, rowSpan: 10, minColSpan: 4, minRowSpan: 5 },
+    { id: "operations-status", name: "운영 현황", selector: ".operations-status-grid", colSpan: 6, rowSpan: 5, minColSpan: 4, minRowSpan: 5 },
     { id: "mini-calendar", name: "미니 캘린더", selector: ".dashboard-month-card", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
-    { id: "operations-status", name: "운영 현황", selector: ".operations-status-grid", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
-    { id: "today-board", name: "오늘 운영보드", selector: "#todayOperationBoard", colSpan: 12, rowSpan: 9, minColSpan: 6, minRowSpan: 6 },
-    { id: "weekly-setup", name: "이번 주 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
+    { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 8, rowSpan: 5, minColSpan: 5, minRowSpan: 5 },
+    { id: "quick", name: "빠른 메뉴", selector: ".dashboard-widget-grid", colSpan: 4, rowSpan: 4, minColSpan: 3, minRowSpan: 3 },
   ];
 
   let grid;
@@ -68,6 +68,7 @@
   function init() {
     const home = document.getElementById("homeSection");
     if (!home || home.querySelector(".dashboard-widget-layout")) return;
+    decorateChrome();
     ensureQuickActions(home);
     const header = document.createElement("header");
     header.className = "dashboard-home-header";
@@ -95,6 +96,35 @@
     draft = load();
     apply(draft);
     bind();
+  }
+
+  function decorateChrome() {
+    const topbar = document.querySelector(".hotel-topbar");
+    const title = topbar?.querySelector(".brand-title");
+    if (title) title.textContent = "연회 운영 대시보드";
+    const actions = topbar?.querySelector(".topbar-actions");
+    if (actions && !actions.querySelector(".hero-date")) {
+      const date = document.createElement("time");
+      date.className = "hero-date";
+      date.dateTime = new Date().toISOString().slice(0, 10);
+      date.textContent = new Intl.DateTimeFormat("ko-KR", { dateStyle: "full" }).format(new Date());
+      actions.prepend(date);
+    }
+    const icons = {
+      home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+      calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+      assets: '<path d="M21 8a2 2 0 0 0-2-2h-5l-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"/>',
+      layouts: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/>',
+      ai: '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h.01"/><path d="M12 10h.01"/><path d="M16 10h.01"/>',
+    };
+    document.querySelectorAll(".sidebar-nav-item[data-dashboard-target]").forEach((button) => {
+      if (button.querySelector(".sidebar-nav-icon")) return;
+      const icon = document.createElement("span");
+      icon.className = "sidebar-nav-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = `<svg viewBox="0 0 24 24">${icons[button.dataset.dashboardTarget] || icons.home}</svg>`;
+      button.prepend(icon);
+    });
   }
 
   function applyItem(item) {
