@@ -52,6 +52,30 @@ assert(next, "종료 공간에는 다음 세팅 블록이 있어야 한다");
 assert.strictEqual(next.next.name, "다음 행사");
 assert.strictEqual(next.next.recommendation, "스쿨 120");
 
+const space = (id, name) => ({ id, spaceName: name });
+const buranoAll = { venue: "부라노 ALL", venueSpaceIds: ["burano-1", "burano-2", "burano-3"], venueSpaces: [space("burano-1", "부라노1"), space("burano-2", "부라노2"), space("burano-3", "부라노3")] };
+const buranoBare = { venue: "부라노" };
+const burano1 = { venue: "부라노1", venueSpaceIds: ["burano-1"], venueSpaces: [space("burano-1", "부라노1")] };
+const burano2 = { venue: "부라노2", venueSpaceIds: ["burano-2"], venueSpaces: [space("burano-2", "부라노2")] };
+assert(board.spacesOverlap(buranoAll, burano1), "부라노 ALL과 부라노1은 물리 공간이 겹쳐야 한다");
+assert(board.spacesOverlap(burano1, buranoAll), "부라노1과 부라노 ALL은 양방향으로 겹쳐야 한다");
+assert(!board.spacesOverlap(burano1, burano2), "부라노1과 부라노2는 겹치지 않아야 한다");
+assert(board.spacesOverlap(buranoBare, buranoAll), "부라노와 부라노 ALL은 같은 전체홀로 취급해야 한다");
+
+const overlapEvents = [
+  { id: "all-today", eventName: "오늘 ALL", calendarDates: [today], ...buranoAll, schedule: [{ date: today, time: "18:00", venue: "부라노 ALL", content: "행사 종료" }] },
+  { id: "all-nearest", eventName: "가장 가까운 ALL", calendarDates: ["2026-09-16"], ...buranoAll, schedule: [{ date: "2026-09-16", time: "09:00", venue: "부라노 ALL", content: "행사 시작" }] },
+  { id: "one-later", eventName: "그 다음 부라노1", calendarDates: ["2026-09-17"], ...burano1, schedule: [{ date: "2026-09-17", time: "09:00", venue: "부라노1", content: "행사 시작" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(overlapEvents, today).find((item) => item.type === "next_setup")?.next?.name, "가장 가까운 ALL", "겹치는 공간 중 가장 가까운 미래 행사를 선택해야 한다");
+
+const individualEvents = [
+  { id: "one-today", eventName: "오늘 부라노1", calendarDates: [today], ...burano1, schedule: [{ date: today, time: "18:00", venue: "부라노1", content: "행사 종료" }] },
+  { id: "two-near", eventName: "부라노2", calendarDates: ["2026-09-16"], ...burano2, schedule: [{ date: "2026-09-16", time: "09:00", venue: "부라노2", content: "행사 시작" }] },
+  { id: "all-later", eventName: "부라노 ALL", calendarDates: ["2026-09-17"], ...buranoAll, schedule: [{ date: "2026-09-17", time: "09:00", venue: "부라노 ALL", content: "행사 시작" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(individualEvents, today).find((item) => item.type === "next_setup")?.next?.name, "부라노 ALL", "개별홀은 다른 개별홀을 건너뛰고 겹치는 전체홀을 선택해야 한다");
+
 const boundaryFixture = [{
   id: "filtered-boundary",
   eventName: "컨벤션 행사",

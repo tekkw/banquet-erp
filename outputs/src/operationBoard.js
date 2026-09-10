@@ -59,6 +59,38 @@
     const explicit = row.spaceId || event.venueSpaceIds?.[0] || event.venueSpaces?.[0]?.id;
     return explicit || `venue:${venueName(row, event).toLowerCase().replace(/\s+/g, "")}`;
   }
+  function physicalSpaceKeys(event, row = {}) {
+    const keys = new Set();
+    [row.spaceId, ...(row.venueSpaceIds || []), ...(event.venueSpaceIds || []),
+      ...(row.venueSpaces || []).map((space) => space?.id), ...(event.venueSpaces || []).map((space) => space?.id)]
+      .filter(Boolean).forEach((id) => keys.add(`id:${id}`));
+    const names = [row.venue, row.location, row.place, event.venue, ...(event.venueSpaceNames || []),
+      ...(row.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode]),
+      ...(event.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode])];
+    names.filter(Boolean).forEach((value) => {
+      const normalized = String(value).toLowerCase().replace(/[Ⅰⅰ]/g, "1").replace(/[Ⅱⅱ]/g, "2").replace(/[Ⅲⅲ]/g, "3")
+        .replace(/^\s*\d+\s*f\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
+      if (!normalized) return;
+      const allMatch = normalized.match(/^(.*?)(?:all|전체|전관)$/i);
+      const memberMatch = normalized.match(/^(.*?)(\d+|[a-z])$/i);
+      if (allMatch?.[1]) keys.add(`place:${allMatch[1]}:*`);
+      else if (memberMatch?.[1]) keys.add(`place:${memberMatch[1]}:${memberMatch[2]}`);
+      else keys.add(`place:${normalized}:*`);
+    });
+    return [...keys];
+  }
+  function physicalSpaceKeysOverlap(leftKeys, rightKeys) {
+    const right = new Set(rightKeys || []);
+    if ((leftKeys || []).some((key) => right.has(key))) return true;
+    const places = (keys) => (keys || []).filter((key) => key.startsWith("place:")).map((key) => {
+      const [, family, member] = key.split(":"); return { family, member };
+    });
+    return places(leftKeys).some((left) => places(rightKeys).some((rightPlace) => left.family === rightPlace.family
+      && (left.member === "*" || rightPlace.member === "*" || left.member === rightPlace.member)));
+  }
+  function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
+    return physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
+  }
   function colorForSpace(key) {
     let hash = 0;
     for (const char of String(key || "")) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
@@ -74,15 +106,15 @@
         const type = visibleScheduleType(row, event);
         if (!type) return;
         const key = blockKey(event, row, type, index);
-        blocks.push({ key, kind: "auto", type, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
       });
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
         const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index);
-        blocks.push({ key, kind: "auto", type: "start", time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type: "start", time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), physicalSpaces: physicalSpaceKeys(event, first.row), title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
       }
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
         const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index)}:${endTime}`;
-        blocks.push({ key, kind: "auto", type: "end", time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type: "end", time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
       }
     });
     const endedBySpace = new Map(blocks.filter((b) => b.type === "end").map((b) => [b.spaceId, b]));
@@ -90,7 +122,7 @@
       const candidates = [];
       events.forEach((event) => (event.schedule || []).forEach((row) => {
         const day = scheduleDate(row, event);
-        if (day > today && spaceKey(row, event) === key) candidates.push({ day, event, row });
+        if (day > today && physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row))) candidates.push({ day, event, row });
       }));
       candidates.sort((a, b) => a.day.localeCompare(b.day));
       const next = candidates[0];
@@ -223,5 +255,5 @@
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
     dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, manual: [], checklist: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, manual: [], checklist: [], ...value }; } };
 })();
