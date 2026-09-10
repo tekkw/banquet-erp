@@ -42,4 +42,8 @@ assert(theme.includes("var(--surface-primary)"));
 assert(theme.includes("var(--surface-secondary)"));
 assert(theme.includes("color: var(--text-secondary)"));
 assert(theme.includes(':where(dialog, .modal, [class*="-modal"])'));
+assert(theme.includes("repeat(auto-fit, minmax(140px, 1fr))"));
+assert(theme.includes(".modal .schedule-table th"));
+assert(theme.includes(".today-operations-card .operation-row strong"));
+assert(theme.includes("align-self: stretch"));
 console.log("erp-dark-theme-v1 tests passed");

@@ -114,6 +114,115 @@ body,
   background: var(--surface-secondary);
 }
 
+.dashboard-widget-shell[data-widget-id="quick"] > .dashboard-widget-grid {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-rows: none;
+  grid-auto-rows: minmax(68px, 1fr);
+  align-content: stretch;
+}
+
+.erp-sidebar {
+  position: relative;
+  top: auto;
+  align-self: stretch;
+  min-height: 100%;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Event details and operational cards still contain legacy light-theme colors. */
+.modal {
+  border: 1px solid var(--border-strong);
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+.modal-header {
+  border-color: var(--border);
+  background: var(--surface-primary);
+}
+
+.modal-title,
+.modal .info-value,
+.modal .schedule-table td,
+.modal .schedule-list li {
+  color: var(--text-primary);
+}
+
+.modal .info-label,
+.modal .info-card.missing .info-value {
+  color: var(--text-muted);
+}
+
+.modal .info-card,
+.modal .schedule-table-wrap {
+  border-color: var(--border);
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+.modal .schedule-table {
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+}
+
+.modal .schedule-table th {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+}
+
+.modal .schedule-table td {
+  border-color: var(--border);
+  background: var(--calendar-day-bg);
+}
+
+.modal .schedule-table tbody tr:nth-child(even) td {
+  background: #0D2436;
+}
+
+.modal .modal-body :where(input, select, textarea),
+.modal .form-field :where(input, select, textarea),
+.modal .editable-table input {
+  color-scheme: dark;
+  border-color: var(--border-strong);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+.modal .form-field label {
+  color: var(--text-secondary);
+}
+
+.modal .secondary-button {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+.today-operations-card,
+.today-operations-card .operation-row {
+  border-color: var(--border);
+  background: var(--surface-primary);
+  color: var(--text-secondary);
+}
+
+.today-operations-card .operation-row:hover {
+  background: var(--calendar-day-hover);
+}
+
+.today-operations-card .operation-row strong {
+  color: var(--text-primary);
+}
+
+.today-operations-card .operation-row :where(span, time),
+.today-operations-card .operation-summary,
+.today-operations-card .operation-empty {
+  color: var(--text-muted);
+}
+
 .dashboard-widget-shell .mini-day {
   min-height: 31px;
   border: 1px solid var(--border);
