@@ -263,7 +263,7 @@ body {
 .weekly-setup-section .operation-board-title { padding: 0 0 13px; border: 0; }
 .weekly-setup-section .operation-board-title h3 { margin: 2px 0 0; font-size: 20px; font-weight: 700; }
 .weekly-setup-section .operation-board-title > strong { color: var(--dash-gold); font-size: 14px; }
-.weekly-setup-list { display: grid; gap: 8px; }
+.weekly-setup-list { display: grid; gap: 8px; min-height: 0; max-height: 420px; padding-right: 4px; overflow-y: auto; scrollbar-color: rgba(150, 180, 205, .35) transparent; scrollbar-width: thin; }
 .weekly-setup-list > p,
 .completed-setup-list > p { margin: 0; padding: 16px; border: 1px dashed var(--dash-border); border-radius: 9px; background: rgba(6, 17, 31, .24); color: var(--dash-muted); }
 .weekly-setup-item { gap: 12px; padding: 12px; border: 1px solid rgba(150, 180, 205, .13); border-left: 3px solid var(--dash-gold); border-radius: 9px; background: var(--dash-row); }

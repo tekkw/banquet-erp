@@ -75,10 +75,19 @@ board._setStateForTest({ completions: {}, plans: {}, manual: [], checklist: [] }
 const weeklyEvents = [
   { id: "previous", eventName: "앞 행사", calendarDates: ["2026-09-08"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }] },
   { id: "setup-target", eventName: "주간 행사", calendarDates: ["2026-09-10"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }], guestCount: 100, internalMemo: "스쿨식", venueLayouts: layouts.map((layout) => ({ ...layout, space_id: "space-f" })) },
+  { id: "next-week-1", eventName: "다음 주 행사 1", calendarDates: ["2026-09-16"], venue: "부라노", venueSpaceIds: ["space-b"], venueSpaces: [{ id: "space-b", spaceName: "부라노" }] },
+  { id: "next-week-2", eventName: "다음 주 행사 2", calendarDates: ["2026-09-17"], venue: "컨벤션", venueSpaceIds: ["space-c"], venueSpaces: [{ id: "space-c", spaceName: "컨벤션" }] },
+  { id: "next-month", eventName: "10월 행사", calendarDates: ["2026-10-12"], venue: "카프리", venueSpaceIds: ["space-k"], venueSpaces: [{ id: "space-k", spaceName: "카프리" }] },
 ];
-const weekly = board.buildWeeklySetupTasks(weeklyEvents, today);
+const setupToday = "2026-09-10";
+const weekly = board.buildWeeklySetupTasks(weeklyEvents, setupToday);
 const targetTasks = weekly.filter((item) => item.eventOrderId === "setup-target" && item.spaceId === "space-f");
 assert.strictEqual(targetTasks.length, 1, "같은 행사와 공간은 하나의 세팅 할 일만 생성해야 한다");
-assert.strictEqual(targetTasks[0].plannedDate, today, "앞 행사 종료일을 세팅 예정일로 우선 추천해야 한다");
+assert.strictEqual(targetTasks[0].plannedDate, setupToday, "앞 행사 종료일을 세팅 예정일로 우선 추천하되 과거 추천일은 오늘로 보정해야 한다");
 assert.strictEqual(targetTasks[0].recommendation, "스쿨 120", "같은 공간의 레이아웃을 추천해야 한다");
+assert.strictEqual(weekly.map((item) => item.eventDate).join(","), "2026-09-10,2026-09-16,2026-09-17,2026-10-12", "이번 주 이후와 다음 달의 미래 행사도 포함하고 과거 행사는 제외해야 한다");
+board._setStateForTest({ completions: { "weekly-setup:next-week-1:space-b": true }, plans: { "weekly-setup:next-month:space-k": "2026-09-11" }, manual: [], checklist: [] });
+const persistedWeekly = board.buildWeeklySetupTasks(weeklyEvents, setupToday);
+assert.strictEqual(persistedWeekly.find((item) => item.eventOrderId === "next-week-1").completed, true, "완료 상태를 복원해야 한다");
+assert.strictEqual(persistedWeekly.find((item) => item.eventOrderId === "next-month").plannedDate, "2026-09-11", "사용자가 수정한 세팅 예정일을 덮어쓰면 안 된다");
 console.log("operation-board-v1 tests passed");

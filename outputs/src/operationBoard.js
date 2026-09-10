@@ -159,11 +159,10 @@
     return [...buildAutoBlocks(currentEvents, today), ...state.manual.filter((x) => x.date === today)].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
-  function weekEnd(today) { const date = new Date(`${today}T12:00:00`); date.setDate(date.getDate() + (7 - date.getDay()) % 7); return dateKey(date); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
-    const sunday = weekEnd(today); const tasks = new Map();
+    const tasks = new Map();
     (events || []).forEach((event) => {
-      const eventDate = eventDates(event).filter((day) => day >= today && day <= sunday).sort()[0];
+      const eventDate = eventDates(event).filter((day) => day >= today).sort()[0];
       if (!eventDate) return;
       const spaces = event.venueSpaces?.length ? event.venueSpaces : [{ id: spaceKey({}, event), spaceName: event.venue || "장소 미입력" }];
       spaces.forEach((space) => {
@@ -196,8 +195,8 @@
   }
   function renderWeeklySetupSection(tasks) {
     const active = tasks.filter((item) => !item.completed); const completed = tasks.filter((item) => item.completed);
-    const row = (item) => `<article class="weekly-setup-item" data-setup-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-setup-complete ${item.completed ? "checked" : ""}><span><strong>${escapeHtml(item.venue)}</strong><small>${escapeHtml(item.eventDate)} · ${escapeHtml(item.title)} · ${escapeHtml(item.people || "-")}명</small></span></label><label class="setup-plan-date">세팅 예정일<input type="date" data-setup-date min="${dateKey()}" max="${weekEnd(dateKey())}" value="${escapeHtml(item.plannedDate)}"></label></article>`;
-    return `<section class="weekly-setup-section"><div class="operation-board-title"><div><span class="eyebrow">Weekly Setup</span><h3>이번 주 세팅 할 일</h3></div><strong>${active.length}건</strong></div><div class="weekly-setup-list">${active.map(row).join("") || "<p>예정된 세팅이 없습니다.</p>"}</div><details class="completed-setup-list"><summary>완료한 세팅 보기 (${completed.length})</summary>${completed.map(row).join("") || "<p>완료한 세팅이 없습니다.</p>"}</details></section>`;
+    const row = (item) => `<article class="weekly-setup-item" data-setup-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-setup-complete ${item.completed ? "checked" : ""}><span><strong>${escapeHtml(item.venue)}</strong><small>${escapeHtml(item.eventDate)} · ${escapeHtml(item.title)} · ${escapeHtml(item.people || "-")}명</small></span></label><label class="setup-plan-date">세팅 예정일<input type="date" data-setup-date value="${escapeHtml(item.plannedDate)}"></label></article>`;
+    return `<section class="weekly-setup-section"><div class="operation-board-title"><div><span class="eyebrow">Next Setup</span><h3>다음 세팅 할 일</h3></div><strong>${active.length}건</strong></div><div class="weekly-setup-list">${active.map(row).join("") || "<p>예정된 세팅이 없습니다.</p>"}</div><details class="completed-setup-list"><summary>완료한 세팅 보기 (${completed.length})</summary>${completed.map(row).join("") || "<p>완료한 세팅이 없습니다.</p>"}</details></section>`;
   }
   function renderBlock(block) {
     const checklist = block.type === "next_setup" ? state.checklist.filter((x) => x.parentKey === block.key) : [];
