@@ -177,6 +177,7 @@
     const validation = byId("floorplanV2Validation"); const saveButton = byId("floorplanV2SaveButton");
     const lockedInput = byId("floorplanV2LockedInput"); const lockStatus = byId("floorplanV2LockStatus");
     const zoomStatus = byId("floorplanV2ZoomStatus"); const nameInput = byId("floorplanV2NameInput");
+    const renameButton = byId("floorplanV2RenameButton"); const deleteButton = byId("floorplanV2DeleteButton");
     const createLayoutButton = byId("floorplanV2CreateLayoutButton");
     const structureTypes = byId("floorplanV2StructureTypes"); const structureProperties = byId("floorplanV2StructureProperties");
     const structureStatus = byId("floorplanV2StructureStatus"); const structureNameInput = byId("floorplanV2StructureNameInput");
@@ -224,6 +225,8 @@
       byId("floorplanV2FitButton").addEventListener("click", () => setZoom(1)); saveButton.addEventListener("click", save);
       venueSelect.addEventListener("change", handleVenueChange); spaceSelect.addEventListener("change", handleSpaceChange);
       savedSelect.addEventListener("change", loadSelected);
+      renameButton?.addEventListener("click", renameSelectedFloorplan);
+      deleteButton?.addEventListener("click", deactivateSelectedFloorplan);
       nameInput.addEventListener("input", () => { transientMessage = ""; renderState(); });
       lockedInput.addEventListener("change", () => { transientMessage = ""; render(); });
       structureTypes?.querySelectorAll("button[data-structure-type]").forEach((button) => button.addEventListener("click", () => addFixedStructure(button.dataset.structureType)));
@@ -368,6 +371,9 @@
         validation.className = `floorplan-v2-validation${result.valid ? " success" : ""}${locked ? " locked" : ""}`;
       }
       saveButton.disabled = isFloorplanLoading || locked || !result.valid || !venueSelect.value || !spaceSelect.value || !nameInput.value.trim();
+      const hasSelectedFloorplan = Boolean(currentFloorplan?.id && savedSelect.value === String(currentFloorplan.id));
+      if (renameButton) renameButton.disabled = isFloorplanLoading || !hasSelectedFloorplan;
+      if (deleteButton) deleteButton.disabled = isFloorplanLoading || !hasSelectedFloorplan;
       if (createLayoutButton) createLayoutButton.hidden = !currentFloorplan?.id;
       byId("floorplanV2WallNumber").textContent = `현재 벽 ${Math.max(0, points.length - 1)}`;
       zoomStatus.textContent = viewZoom === 1 ? "자동 맞춤" : `${Math.round(viewZoom * 100)}%`;
@@ -442,6 +448,50 @@
         wizardTitle.textContent = "기본 도면 확인 및 수정"; wizard.hidden = false; empty.hidden = true; viewZoom = 1; transientMessage = ""; render();
       } catch (error) { if (loadVersion === floorplanLoadVersion) showMessage(error.message || "기본 도면을 불러오지 못했습니다.", "error"); }
       finally { if (loadVersion === floorplanLoadVersion) { isFloorplanLoading = false; render(); } }
+    }
+    async function renameSelectedFloorplan() {
+      if (!currentFloorplan?.id || isFloorplanLoading) return;
+      const nextName = window.prompt("변경할 기본 도면 이름", currentFloorplan.floorplan_name || "")?.trim();
+      if (!nextName || nextName === currentFloorplan.floorplan_name) return;
+      isFloorplanLoading = true; renderState();
+      try {
+        const rows = await storage.supabaseRequest(`venue_floorplans?id=eq.${encodeURIComponent(currentFloorplan.id)}&select=*`, {
+          method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ floorplan_name: nextName }),
+        });
+        await storage.supabaseRequest(`venue_floorplan_objects?floorplan_id=eq.${encodeURIComponent(currentFloorplan.id)}&object_type=eq.hall_outline`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: nextName }),
+        });
+        currentFloorplan = rows?.[0] || { ...currentFloorplan, floorplan_name: nextName };
+        if (currentOutline) currentOutline = { ...currentOutline, label: nextName };
+        nameInput.value = nextName;
+        await loadSaved(currentFloorplan.id);
+        showMessage("기본 도면 이름을 변경했습니다.", "success");
+        window.dispatchEvent(new CustomEvent("banquet:base-floorplan-saved", { detail: { floorplanId: currentFloorplan.id } }));
+      } catch (error) { showMessage(error.message || "기본 도면 이름을 변경하지 못했습니다.", "error"); }
+      finally { isFloorplanLoading = false; renderState(); }
+    }
+    async function deactivateSelectedFloorplan() {
+      if (!currentFloorplan?.id || isFloorplanLoading) return;
+      isFloorplanLoading = true; renderState();
+      try {
+        const references = await storage.supabaseRequest(`venue_layouts?select=id&floorplan_id=eq.${encodeURIComponent(currentFloorplan.id)}`);
+        if (references?.length) {
+          window.alert(`이 기본도면을 사용하는 레이아웃이 ${references.length}개 있습니다.`);
+          return;
+        }
+        if (!window.confirm(`'${currentFloorplan.floorplan_name || "기본 도면"}'을 삭제하시겠습니까?`)) return;
+        await storage.supabaseRequest(`venue_floorplans?id=eq.${encodeURIComponent(currentFloorplan.id)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
+        });
+        await storage.supabaseRequest(`venue_floorplan_objects?floorplan_id=eq.${encodeURIComponent(currentFloorplan.id)}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ is_active: false }),
+        });
+        floorplanLoadVersion += 1; currentFloorplan = null; currentOutline = null; fixedStructures = []; selectedStructureId = "";
+        savedSelect.value = ""; wizard.hidden = true; empty.hidden = false; await loadSaved();
+        showMessage("기본 도면을 삭제했습니다.", "success");
+        window.dispatchEvent(new CustomEvent("banquet:base-floorplan-saved", { detail: { floorplanId: "" } }));
+      } catch (error) { showMessage(error.message || "기본 도면을 삭제하지 못했습니다.", "error"); }
+      finally { isFloorplanLoading = false; renderState(); }
     }
     async function save() {
       const result = validate(points); const floorplanName = nameInput.value.trim();

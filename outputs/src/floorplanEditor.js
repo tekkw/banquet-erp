@@ -16,6 +16,24 @@
  *   and creates PNG previews in files + venue_layout_images.
  */
 (function registerBanquetErpFloorplanEditor() {
+  function floorplanOutlineMetrics(points) {
+    const validPoints = (Array.isArray(points) ? points : [])
+      .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+    if (!validPoints.length) return { points: [], widthMm: 0, heightMm: 0, areaMm2: 0, signedAreaMm2: 0, segments: [] };
+    const xs = validPoints.map((point) => point.x); const ys = validPoints.map((point) => point.y);
+    let signedTwiceArea = 0;
+    const segments = validPoints.slice(1).map((end, index) => {
+      const start = validPoints[index];
+      return { start, end, lengthMm: Math.hypot(end.x - start.x, end.y - start.y) };
+    });
+    segments.forEach(({ start, end }) => { signedTwiceArea += start.x * end.y - end.x * start.y; });
+    return {
+      points: validPoints, widthMm: Math.max(...xs) - Math.min(...xs), heightMm: Math.max(...ys) - Math.min(...ys),
+      areaMm2: Math.abs(signedTwiceArea) / 2, signedAreaMm2: signedTwiceArea / 2, segments,
+    };
+  }
+
   function createFloorplanEditor({ elements, deps }) {
     const {
       modal,
@@ -1255,9 +1273,7 @@
 
     function applyWorkspaceHallOutline(outline) {
       const points = Array.isArray(outline?.metadata?.points) ? outline.metadata.points : [];
-      const validPoints = points
-        .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
-        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+      const validPoints = floorplanOutlineMetrics(points).points;
       workspaceOutlinePoints = validPoints;
       if (!validPoints.length || !workspaceBackgroundLayer) return;
       const xs = validPoints.map((point) => point.x);
@@ -1279,6 +1295,38 @@
       polygon.setAttribute("stroke-linejoin", "round");
       polygon.setAttribute("pointer-events", "none");
       workspaceBackgroundLayer.append(polygon);
+    }
+
+    function renderWorkspaceFloorplanDimensions() {
+      if (!workspaceGuideLayer || workspaceDimensionMode === "hidden" || !workspaceOutlinePoints.length || !workspaceShowFloorplan) return;
+      const metrics = floorplanOutlineMetrics(workspaceOutlinePoints);
+      const scale = Math.max(0.0001, Number(view.scale) || 1);
+      const offset = 18 / scale; const extension = 6 / scale; const fontSize = 13 / scale;
+      const outwardSign = metrics.signedAreaMm2 >= 0 ? 1 : -1;
+      const group = document.createElementNS(svgNs, "g"); group.dataset.floorplanDimensions = "true"; group.setAttribute("pointer-events", "none");
+      metrics.segments.forEach(({ start, end, lengthMm }) => {
+        if (!lengthMm) return;
+        const dx = end.x - start.x; const dy = end.y - start.y;
+        const nx = outwardSign * dy / lengthMm; const ny = outwardSign * -dx / lengthMm;
+        const a = { x: start.x + workspaceGeometryOffset.x + nx * offset, y: start.y + workspaceGeometryOffset.y + ny * offset };
+        const b = { x: end.x + workspaceGeometryOffset.x + nx * offset, y: end.y + workspaceGeometryOffset.y + ny * offset };
+        const line = document.createElementNS(svgNs, "line");
+        line.setAttribute("x1", String(a.x)); line.setAttribute("y1", String(a.y)); line.setAttribute("x2", String(b.x)); line.setAttribute("y2", String(b.y));
+        line.setAttribute("class", "layout-floorplan-dimension-line"); line.setAttribute("vector-effect", "non-scaling-stroke"); group.append(line);
+        [start, end].forEach((point) => {
+          const tick = document.createElementNS(svgNs, "line");
+          tick.setAttribute("x1", String(point.x + workspaceGeometryOffset.x + nx * (offset - extension)));
+          tick.setAttribute("y1", String(point.y + workspaceGeometryOffset.y + ny * (offset - extension)));
+          tick.setAttribute("x2", String(point.x + workspaceGeometryOffset.x + nx * (offset + extension)));
+          tick.setAttribute("y2", String(point.y + workspaceGeometryOffset.y + ny * (offset + extension)));
+          tick.setAttribute("class", "layout-floorplan-dimension-line"); tick.setAttribute("vector-effect", "non-scaling-stroke"); group.append(tick);
+        });
+        const label = document.createElementNS(svgNs, "text");
+        label.setAttribute("x", String((a.x + b.x) / 2 + nx * (8 / scale))); label.setAttribute("y", String((a.y + b.y) / 2 + ny * (8 / scale)));
+        label.setAttribute("class", "layout-floorplan-dimension-label"); label.setAttribute("font-size", String(fontSize));
+        label.textContent = `${(lengthMm / 1000).toFixed(1)}m`; group.append(label);
+      });
+      workspaceGuideLayer.append(group);
     }
 
     async function loadWorkspaceFloorplanState() {
@@ -2111,6 +2159,7 @@
         .slice()
         .sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
         .forEach((object) => getWorkspaceRenderLayer(object).append(renderWorkspaceObject(object)));
+      renderWorkspaceFloorplanDimensions();
       renderWorkspaceGuide();
       renderWorkspaceDimensions();
       renderWorkspaceSelection();
@@ -3356,9 +3405,14 @@
       const spaceName = workspaceSourceRow?.venue_spaces?.space_name || workspaceSpaces.find((space) => space.id === workspaceSpaceSelect?.value)?.space_name || "";
       const sizeLabel = `${formatMmAsMeters(workspaceDrawingWidthMm)} x ${formatMmAsMeters(workspaceDrawingHeightMm)}`;
       const mmLabel = `${workspaceDrawingWidthMm}mm x ${workspaceDrawingHeightMm}mm`;
+      const metrics = floorplanOutlineMetrics(workspaceOutlinePoints);
+      const floorplanName = workspaceFloorplanRecord?.floorplan_name || workspaceSourceRow?.layout_type || "선택 없음";
+      const areaLabel = metrics.areaMm2 ? `${formatDecimal(metrics.areaMm2 / 1000000, 1)}m²` : "-";
       workspaceFloorplanInfo.innerHTML = `
-        <span>\uB3C4\uBA74: ${escapeHtml([venueName, spaceName].filter(Boolean).join(" / "))}</span>
-        <span>\uD06C\uAE30: ${escapeHtml(sizeLabel)}</span>
+        <span>\uAE30\uC900 \uAE30\uBCF8\uB3C4\uBA74: ${escapeHtml(floorplanName)}</span>
+        <span>\uC7A5\uC18C: ${escapeHtml([venueName, spaceName].filter(Boolean).join(" / "))}</span>
+        <span>\uC804\uCCB4\uD06C\uAE30: ${escapeHtml(sizeLabel)}</span>
+        <span>\uBA74\uC801: ${escapeHtml(areaLabel)}</span>
         <span>${escapeHtml(mmLabel)}</span>
         <span>\uACA9\uC790: ${workspaceGridSizeMm}mm</span>
         <span>\uBC30\uC728: ${Math.round(view.scale * 100)}%</span>
@@ -4629,6 +4683,7 @@
 
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {
     createFloorplanEditor,
+    floorplanOutlineMetrics,
   };
 })();
 
