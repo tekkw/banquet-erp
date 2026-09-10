@@ -39,6 +39,22 @@
     return eventDates(event).length === 1 ? eventDates(event)[0] : "";
   }
   function venueName(row, event) { return normalize(row.venue || event.venue) || "장소 미입력"; }
+  function scheduleContext(row, event) {
+    const rowLocation = normalize([row.venue, row.location, row.place].filter(Boolean).join(" "));
+    return normalize([rowLocation || event.venue, row.content].filter(Boolean).join(" ")).toLowerCase();
+  }
+  function isFrontSchedule(row, event) { return /프론트/.test(scheduleContext(row, event)); }
+  function isFirenzeSchedule(row, event) { return /피렌체/.test(scheduleContext(row, event)); }
+  function visibleScheduleType(row, event) {
+    if (isFrontSchedule(row, event)) return "";
+    const type = classifySchedule(row.content);
+    return isFirenzeSchedule(row, event) && !["lunch", "dinner"].includes(type) ? "" : type;
+  }
+  function isBoundarySchedule(row, event) {
+    if (isFrontSchedule(row, event) || isFirenzeSchedule(row, event)) return false;
+    return !["lunch", "dinner", "coffee"].includes(classifySchedule(row.content));
+  }
+  function scheduleEndTime(row) { return normalize(row.time).match(/~\s*(\d{1,2}:\d{2})/)?.[1] || timeValue(row.time); }
   function spaceKey(row, event) {
     const explicit = row.spaceId || event.venueSpaceIds?.[0] || event.venueSpaces?.[0]?.id;
     return explicit || `venue:${venueName(row, event).toLowerCase().replace(/\s+/g, "")}`;
@@ -52,20 +68,20 @@
   function buildAutoBlocks(events, today = dateKey()) {
     const blocks = [];
     events.forEach((event) => {
-      const todayRows = (event.schedule || []).map((row, index) => ({ row, index, day: scheduleDate(row, event), time: timeValue(row.time) })).filter((item) => item.day === today && item.time).sort((a, b) => a.time.localeCompare(b.time));
+      const boundaryRows = (event.schedule || []).map((row, index) => ({ row, index, day: scheduleDate(row, event), time: timeValue(row.time), endTime: scheduleEndTime(row) })).filter((item) => item.day === today && item.time && isBoundarySchedule(item.row, event)).sort((a, b) => a.time.localeCompare(b.time));
       (event.schedule || []).forEach((row, index) => {
         if (scheduleDate(row, event) !== today) return;
-        const type = classifySchedule(row.content);
+        const type = visibleScheduleType(row, event);
         if (!type) return;
         const key = blockKey(event, row, type, index);
         blocks.push({ key, kind: "auto", type, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
       });
-      if (todayRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
-        const first = todayRows[0]; const key = blockKey(event, first.row, "start", first.index);
+      if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
+        const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index);
         blocks.push({ key, kind: "auto", type: "start", time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
       }
-      if (todayRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
-        const last = todayRows[todayRows.length - 1]; const range = normalize(last.row.time).match(/~\s*(\d{1,2}:\d{2})/); const endTime = range?.[1] || last.time; const key = `${blockKey(event, last.row, "end", last.index)}:${endTime}`;
+      if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
+        const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index)}:${endTime}`;
         blocks.push({ key, kind: "auto", type: "end", time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
       }
     });

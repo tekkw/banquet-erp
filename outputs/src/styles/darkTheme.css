@@ -9,7 +9,30 @@ body,
 .erp-workspace,
 .erp-page {
   background: var(--app-bg);
+  color: var(--text-secondary);
+}
+
+.erp-page :where(h1, h2, h3, h4, h5, h6, strong, .day-number, .event-name, .metric-value),
+:where(dialog, .modal, [class*="-modal"]) :where(h1, h2, h3, h4, strong) {
   color: var(--text-primary);
+}
+
+.erp-page :where(p, li, td, th, label, summary, output),
+:where(dialog, .modal, [class*="-modal"]) :where(p, li, label, span) {
+  color: var(--text-secondary);
+}
+
+.erp-page :where(small, .subtle, .helper-text, .empty-state, [aria-disabled="true"]),
+:where(dialog, .modal, [class*="-modal"]) :where(small, .subtle, .helper-text) {
+  color: var(--text-muted);
+}
+
+:where(.erp-page, dialog, .modal, [class*="-modal"]) :where(input, select, textarea, button) {
+  color: var(--text-primary);
+}
+
+:where(.erp-page, dialog, .modal, [class*="-modal"]) :where(input, textarea)::placeholder {
+  color: var(--text-muted);
 }
 
 .erp-shell {
@@ -34,7 +57,10 @@ body,
   color: var(--text-primary);
 }
 
-.erp-page p,
+.erp-page p {
+  color: var(--text-secondary);
+}
+
 .erp-page small,
 .erp-page .subtle,
 .erp-page .eyebrow {

@@ -52,6 +52,25 @@ assert(next, "종료 공간에는 다음 세팅 블록이 있어야 한다");
 assert.strictEqual(next.next.name, "다음 행사");
 assert.strictEqual(next.next.recommendation, "스쿨 120");
 
+const boundaryFixture = [{
+  id: "filtered-boundary",
+  eventName: "컨벤션 행사",
+  calendarDates: [today],
+  venue: "컨벤션",
+  venueSpaceIds: ["space-convention"],
+  guestCount: 120,
+  schedule: [
+    { date: today, time: "07:00", venue: "피렌체", content: "조식" },
+    { date: today, time: "09:00~18:00", venue: "컨벤션", content: "본 행사" },
+    { date: today, time: "12:00", venue: "피렌체", content: "중식" },
+    { date: today, time: "13:00", venue: "컨벤션", content: "커피브레이크" },
+    { date: today, time: "15:00", venue: "프론트", content: "체크인" },
+  ],
+}];
+const filteredBlocks = board.buildAutoBlocks(boundaryFixture, today);
+assert.strictEqual(filteredBlocks.filter((item) => item.type !== "next_setup").map((item) => `${item.time}:${item.type}`).join(","), "12:00:lunch,13:00:coffee,09:00:start,18:00:end");
+assert(!filteredBlocks.some((item) => /프론트|조식/.test(`${item.venue} ${item.title}`)), "프론트와 피렌체 조식은 완전히 제외해야 한다");
+
 board._setStateForTest({ completions: {}, plans: {}, manual: [], checklist: [] });
 const weeklyEvents = [
   { id: "previous", eventName: "앞 행사", calendarDates: ["2026-09-08"], venue: "페스타", venueSpaceIds: ["space-f"], venueSpaces: [{ id: "space-f", spaceName: "페스타" }] },

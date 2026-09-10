@@ -18,6 +18,7 @@ assert(app.trim().endsWith('@import "./darkTheme.css";'), "dark theme must load 
   "--surface-secondary: #0D2235",
   "--border: rgba(150, 180, 205, 0.18)",
   "--text-primary: #F4F7FA",
+  "--text-secondary: #DCE6EF",
   "--text-muted: #96A9BA",
   "--accent-gold: #D6B35A",
   "--accent-blue: #4C8DFF",
@@ -39,4 +40,6 @@ assert(theme.includes("var(--calendar-day-bg)"));
 assert(theme.includes("var(--border)"));
 assert(theme.includes("var(--surface-primary)"));
 assert(theme.includes("var(--surface-secondary)"));
+assert(theme.includes("color: var(--text-secondary)"));
+assert(theme.includes(':where(dialog, .modal, [class*="-modal"])'));
 console.log("erp-dark-theme-v1 tests passed");
