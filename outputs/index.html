@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=erp-dark-v2">
+  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-ai-reminders-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -162,7 +162,7 @@
         <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
         <section id="weeklySetupWidget" class="operation-board weekly-setup-widget" aria-label="다음 세팅 할 일"></section>
 
-        <aside class="ai-chat-panel" aria-label="연회장 AI 비서" hidden>
+        <aside class="ai-chat-panel dashboard-ai-widget" aria-label="연회장 AI 비서">
           <div class="ai-chat-header">
             <div>
               <h2>연회장 AI 비서</h2>
@@ -179,6 +179,7 @@
             <textarea id="chatInput" rows="3" placeholder="예: 6월 26일 행사 스케줄 알려줘"></textarea>
             <button id="chatSendButton" class="primary-button" type="submit">질문</button>
           </form>
+          <button class="secondary-button dashboard-ai-full-button" type="button" data-ai-fullscreen>AI 비서 전체 화면</button>
           <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰"></section>
         </aside>
         <dialog id="dailyBriefingDialog" class="daily-briefing-dialog" aria-labelledby="dailyBriefingTitle">
@@ -1097,8 +1098,8 @@
 <script src="./src/floorplanEditor.js?v=base-floorplan-management-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js"></script>
-  <script src="./src/operationBoard.js?v=dashboard-dark-v1"></script>
-  <script src="./src/dashboardWidgets.js?v=dashboard-dark-v1"></script>
+  <script src="./src/operationBoard.js?v=dashboard-ai-reminders-v1"></script>
+  <script src="./src/dashboardWidgets.js?v=dashboard-ai-reminders-v1"></script>
   <script>
     /*
      * 역할:

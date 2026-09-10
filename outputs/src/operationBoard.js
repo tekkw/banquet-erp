@@ -1,5 +1,6 @@
 (function registerOperationBoard() {
   const STORAGE_KEY = "banquet-erp-operation-board-v1";
+  const REMINDER_DEFAULT_KEY = "banquet-erp-operation-reminder-default-v1";
   const TYPES = { start: "행사 시작", lunch: "중식", dinner: "석식", coffee: "커피브레이크", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
   const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#c2410c", "#be123c", "#4f46e5", "#15803d", "#a16207"];
   let root;
@@ -7,6 +8,7 @@
   let currentEvents = [];
   let state = loadState();
   let remoteStatus = "idle";
+  let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
 
   function dateKey(date = new Date()) {
     const offset = date.getTimezoneOffset() * 60000;
@@ -146,8 +148,8 @@
     return ranked[0]?.score ? ranked[0].layout.layout_name : "추천 레이아웃 없음";
   }
   function loadState() {
-    try { return { completions: {}, plans: {}, manual: [], checklist: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
-    catch { return { completions: {}, plans: {}, manual: [], checklist: [] }; }
+    try { return { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+    catch { return { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [] }; }
   }
   function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   async function remoteRequest(path, options = {}) {
@@ -169,6 +171,7 @@
       (items || []).forEach((row) => {
         state.completions[row.item_key] = !!row.is_completed;
         if (row.metadata?.plannedDate) state.plans[row.item_key] = row.metadata.plannedDate;
+        if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
         if (row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, title: row.title, memo: row.memo || "", completed: !!row.is_completed }];
       });
       state.checklist = (checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }));
@@ -177,7 +180,8 @@
   }
   function syncItem(item) {
     if (remoteStatus !== "ready") return;
-    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type } };
+    const override = state.reminders[item.key]; const resolved = override == null || override === "default" ? defaultReminder : override;
+    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
     remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) }).catch(console.error);
   }
   function syncChecklist(item, removed = false) {
@@ -218,7 +222,7 @@
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
     const groups = blocks.reduce((map, block) => { (map[block.time] ||= []).push(block); return map; }, {});
-    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>오늘 운영보드</h2></div><button class="primary-button" type="button" data-board-add>작업 추가</button></div>
+    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>오늘 운영보드</h2></div><div class="operation-board-actions"><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
       <div class="operation-briefing-counts"><span>오늘 행사 <strong>${todayEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
       <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">오늘 표시할 운영 일정이 없습니다. 직접 작업을 추가할 수 있습니다.</p>'}</div>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>`;
@@ -232,11 +236,22 @@
   }
   function renderBlock(block) {
     const checklist = block.type === "next_setup" ? state.checklist.filter((x) => x.parentKey === block.key) : [];
-    return `<article class="operation-block ${block.completed ? "completed" : ""}" style="--space-color:${colorForSpace(block.spaceId)}" data-key="${escapeHtml(block.key)}"><label class="operation-check"><input type="checkbox" data-complete ${block.completed ? "checked" : ""}><span></span></label><div class="operation-block-body"><div class="operation-block-meta"><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(TYPES[block.type] || TYPES.manual)}</span>${block.people ? `<span>${escapeHtml(block.people)}명</span>` : ""}</div><h4>${escapeHtml(block.title)}</h4>${block.memo ? `<p>${escapeHtml(block.memo)}</p>` : ""}${block.next ? `<div class="next-setup-detail"><span>오늘 종료: ${escapeHtml(block.eventName)}</span><span>다음 행사: ${escapeHtml(block.next.date)} · ${escapeHtml(block.next.name)} · ${escapeHtml(block.next.people || "-")}명</span><span>형태: ${escapeHtml(block.next.layoutType || "미지정")}</span><strong>${escapeHtml(block.next.recommendation)}</strong></div>` : block.type === "next_setup" ? '<div class="next-setup-detail">같은 장소의 다음 행사가 없습니다.</div>' : ""}${block.type === "next_setup" ? `<div class="setup-checklist">${checklist.map((item) => `<div class="setup-item ${item.completed ? "completed" : ""}" data-item-id="${item.id}"><input type="checkbox" data-check-item ${item.completed ? "checked" : ""}><span>${escapeHtml(item.name)}${item.quantity ? ` ${escapeHtml(item.quantity)}${escapeHtml(item.unit || "")}` : ""}${item.memo ? ` · ${escapeHtml(item.memo)}` : ""}</span><button type="button" data-delete-item>삭제</button></div>`).join("")}<button type="button" data-add-item>+ 세팅 항목</button></div>` : ""}</div>${block.kind === "manual" ? '<div class="operation-block-actions"><button type="button" data-edit>수정</button><button type="button" data-delete>삭제</button></div>' : ""}</article>`;
+    return `<article class="operation-block ${block.completed ? "completed" : ""}" style="--space-color:${colorForSpace(block.spaceId)}" data-key="${escapeHtml(block.key)}"><label class="operation-check"><input type="checkbox" data-complete ${block.completed ? "checked" : ""}><span></span></label><div class="operation-block-body"><div class="operation-block-meta"><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(TYPES[block.type] || TYPES.manual)}</span>${block.people ? `<span>${escapeHtml(block.people)}명</span>` : ""}</div><h4>${escapeHtml(block.title)}</h4>${block.memo ? `<p>${escapeHtml(block.memo)}</p>` : ""}${block.next ? `<div class="next-setup-detail"><span>오늘 종료: ${escapeHtml(block.eventName)}</span><span>다음 행사: ${escapeHtml(block.next.date)} · ${escapeHtml(block.next.name)} · ${escapeHtml(block.next.people || "-")}명</span><span>형태: ${escapeHtml(block.next.layoutType || "미지정")}</span><strong>${escapeHtml(block.next.recommendation)}</strong></div>` : block.type === "next_setup" ? '<div class="next-setup-detail">같은 장소의 다음 행사가 없습니다.</div>' : ""}${block.type === "next_setup" ? `<div class="setup-checklist">${checklist.map((item) => `<div class="setup-item ${item.completed ? "completed" : ""}" data-item-id="${item.id}"><input type="checkbox" data-check-item ${item.completed ? "checked" : ""}><span>${escapeHtml(item.name)}${item.quantity ? ` ${escapeHtml(item.quantity)}${escapeHtml(item.unit || "")}` : ""}${item.memo ? ` · ${escapeHtml(item.memo)}` : ""}</span><button type="button" data-delete-item>삭제</button></div>`).join("")}<button type="button" data-add-item>+ 세팅 항목</button></div>` : ""}</div><label class="operation-reminder">알림 ${reminderSelect(block.key, state.reminders[block.key] ?? "default")}</label>${block.kind === "manual" ? '<div class="operation-block-actions"><button type="button" data-edit>수정</button><button type="button" data-delete>삭제</button></div>' : ""}</article>`;
+  }
+  function reminderSelect(key, value, isDefault = false) {
+    const options = isDefault ? [["none", "없음"], ["10", "10분 전"], ["30", "30분 전"], ["60", "1시간 전"], ["custom", "직접 설정"]] : [["default", "기본값"], ["none", "없음"], ["10", "10분 전"], ["30", "30분 전"], ["60", "1시간 전"], ["custom", "직접 설정"]];
+    return `<select data-reminder-key="${escapeHtml(key)}">${options.map(([id, label]) => `<option value="${id}" ${String(value) === id ? "selected" : ""}>${label}</option>`).join("")}${!options.some(([id]) => id === String(value)) ? `<option value="${escapeHtml(value)}" selected>${escapeHtml(value)}분 전</option>` : ""}</select>`;
   }
   function bindEvents() {
     root.querySelector("[data-board-add]").onclick = () => openDialog();
     root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
+    root.querySelectorAll("[data-reminder-key]").forEach((select) => select.onchange = () => {
+      let value = select.value;
+      if (value === "custom") { const entered = prompt("몇 분 전에 알릴까요?", "45"); value = String(Math.max(1, Number.parseInt(entered, 10) || 45)); }
+      if (select.dataset.reminderKey === "default") { defaultReminder = value; localStorage.setItem(REMINDER_DEFAULT_KEY, value); }
+      else { state.reminders[select.dataset.reminderKey] = value; const block = allBlocks().find((item) => item.key === select.dataset.reminderKey); if (block) syncItem(block); saveState(); }
+      render();
+    });
     const dialog = root.querySelector(".operation-dialog");
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
@@ -255,5 +270,5 @@
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
     dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, manual: [], checklist: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
 })();

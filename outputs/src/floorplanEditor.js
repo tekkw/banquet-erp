@@ -265,7 +265,7 @@
       return fixedObjectTypes.has(master?.object_type) || /고정/.test(String(master?.category || ""));
     }
     const defaultObjectTypes = [
-      { object_name: "\uAE30\uB465", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "pillar", default_width_m: 0.8, default_height_m: 0.8, default_seat_count: null, display_shape: "circle", can_resize: true, can_rotate: false, is_active: true },
+      { object_name: "\uAE30\uB465", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "pillar", default_width_m: 0.8, default_height_m: 0.8, default_seat_count: null, display_shape: "rect", can_resize: true, can_rotate: false, is_active: true },
       { object_name: "\uBB38", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "door", default_width_m: 1.2, default_height_m: 0.25, default_seat_count: null, display_shape: "rect", can_resize: true, can_rotate: true, is_active: true },
       { object_name: "\uC2A4\uD06C\uB9B0", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "screen", default_width_m: 4, default_height_m: 0.25, default_seat_count: null, display_shape: "rect", can_resize: true, can_rotate: true, is_active: true },
       { object_name: "\uBC30\uCE58 \uAC00\uB2A5 \uC601\uC5ED", category: "\uACE0\uC815 \uAC1D\uCCB4", object_type: "allowed_area", default_width_m: 5, default_height_m: 3, default_seat_count: null, display_shape: "area", can_resize: true, can_rotate: true, is_active: true },
@@ -1135,7 +1135,7 @@
       const objects = libraryObjectsByLayout.get(layout.id) || []; const width = Math.max(1, workspaceDrawingWidthMm); const height = Math.max(1, workspaceDrawingHeightMm);
       const shapes = objects.map((row) => { const m = row.metadata || {}; const w = Number(m.widthMm) || Number(row.width) * width; const h = Number(m.heightMm) || Number(row.height) * height;
         const x = Number.isFinite(Number(m.xMm)) ? Number(m.xMm) : Number(row.x) * width + w / 2; const y = Number.isFinite(Number(m.yMm)) ? Number(m.yMm) : Number(row.y) * height + h / 2;
-        const circle = row.object_type === "round_table" || row.object_type === "pillar"; return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#d4af3755" stroke="#9a7b16"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="40" fill="#2563eb33" stroke="#2563eb"/>`; }).join("");
+        const circle = row.object_type === "round_table"; return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#d4af3755" stroke="#9a7b16"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="40" fill="#2563eb33" stroke="#2563eb"/>`; }).join("");
       const outline = workspaceOutlinePoints.length ? `<polygon points="${workspaceOutlinePoints.map((p)=>`${p.x},${p.y}`).join(" ")}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>` : "";
       const fixed = workspaceObjects.filter(isWorkspaceBaseObject).map((object) => { const w=object.widthM*1000; const h=object.heightM*1000; const x=object.x; const y=object.y; const circle=getObjectDisplayShape(object)==="circle";
         return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#64748b55" stroke="#475569"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${object.rotation||0} ${x} ${y})" fill="#64748b44" stroke="#475569"/>`; }).join("");
@@ -2629,7 +2629,7 @@
       const explicitShape = object?.displayShape || object?.display_shape || object?.metadata?.display_shape || "";
       if (explicitShape) return explicitShape;
       const type = object?.objectType || object?.object_type || "";
-      if (type === "round_table" || type === "pillar") return "circle";
+      if (type === "round_table") return "circle";
       if (type === "allowed_area" || type === "blocked_area") return "area";
       if (type === "wall" || type === "calibration") return "line";
       return "rect";
@@ -4222,7 +4222,7 @@
         const width = object.width * imageSize.width;
         const height = object.height * imageSize.height;
         const style = objectStyles[object.object_type] || { fill: "rgba(15,42,67,.14)", stroke: "#0f2a43" };
-        const shape = object.display_shape || object.metadata?.display_shape || (object.object_type === "round_table" || object.object_type === "pillar" ? "circle" : "rect");
+        const shape = object.display_shape || object.metadata?.display_shape || (object.object_type === "round_table" ? "circle" : "rect");
         targetCtx.save();
         targetCtx.translate(x + width / 2, y + height / 2);
         targetCtx.rotate((Number(object.rotation || 0) * Math.PI) / 180);

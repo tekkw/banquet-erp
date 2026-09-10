@@ -8,7 +8,7 @@
     left: { dx: -1, dy: 0 }, up: { dx: 0, dy: -1 },
   };
   const fixedStructureDefinitions = {
-    pillar: { label: "기둥", widthMm: 800, heightMm: 800, shape: "circle" },
+    pillar: { label: "기둥", widthMm: 800, heightMm: 800, shape: "rect" },
     door: { label: "출입문", widthMm: 1200, heightMm: 250, shape: "rect" },
     screen: { label: "스크린", widthMm: 4000, heightMm: 250, shape: "rect" },
     fixed_wall: { label: "고정벽 / 파티션", widthMm: 3000, heightMm: 150, shape: "rect" },

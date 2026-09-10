@@ -14,6 +14,7 @@
     { id: "mini-calendar", name: "미니 캘린더", selector: ".dashboard-month-card", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
     { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 8, rowSpan: 5, minColSpan: 5, minRowSpan: 5 },
     { id: "quick", name: "빠른 메뉴", selector: ".dashboard-widget-grid", colSpan: 4, rowSpan: 4, minColSpan: 3, minRowSpan: 3 },
+    { id: "ai-assistant", name: "AI 비서", selector: ".dashboard-ai-widget", colSpan: 4, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
   ];
 
   let grid;
@@ -70,6 +71,7 @@
     if (!home || home.querySelector(".dashboard-widget-layout")) return;
     decorateChrome();
     ensureQuickActions(home);
+    home.querySelector("[data-ai-fullscreen]")?.addEventListener("click", () => document.querySelector('.sidebar-nav-item[data-dashboard-target="ai"]')?.click());
     const header = document.createElement("header");
     header.className = "dashboard-home-header";
     header.innerHTML = `<div><span class="dashboard-today">${new Intl.DateTimeFormat("ko-KR", { dateStyle: "full" }).format(new Date())}</span><small>연회 운영 대시보드</small></div><div class="dashboard-edit-actions"><button class="secondary-button" type="button" data-dashboard-edit>대시보드 편집</button><button class="secondary-button" type="button" data-widget-add hidden>+ 위젯 추가</button><button class="secondary-button" type="button" data-widget-reset hidden>기본 배치로 초기화</button><button class="secondary-button" type="button" data-widget-cancel hidden>취소</button><button class="primary-button" type="button" data-widget-save hidden>저장</button></div>`;

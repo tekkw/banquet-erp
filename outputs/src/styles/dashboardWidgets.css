@@ -213,6 +213,16 @@ body {
 .dashboard-widget-shell[data-widget-id="operations-status"] > .operations-status-grid { border-top: 2px solid var(--dash-mint); }
 .dashboard-widget-shell[data-widget-id="mini-calendar"] > .dashboard-month-card { border-top: 2px solid var(--dash-indigo); }
 .dashboard-widget-shell[data-widget-id="quick"] > .dashboard-widget-grid { border-top: 2px solid rgba(214, 179, 90, .58); }
+.dashboard-widget-shell[data-widget-id="ai-assistant"] > .dashboard-ai-widget { border-top: 2px solid rgba(96, 165, 250, .58); }
+.erp-shell[data-active-page="home"] .dashboard-widget-shell .dashboard-ai-widget { display: flex !important; flex-direction: column; min-height: 0; padding: 16px; background: var(--dash-widget); color: var(--dash-text); }
+.dashboard-ai-widget .ai-chat-header p { margin: 4px 0; color: var(--dash-muted); }
+.dashboard-ai-widget .chat-messages { flex: 1; min-height: 120px; max-height: none; overflow: auto; }
+.dashboard-ai-widget .ai-interview-panel { display: none; }
+.dashboard-ai-full-button { align-self: flex-end; margin-top: 8px; }
+.operation-board-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.operation-board-actions label, .operation-reminder { display: flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 12px; }
+.operation-reminder { align-self: flex-start; margin-left: auto; }
+.operation-reminder select, .operation-board-actions select { min-height: 34px; width: auto; }
 
 .dashboard-overview h2,
 .dashboard-overview h3,
