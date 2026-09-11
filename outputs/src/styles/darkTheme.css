@@ -622,6 +622,37 @@ body,
   color: var(--text-muted);
 }
 
+.event-space-list {
+  display: grid;
+  gap: 7px;
+}
+
+.event-space-list > div {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-elevated);
+}
+
+.event-space-list span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.event-space-list strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.event-space-list.empty {
+  color: var(--text-muted);
+}
+
 @media (max-width: 768px) {
   .erp-shell {
     min-height: 100vh;

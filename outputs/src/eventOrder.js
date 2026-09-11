@@ -55,12 +55,16 @@
       };
       extracted.layout = splitEditorLines(extracted.layoutEqpText || extractSectionColumnValues(sheets, "Lay out & EQP", "Others").join("\n"));
       extracted.others = splitEditorLines(extracted.othersText || extractSectionColumnValues(sheets, "Others", "시설(Engineering)").join("\n"));
-      return {
+      const result = {
         ...extracted,
         eventName: extracted.eventName || findFallbackDColumnValue(sheets, ["행사명"], "행사명 D열"),
         host: extracted.host || findFallbackDColumnValue(sheets, ["행사주관", "행사주최"], "행사주관 D열"),
         eventDate: extracted.eventDate || findFallbackDColumnValue(sheets, ["행사일시"], "행사일시 D열"),
         place: extracted.place || findFallbackDColumnValue(sheets, ["장소"], "장소 D열"),
+      };
+      return {
+        ...result,
+        eventSpaces: deriveEventSpaces(result),
       };
     }
 
@@ -447,9 +451,84 @@
       return normalized.includes("피렌체") || normalized.includes("florence");
     }
 
+    /*
+     * Derive operational spaces without changing the original place/schedule.
+     * Wedding V1 applies only when the event name or explicit type says wedding.
+     */
+    function deriveEventSpaces(extracted) {
+      const eventName = cleanValue(extracted?.eventName || extracted?.name);
+      const eventType = cleanValue(extracted?.eventType || extracted?.type);
+      const place = cleanValue(extracted?.place || extracted?.venue);
+      const schedule = Array.isArray(extracted?.schedule) ? extracted.schedule : [];
+      const isWedding = /(웨딩|결혼|예식)/i.test(`${eventName} ${eventType}`);
+      const spaces = [];
+
+      const addSpace = (spaceName, role = "unspecified", roleLabel = "사용 공간") => {
+        const canonicalName = normalizeDerivedSpaceName(spaceName);
+        if (!canonicalName) return;
+        const key = canonicalName.toLowerCase().replace(/\s+/g, "");
+        const existing = spaces.find((item) => item._key === key);
+        if (existing) {
+          if (existing.role === "unspecified" && role !== "unspecified") {
+            existing.role = role;
+            existing.roleLabel = roleLabel;
+          }
+          return;
+        }
+        spaces.push({ spaceName: canonicalName, role, roleLabel, _key: key });
+      };
+
+      if (isWedding) {
+        let ceremonySpace = "";
+        let hasFlorenceDining = false;
+        schedule.forEach((row) => {
+          const content = cleanValue(row?.content);
+          const venue = cleanValue(row?.venue);
+          if (/(예식\s*(시작|종료)|본식)/i.test(content) && /컨벤션/i.test(venue)) {
+            ceremonySpace = /컨벤션\s*(센터)?\s*B/i.test(venue) ? "컨벤션센터 B" : "컨벤션센터 A";
+          }
+          if (/(식사\s*(시작|종료)|중식|석식)/i.test(content) && isFlorenceVenue(venue)) {
+            hasFlorenceDining = true;
+          }
+        });
+        if (ceremonySpace) addSpace(ceremonySpace, "ceremony", "예식장");
+        if (/올리비아/i.test(place)) addSpace("올리비아", "bridal_waiting", "신부대기실");
+        addSpace("부라노1", "family_lounge", "혼주라운지");
+        if (hasFlorenceDining) addSpace("피렌체", "dining", "식사장");
+
+        const knownWeddingSpace = (value) => /컨벤션|올리비아|부라노\s*[1ⅠI]|피렌체|florence/i.test(cleanValue(value));
+        splitVenueNames(place).filter((value) => !knownWeddingSpace(value)).forEach((value) => addSpace(value));
+        schedule.map((row) => row?.venue).filter((value) => value && !knownWeddingSpace(value)).forEach((value) => addSpace(value));
+      } else {
+        splitVenueNames(place).forEach((value) => addSpace(value));
+        schedule.map((row) => row?.venue).filter(Boolean).forEach((value) => addSpace(value));
+      }
+
+      return spaces.map(({ _key, ...space }) => space);
+    }
+
+    function splitVenueNames(value) {
+      return cleanValue(value)
+        .split(/\s*(?:,|，|\+|&|·|ㆍ|\/|\n)\s*/)
+        .map((item) => cleanValue(item))
+        .filter(Boolean);
+    }
+
+    function normalizeDerivedSpaceName(value) {
+      const name = cleanValue(value)
+        .replace(/^\s*(?:B\d+|지하\s*\d+층?|\d+\s*(?:F|층))\s*/i, "")
+        .trim();
+      if (!name) return "";
+      if (/^부라노\s*(?:1|I|Ⅰ)$/i.test(name)) return "부라노1";
+      if (/^(?:피렌체|florence)$/i.test(name)) return "피렌체";
+      if (/^올리비아$/i.test(name)) return "올리비아";
+      return name;
+    }
+
     return {
       extractEventOrderInfo,
       detectMealTypes,
+      deriveEventSpaces,
     };
   }
 

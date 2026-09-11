@@ -1092,7 +1092,7 @@
   <script src="./src/storage.js"></script>
   <script src="./src/auth.js"></script>
   <script src="./src/eventCalendar.js"></script>
-  <script src="./src/eventOrder.js"></script>
+  <script src="./src/eventOrder.js?v=multi-space-v1"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=base-floorplan-management-v2"></script>
@@ -1457,7 +1457,7 @@
         normalizeMealTypes,
       },
     });
-    const { extractEventOrderInfo, detectMealTypes } = eventOrderService;
+    const { extractEventOrderInfo, detectMealTypes, deriveEventSpaces } = eventOrderService;
     const assetManager = window.BANQUET_ERP_ASSET_MANAGER.createAssetManager({
       elements: {
         assetPanel,
@@ -2069,6 +2069,11 @@
       };
       const pendingKey = pendingKeys[field.key];
       if (pendingKey) pendingEvent[pendingKey] = value;
+      if (field.key === "place") pendingEvent.originalVenue = value;
+      if (["eventName", "place"].includes(field.key)) {
+        pendingEvent.eventSpaces = deriveEventSpaces(pendingEvent);
+        resultWrap.querySelector(".event-space-list")?.replaceWith(createEventSpacesValue(pendingEvent));
+      }
       if (field.key === "place") resetVenueResolution(pendingEvent);
     }
 
@@ -2077,10 +2082,8 @@
       card.className = "info-card wide-card";
       const label = document.createElement("div");
       label.className = "info-label";
-      label.textContent = "실제 사용 공간";
-      const value = document.createElement("div");
-      value.className = "info-value";
-      value.textContent = formatVenueSpaces(pendingEvent);
+      label.textContent = "사용 공간";
+      const value = createEventSpacesValue(pendingEvent);
       const note = document.createElement("p");
       note.className = "file-storage-note";
       if (pendingEvent?.venueMatchSource === "alias") {
@@ -2434,7 +2437,11 @@
       });
       typeInput.addEventListener("input", () => {
         selectedEventType = typeInput.value.trim();
-        if (pendingEvent) pendingEvent.eventType = selectedEventType;
+        if (pendingEvent) {
+          pendingEvent.eventType = selectedEventType;
+          pendingEvent.eventSpaces = deriveEventSpaces(pendingEvent);
+          resultWrap.querySelector(".event-space-list")?.replaceWith(createEventSpacesValue(pendingEvent));
+        }
       });
       typeGroup.append(typeLabel, typeInput);
 
@@ -2663,6 +2670,9 @@
         companyName: cleanValue(extracted.host),
         eventDateTime: cleanValue(extracted.eventDate),
         venue: cleanValue(extracted.place),
+        originalVenue: cleanValue(extracted.place),
+        resolvedVenueName: "",
+        eventSpaces: deriveEventSpaces({ ...extracted, eventType: selectedEventType }),
         venueId: null,
         venueSpaces: [],
         venueSpaceIds: [],
@@ -2790,6 +2800,7 @@
       eventItem.venueSpaceNames = [];
       eventItem.venueMatchSource = "";
       eventItem.venueAliasName = "";
+      eventItem.resolvedVenueName = "";
     }
 
     async function loadVenueDirectory() {
@@ -2966,7 +2977,7 @@
         return null;
       }
       eventItem.venueId = resolved.venueId;
-      eventItem.venue = resolved.venueName;
+      eventItem.resolvedVenueName = resolved.venueName;
       eventItem.venueSpaces = resolved.venueSpaces;
       eventItem.venueSpaceIds = resolved.venueSpaces.map((space) => space.id).filter(Boolean);
       eventItem.venueSpaceNames = resolved.venueSpaces.map((space) => space.spaceName).filter(Boolean);
@@ -2976,9 +2987,39 @@
     }
 
     function formatVenueSpaces(eventItem) {
-      const spaces = eventItem?.venueSpaces || [];
-      if (!spaces.length) return "매칭된 실제 공간이 없습니다.";
-      return spaces.map((space) => space.spaceName || space.spaceCode).filter(Boolean).join(", ");
+      const spaces = getEventSpaces(eventItem);
+      if (!spaces.length) return "확인된 사용 공간이 없습니다.";
+      return spaces.map((space) => `${space.roleLabel} ${space.spaceName}`).join(", ");
+    }
+
+    function getEventSpaces(eventItem) {
+      const spaces = deriveEventSpaces({
+        ...eventItem,
+        place: eventItem?.originalVenue || eventItem?.venue || "",
+      });
+      if (eventItem) eventItem.eventSpaces = spaces;
+      return spaces;
+    }
+
+    function createEventSpacesValue(eventItem) {
+      const spaces = getEventSpaces(eventItem);
+      const value = document.createElement("div");
+      value.className = "event-space-list";
+      if (!spaces.length) {
+        value.classList.add("empty");
+        value.textContent = "확인된 사용 공간이 없습니다.";
+        return value;
+      }
+      spaces.forEach((space) => {
+        const row = document.createElement("div");
+        const role = document.createElement("span");
+        const name = document.createElement("strong");
+        role.textContent = space.roleLabel;
+        name.textContent = space.spaceName;
+        row.append(role, name);
+        value.append(row);
+      });
+      return value;
     }
 
     async function savePendingEvent() {
@@ -3345,7 +3386,11 @@
     async function loadEventsFromSupabase() {
       try {
         const rows = await fetchEventRowsFromSupabase();
-        savedEvents = rows.map(mapDatabaseEvent);
+        savedEvents = rows.map(mapDatabaseEvent).map((eventItem) => ({
+          ...eventItem,
+          originalVenue: eventItem.venue,
+          eventSpaces: deriveEventSpaces(eventItem),
+        }));
         await enrichEventsForOperationBoard(savedEvents);
         eventsLoaded = true;
         renderCalendar();
@@ -4135,7 +4180,6 @@
         ["행사주최", eventItem.companyName],
         ["행사일시", eventItem.eventDateTime],
         ["장소", eventItem.venue],
-        ["실제 사용 공간", formatVenueSpaces(eventItem)],
         ["대표 행사 인원", formatPeopleSummary(eventItem)],
         ["행사 유형", eventItem.eventType || "미입력"],
         ["식사유형", formatMealTypes(eventItem.mealTypes)],
@@ -4151,6 +4195,13 @@
         card.append(label, value);
         detailGrid.append(card);
       });
+      const spacesCard = document.createElement("article");
+      spacesCard.className = "info-card wide-card";
+      const spacesLabel = document.createElement("div");
+      spacesLabel.className = "info-label";
+      spacesLabel.textContent = "사용 공간";
+      spacesCard.append(spacesLabel, createEventSpacesValue(eventItem));
+      detailGrid.append(spacesCard);
 
       const fileCard = document.createElement("article");
       fileCard.className = `info-card wide-card${eventItem.originalFilename ? "" : " missing"}`;
@@ -4469,6 +4520,8 @@
         others: splitEditorLines(getEditorValue("others")),
         internalMemo: getEditorValue("internalMemo"),
       };
+      updatedEvent.originalVenue = updatedEvent.venue;
+      updatedEvent.eventSpaces = deriveEventSpaces(updatedEvent);
       applyFilenameYearToEventDates(updatedEvent);
       logEventDateDetection(updatedEvent);
       await resolveAndApplyVenueInfo(updatedEvent);
