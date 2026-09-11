@@ -41,6 +41,23 @@
     return eventDates(event).length === 1 ? eventDates(event)[0] : "";
   }
   function venueName(row, event) { return normalize(row.venue || event.venue) || "장소 미입력"; }
+  function eventSpaceNames(event) {
+    return [...new Set((event?.eventSpaces || []).map((space) => normalize(space?.spaceName))
+      .filter(Boolean).map((name) => name.replace(/^컨벤션\s*센터\s*/i, "컨벤션")))];
+  }
+  function formatEventSpaceSummary(event, compact = false) {
+    const names = eventSpaceNames(event);
+    if (!names.length) return normalize(event?.venue) || "장소 미입력";
+    return compact && names.length > 2 ? `${names[0]} 외 ${names.length - 1}곳` : names.join(" · ");
+  }
+  function formatEventSpaceDetails(event) {
+    const spaces = event?.eventSpaces || [];
+    if (!spaces.length) return normalize(event?.venue) || "장소 미입력";
+    return spaces.map((space) => {
+      const name = normalize(space?.spaceName).replace(/^컨벤션\s*센터\s*/i, "컨벤션");
+      return `${normalize(space?.roleLabel) || "사용 공간"}: ${name}`;
+    }).filter((value) => !value.endsWith(": ")).join("\n");
+  }
   function scheduleContext(row, event) {
     const rowLocation = normalize([row.venue, row.location, row.place].filter(Boolean).join(" "));
     return normalize([rowLocation || event.venue, row.content].filter(Boolean).join(" ")).toLowerCase();
@@ -68,7 +85,8 @@
       .filter(Boolean).forEach((id) => keys.add(`id:${id}`));
     const names = [row.venue, row.location, row.place, event.venue, ...(event.venueSpaceNames || []),
       ...(row.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode]),
-      ...(event.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode])];
+      ...(event.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode]),
+      ...(event.eventSpaces || []).map((space) => space?.spaceName)];
     names.filter(Boolean).forEach((value) => {
       const normalized = String(value).toLowerCase().replace(/[Ⅰⅰ]/g, "1").replace(/[Ⅱⅱ]/g, "2").replace(/[Ⅲⅲ]/g, "3")
         .replace(/^\s*\d+\s*f\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
@@ -271,5 +289,5 @@
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
     dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
 })();

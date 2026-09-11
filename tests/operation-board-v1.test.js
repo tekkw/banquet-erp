@@ -62,6 +62,24 @@ assert(board.spacesOverlap(burano1, buranoAll), "부라노1과 부라노 ALL은 
 assert(!board.spacesOverlap(burano1, burano2), "부라노1과 부라노2는 겹치지 않아야 한다");
 assert(board.spacesOverlap(buranoBare, buranoAll), "부라노와 부라노 ALL은 같은 전체홀로 취급해야 한다");
 
+const weddingSpaces = [
+  { spaceName: "컨벤션센터 A", role: "ceremony", roleLabel: "예식장" },
+  { spaceName: "올리비아", role: "bridal_waiting", roleLabel: "신부대기실" },
+  { spaceName: "부라노1", role: "family_lounge", roleLabel: "혼주라운지" },
+  { spaceName: "피렌체", role: "dining", roleLabel: "식사장" },
+];
+const wedding = { venue: "올리비아", eventSpaces: weddingSpaces };
+assert.strictEqual(board.formatEventSpaceSummary(wedding, true), "컨벤션A 외 3곳", "좁은 행사 표시는 다중 공간을 축약해야 한다");
+assert.strictEqual(board.formatEventSpaceDetails(wedding), "예식장: 컨벤션A\n신부대기실: 올리비아\n혼주라운지: 부라노1\n식사장: 피렌체");
+assert(board.physicalSpaceKeys(wedding).includes("place:부라노:1"), "웨딩 혼주라운지를 실제 점유 공간으로 포함해야 한다");
+assert.strictEqual(board.formatEventSpaceSummary({ venue: "페스타" }), "페스타", "일반 행사는 기존 venue로 표시해야 한다");
+
+const weddingNextFixture = [
+  { id: "burano-today", eventName: "오늘 부라노 행사", calendarDates: [today], venue: "부라노1", schedule: [{ date: today, time: "18:00", content: "행사 종료", venue: "부라노1" }] },
+  { id: "wedding-tomorrow", eventName: "내일 웨딩", calendarDates: ["2026-09-09"], venue: "올리비아", eventSpaces: weddingSpaces, schedule: [{ date: "2026-09-09", time: "11:30", content: "예식시작", venue: "컨벤션센터 A" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(weddingNextFixture, today).find((item) => item.type === "next_setup")?.next?.name, "내일 웨딩", "부라노1 다음 세팅에서 웨딩의 혼주라운지 점유를 인식해야 한다");
+
 const overlapEvents = [
   { id: "all-today", eventName: "오늘 ALL", calendarDates: [today], ...buranoAll, schedule: [{ date: today, time: "18:00", venue: "부라노 ALL", content: "행사 종료" }] },
   { id: "all-nearest", eventName: "가장 가까운 ALL", calendarDates: ["2026-09-16"], ...buranoAll, schedule: [{ date: "2026-09-16", time: "09:00", venue: "부라노 ALL", content: "행사 시작" }] },

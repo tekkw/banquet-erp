@@ -1098,7 +1098,7 @@
 <script src="./src/floorplanEditor.js?v=base-floorplan-management-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js"></script>
-  <script src="./src/operationBoard.js?v=web-push-v1"></script>
+  <script src="./src/operationBoard.js?v=multi-space-dashboard-v1"></script>
   <script src="./src/pushNotifications.js?v=web-push-v1"></script>
   <script src="./src/dashboardWidgets.js?v=dashboard-ai-overlay-v1"></script>
   <script>
@@ -3672,7 +3672,8 @@
         title.textContent = getDashboardEventTitle(eventItem);
         const venue = document.createElement("span");
         venue.className = "operation-venue-name";
-        venue.textContent = eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력";
+        venue.textContent = getDashboardEventVenue(eventItem);
+        venue.title = getDashboardEventVenueDetails(eventItem);
         const mobileTime = document.createElement("span");
         mobileTime.className = "operation-card-time";
         mobileTime.textContent = getDashboardEventTime(eventItem);
@@ -3684,7 +3685,7 @@
     }
 
     function getOperationVenueCode(eventItem) {
-      const venueText = eventItem.venue || getFirstScheduleVenue(eventItem) || "";
+      const venueText = getDashboardEventVenue(eventItem);
       const normalized = String(venueText).replace(/\s+/g, " ").trim();
       const compact = normalized.replace(/\s+/g, "");
       const venuePrefixMap = [
@@ -3739,7 +3740,7 @@
       const todayEvents = getEventsForDate(formatDateKey(today));
       const tomorrowEvents = getEventsForDate(formatDateKey(tomorrow));
       const setupBlocks = window.BANQUET_ERP_OPERATION_BOARD?.buildAutoBlocks(savedEvents, formatDateKey(today)).filter((block) => block.type === "next_setup") || [];
-      const eventRows = (events) => events.length ? events.map((eventItem) => `<li><time>${escapeHtml(getDashboardEventTime(eventItem))}</time><span>${escapeHtml(eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력")} / ${escapeHtml(getDashboardEventTitle(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</span></li>`).join("") : '<li class="operation-status-empty">등록된 행사가 없습니다.</li>';
+      const eventRows = (events) => events.length ? events.map((eventItem) => `<li><time>${escapeHtml(getDashboardEventTime(eventItem))}</time><span title="${escapeHtml(getDashboardEventVenueDetails(eventItem))}">${escapeHtml(getDashboardEventVenue(eventItem, true))} / ${escapeHtml(getDashboardEventTitle(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</span></li>`).join("") : '<li class="operation-status-empty">등록된 행사가 없습니다.</li>';
       const setupRows = setupBlocks.length ? setupBlocks.map((block) => `<li><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(block.eventName)} 종료<br>→ ${block.next ? `${escapeHtml(block.next.name)} · ${escapeHtml(block.next.layoutType || "형태 미지정")} · ${escapeHtml(block.next.people || "-")}명` : "다음 행사 없음"}</span></li>`).join("") : '<li class="operation-status-empty">세팅 변경이 없습니다.</li>';
       grid.innerHTML = `<div class="operation-status-heading"><div><span class="eyebrow">Operations Status</span><h2>운영 현황</h2></div><button class="secondary-button" type="button" data-briefing-open>오늘 브리핑 다시 보기</button></div>
         ${renderStatusCard("오늘 행사", todayEvents.length, eventRows(todayEvents), "today")}
@@ -3762,7 +3763,7 @@
       const userKey = currentUser?.id || currentUser?.label || "user";
       const seenKey = `banquet-erp-daily-briefing:${userKey}:${todayKey}`;
       if (!force && localStorage.getItem(seenKey)) return;
-      content.innerHTML = `<span class="eyebrow">Daily Banquet Briefing</span><h2 id="dailyBriefingTitle">${today.getMonth() + 1}월 ${today.getDate()}일 오늘의 연회 브리핑</h2><p class="daily-briefing-count">오늘 등록 행사: <strong>${getEventsForDate(todayKey).length}건</strong></p><section><h3>내일 주요 일정</h3><ul>${tomorrowEvents.length ? tomorrowEvents.slice(0, 6).map((eventItem) => `<li>${escapeHtml(eventItem.venue || getFirstScheduleVenue(eventItem) || "장소 미입력")} ${escapeHtml(getDashboardEventTime(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</li>`).join("") : "<li>등록된 일정이 없습니다.</li>"}</ul></section><section><h3>오늘 준비할 사항</h3><ul>${setupBlocks.length ? setupBlocks.map((block) => `<li>${escapeHtml(block.venue)} · ${block.next ? `${escapeHtml(block.next.name)} 사전 세팅` : "다음 세팅 확인"}</li>`).join("") : "<li>추가 준비 사항이 없습니다.</li>"}</ul></section><section><h3>운영 체크</h3><p>세팅 변경 ${setupBlocks.length}건</p></section>`;
+      content.innerHTML = `<span class="eyebrow">Daily Banquet Briefing</span><h2 id="dailyBriefingTitle">${today.getMonth() + 1}월 ${today.getDate()}일 오늘의 연회 브리핑</h2><p class="daily-briefing-count">오늘 등록 행사: <strong>${getEventsForDate(todayKey).length}건</strong></p><section><h3>내일 주요 일정</h3><ul>${tomorrowEvents.length ? tomorrowEvents.slice(0, 6).map((eventItem) => `<li title="${escapeHtml(getDashboardEventVenueDetails(eventItem))}">${escapeHtml(getDashboardEventVenue(eventItem, true))} ${escapeHtml(getDashboardEventTime(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</li>`).join("") : "<li>등록된 일정이 없습니다.</li>"}</ul></section><section><h3>오늘 준비할 사항</h3><ul>${setupBlocks.length ? setupBlocks.map((block) => `<li>${escapeHtml(block.venue)} · ${block.next ? `${escapeHtml(block.next.name)} 사전 세팅` : "다음 세팅 확인"}</li>`).join("") : "<li>추가 준비 사항이 없습니다.</li>"}</ul></section><section><h3>운영 체크</h3><p>세팅 변경 ${setupBlocks.length}건</p></section>`;
       localStorage.setItem(seenKey, "shown");
       dialog.showModal();
     }
@@ -3911,6 +3912,18 @@
 
     function getFirstScheduleVenue(eventItem) {
       return (eventItem.schedule || []).map((item) => cleanValue(item.venue)).find(Boolean) || "";
+    }
+
+    function getDashboardEventVenue(eventItem, compact = false) {
+      return window.BANQUET_ERP_OPERATION_BOARD?.formatEventSpaceSummary(eventItem, compact)
+        || eventItem.venue
+        || getFirstScheduleVenue(eventItem)
+        || "장소 미입력";
+    }
+
+    function getDashboardEventVenueDetails(eventItem) {
+      return window.BANQUET_ERP_OPERATION_BOARD?.formatEventSpaceDetails(eventItem)
+        || getDashboardEventVenue(eventItem);
     }
 
     function syncExportDefaults() {
