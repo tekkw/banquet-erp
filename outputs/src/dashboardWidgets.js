@@ -71,7 +71,7 @@
     if (!home || home.querySelector(".dashboard-widget-layout")) return;
     decorateChrome();
     ensureQuickActions(home);
-    home.querySelector("[data-ai-fullscreen]")?.addEventListener("click", () => document.querySelector('.sidebar-nav-item[data-dashboard-target="ai"]')?.click());
+    setupDashboardAiOverlay(home);
     const header = document.createElement("header");
     header.className = "dashboard-home-header";
     header.innerHTML = `<div><span class="dashboard-today">${new Intl.DateTimeFormat("ko-KR", { dateStyle: "full" }).format(new Date())}</span><small>연회 운영 대시보드</small></div><div class="dashboard-edit-actions"><button class="secondary-button" type="button" data-dashboard-edit>대시보드 편집</button><button class="secondary-button" type="button" data-widget-add hidden>+ 위젯 추가</button><button class="secondary-button" type="button" data-widget-reset hidden>기본 배치로 초기화</button><button class="secondary-button" type="button" data-widget-cancel hidden>취소</button><button class="primary-button" type="button" data-widget-save hidden>저장</button></div>`;
@@ -98,6 +98,64 @@
     draft = load();
     apply(draft);
     bind();
+  }
+
+  function setupDashboardAiOverlay(home) {
+    const widget = home.querySelector(".dashboard-ai-widget");
+    const expandButton = widget?.querySelector("[data-ai-fullscreen]");
+    const widgetHeader = widget?.querySelector(".ai-chat-header");
+    if (!widget || !expandButton || !widgetHeader) return;
+
+    expandButton.textContent = "⛶ 펼치기";
+    expandButton.setAttribute("aria-haspopup", "dialog");
+    widgetHeader.append(expandButton);
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "ai-widget-modal";
+    dialog.setAttribute("aria-labelledby", "aiWidgetModalTitle");
+    dialog.innerHTML = `<header class="ai-widget-modal-header"><h2 id="aiWidgetModalTitle">AI 비서</h2><div><button class="secondary-button" type="button" data-ai-page-link>전체 AI 비서 페이지로 이동</button><button class="secondary-button ai-widget-modal-close" type="button" data-ai-modal-close aria-label="AI 비서 확대창 닫기">닫기 ×</button></div></header><div class="ai-widget-modal-body"></div>`;
+    document.body.append(dialog);
+
+    const modalBody = dialog.querySelector(".ai-widget-modal-body");
+    let placeholder = null;
+
+    const restoreWidget = () => {
+      if (!placeholder?.isConnected) return;
+      widget.classList.remove("is-expanded");
+      placeholder.replaceWith(widget);
+      placeholder = null;
+    };
+
+    const closeOverlay = () => {
+      restoreWidget();
+      if (dialog.open) dialog.close();
+      expandButton.focus();
+    };
+
+    expandButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (dialog.open) return;
+      placeholder = document.createComment("dashboard-ai-widget-position");
+      widget.before(placeholder);
+      modalBody.append(widget);
+      widget.classList.add("is-expanded");
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+      requestAnimationFrame(() => widget.querySelector("#chatInput")?.focus());
+    });
+
+    dialog.querySelector("[data-ai-modal-close]").addEventListener("click", closeOverlay);
+    dialog.querySelector("[data-ai-page-link]").addEventListener("click", () => {
+      closeOverlay();
+      document.querySelector('.sidebar-nav-item[data-dashboard-target="ai"]')?.click();
+    });
+    dialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      closeOverlay();
+    });
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) closeOverlay();
+    });
   }
 
   function decorateChrome() {
