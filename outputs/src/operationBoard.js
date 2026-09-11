@@ -222,12 +222,13 @@
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
     const groups = blocks.reduce((map, block) => { (map[block.time] ||= []).push(block); return map; }, {});
-    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>오늘 운영보드</h2></div><div class="operation-board-actions"><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
+    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>오늘 운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
       <div class="operation-briefing-counts"><span>오늘 행사 <strong>${todayEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
       <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">오늘 표시할 운영 일정이 없습니다. 직접 작업을 추가할 수 있습니다.</p>'}</div>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>`;
     if (weeklyRoot) weeklyRoot.innerHTML = renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents));
     bindEvents();
+    window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
   function renderWeeklySetupSection(tasks) {
     const active = tasks.filter((item) => !item.completed); const completed = tasks.filter((item) => item.completed);
