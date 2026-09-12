@@ -132,6 +132,52 @@ body,
 }
 
 /* Event details and operational cards still contain legacy light-theme colors. */
+#uploadPage #resultWrap,
+#uploadPage #resultWrap .info-card,
+#uploadPage #resultWrap .schedule-table-wrap {
+  border-color: var(--border);
+  background: #0D2235;
+  color: var(--text-secondary);
+  box-shadow: none;
+}
+
+#uploadPage #resultWrap .info-label,
+#uploadPage #resultWrap .info-card label {
+  color: var(--text-muted);
+}
+
+#uploadPage #resultWrap .schedule-table {
+  background: #0D2235;
+  color: var(--text-primary);
+}
+
+#uploadPage #resultWrap .schedule-table th {
+  border-color: var(--border-strong);
+  background: #163149;
+  color: var(--text-primary);
+}
+
+#uploadPage #resultWrap .schedule-table td {
+  border-color: var(--border);
+  background: #102A40;
+  color: var(--text-primary);
+}
+
+#uploadPage #resultWrap .schedule-table tbody tr:nth-child(even) td {
+  background: #0D263A;
+}
+
+#uploadPage #resultWrap :where(.preview-input, .preview-textarea, input, select, textarea) {
+  color-scheme: dark;
+  border-color: var(--border-strong);
+  background: var(--surface-input);
+  color: var(--text-primary);
+}
+
+#uploadPage #resultWrap :where(.preview-input, .preview-textarea, input, textarea)::placeholder {
+  color: var(--text-muted);
+}
+
 .modal {
   border: 1px solid var(--border-strong);
   background: var(--surface-secondary);
