@@ -4949,7 +4949,7 @@
           cellText: true,
         });
 
-        return workbook.SheetNames.map((name) => {
+        const parsedSheets = workbook.SheetNames.map((name) => {
           const sheet = workbook.Sheets[name];
           const rows = window.XLSX.utils.sheet_to_json(sheet, {
             header: 1,
@@ -4959,6 +4959,10 @@
           });
           return { name, rows };
         });
+        if (parsedSheets.some((sheet) => sheet.rows.some((row) => row.some((cell) => cleanValue(cell))))) {
+          return parsedSheets;
+        }
+        console.warn("SheetJS가 빈 시트를 반환해 내장 XLSX parser로 다시 읽습니다.");
       }
 
       const files = await unzip(buffer);

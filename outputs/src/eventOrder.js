@@ -42,7 +42,8 @@
     function extractEventOrderInfo(sheets) {
       const extracted = {
         eventName: findFixedRowValue(sheets, "행사명(Name of Event)"),
-        host: findFixedRowValue(sheets, "행사주최(Name of Company)"),
+        host: findFixedRowValue(sheets, "행사주최(Name of Company)")
+          || findFixedRowValue(sheets, "행사주관(Name of Company)"),
         eventDate: findFixedRowValue(sheets, "행사일시(Date / Time)"),
         place: findFixedRowValue(sheets, "장소(Venue)"),
         schedule: extractScheduleRows(sheets),
@@ -53,7 +54,8 @@
         layout: [],
         others: [],
       };
-      extracted.layout = splitEditorLines(extracted.layoutEqpText || extractSectionColumnValues(sheets, "Lay out & EQP", "Others").join("\n"));
+      extracted.layout = normalizeLayoutEqpLines(splitEditorLines(extracted.layoutEqpText || extractSectionColumnValues(sheets, "Lay out & EQP", "Others").join("\n")));
+      extracted.layoutEqpText = extracted.layout.join("\n");
       extracted.others = splitEditorLines(extracted.othersText || extractSectionColumnValues(sheets, "Others", "시설(Engineering)").join("\n"));
       const result = {
         ...extracted,
@@ -64,6 +66,7 @@
       };
       return {
         ...result,
+        guestCount: inferRepresentativeGuestCount(sheets, result.schedule),
         eventSpaces: deriveEventSpaces(result),
       };
     }
@@ -82,9 +85,19 @@
       const normalizedLabel = normalizeLabel(label);
       for (const sheet of sheets) {
         for (const row of sheet.rows) {
-          const hasLabel = (row || []).some((cell) => normalizeLabel(cell) === normalizedLabel);
-          if (hasLabel) return cleanValue(row?.[3]);
+          const labelIndex = (row || []).findIndex((cell) => normalizeLabel(cell) === normalizedLabel);
+          if (labelIndex < 0) continue;
+          const value = findFirstValueToRight(row, labelIndex);
+          if (value) return value;
         }
+      }
+      return "";
+    }
+
+    function findFirstValueToRight(row, labelIndex, maxOffset = 4) {
+      for (let offset = 1; offset <= maxOffset; offset += 1) {
+        const value = cleanValue(row?.[labelIndex + offset]);
+        if (value) return value;
       }
       return "";
     }
@@ -106,7 +119,7 @@
           if (!firstCell) continue;
           const hasLabel = labels.some((label) => firstCell.includes(normalizeLabel(label)));
           if (!hasLabel) continue;
-          const value = cleanValue(row?.[3]);
+          const value = findFirstValueToRight(row, 0);
           if (value) return value;
         }
       }
@@ -127,16 +140,12 @@
     function extractScheduleRows(sheets) {
       for (const sheet of sheets) {
         const headerIndex = findScheduleHeaderRowIndex(sheet.rows);
-        if (headerIndex >= 0 && headerIndex < 12) {
-          const fallbackRows = readScheduleRowsAfterHeader(sheet.rows, headerIndex);
-          if (fallbackRows.length > 0) return fallbackRows;
+        if (headerIndex >= 0) {
+          const headerRows = readScheduleRowsAfterHeader(sheet.rows, headerIndex);
+          if (headerRows.length > 0) return headerRows;
         }
         const scheduleRows = readFixedScheduleRows(sheet.rows);
         if (scheduleRows.length > 0) return scheduleRows;
-        if (headerIndex >= 0) {
-          const fallbackRows = readScheduleRowsAfterHeader(sheet.rows, headerIndex);
-          if (fallbackRows.length > 0) return fallbackRows;
-        }
       }
       return extractFallbackScheduleRows(sheets);
     }
@@ -209,14 +218,12 @@
     }
 
     function isScheduleHeaderRow(row) {
-      const timeHeader = normalizeLabel(row?.[1]).includes(normalizeLabel("시간"));
-      const contentHeader = normalizeLabel(row?.[2]).includes(normalizeLabel("내용"));
-      const venueHeader = normalizeLabel(row?.[4]).includes(normalizeLabel("장소"));
-      const peopleHeader = normalizeLabel(row?.[6]).includes(normalizeLabel("인원"));
-      return timeHeader && contentHeader && venueHeader && peopleHeader;
+      return Boolean(findScheduleColumns(row));
     }
 
     function readScheduleRowsAfterHeader(rows, headerIndex) {
+      const columns = findScheduleColumns(rows[headerIndex] || []);
+      if (!columns) return [];
       const scheduleRows = [];
       let currentDate = "";
       let blankStreak = 0;
@@ -224,14 +231,14 @@
         const row = rows[rowIndex] || [];
         if (rowHasMarkerInColumns(row, "Items", 0, 9)) break;
 
-        const rowDate = cleanValue(row[0]);
+        const rowDate = cleanValue(row[columns.date]);
         if (rowDate) currentDate = rowDate;
         const item = {
           date: currentDate,
-          time: cleanValue(row[1]),
-          content: cleanValue(row[2]),
-          venue: cleanValue(row[4]),
-          people: cleanValue(row[6]),
+          time: cleanValue(row[columns.time]),
+          content: cleanValue(row[columns.content]),
+          venue: cleanValue(row[columns.venue]),
+          people: cleanValue(row[columns.people]),
         };
 
         if (isScheduleRowEmpty(item)) {
@@ -248,6 +255,60 @@
         console.warn(`fallback extraction failed: Schedule 데이터 행을 찾지 못했습니다. headerRow=${headerIndex + 1}`);
       }
       return scheduleRows;
+    }
+
+    function findScheduleColumns(row) {
+      const columns = { date: -1, time: -1, content: -1, venue: -1, people: -1 };
+      (row || []).forEach((cell, index) => {
+        const label = normalizeLabel(cell);
+        if (!label) return;
+        const hasDate = label.includes(normalizeLabel("날짜")) || label.includes("date");
+        const hasTime = label.includes(normalizeLabel("시간")) || label.includes("time");
+        if (hasDate && hasTime) {
+          columns.date = index;
+          columns.time = index + 1;
+        } else if (hasDate) columns.date = index;
+        else if (hasTime) columns.time = index;
+        if (label.includes(normalizeLabel("내용")) || label.includes("content")) columns.content = index;
+        if (label.includes(normalizeLabel("장소")) || label.includes("venue")) columns.venue = index;
+        if (label.includes(normalizeLabel("인원")) || label.includes("people") || label.includes("pax")) columns.people = index;
+      });
+      if (columns.time >= 0 && columns.content - columns.time > 1 && !cleanValue(row?.[columns.time + 1])) {
+        columns.date = columns.time;
+        columns.time += 1;
+      }
+      if (columns.date < 0) columns.date = 0;
+      return columns.time >= 0 && columns.content >= 0 && columns.venue >= 0 && columns.people >= 0
+        ? columns
+        : null;
+    }
+
+    function inferRepresentativeGuestCount(sheets, scheduleRows) {
+      for (const sheet of sheets) {
+        for (const row of sheet.rows) {
+          const labelIndex = (row || []).findIndex((cell) => /(최저\s*보증|최대\s*인원|minimum\s*guarantee|maximum\s*(?:people|pax))/i.test(cleanValue(cell)));
+          if (labelIndex < 0) continue;
+          const count = extractPeopleCount(findFirstValueToRight(row, labelIndex));
+          if (count) return count;
+        }
+      }
+      const candidates = (scheduleRows || []).map((row) => ({ row, count: extractPeopleCount(row?.people) })).filter((item) => item.count);
+      const mainEvent = candidates.find(({ row }) => {
+        const text = `${cleanValue(row?.content)} ${cleanValue(row?.venue)}`;
+        return !/(조식|중식|석식|런치|디너|breakfast|lunch|dinner|커피\s*브레이크|coffee\s*break|체크인|check\s*in|프론트|피렌체)/i.test(text);
+      });
+      return mainEvent?.count || candidates[0]?.count || "";
+    }
+
+    function extractPeopleCount(value) {
+      const match = cleanValue(value).replace(/,/g, "").match(/\d+/);
+      return match ? match[0] : "";
+    }
+
+    function normalizeLayoutEqpLines(lines) {
+      return (lines || [])
+        .map((line) => cleanValue(line).replace(/class\s*ttpe/ig, "Class").replace(/class\s*type/ig, "Class"))
+        .filter(Boolean);
     }
 
     /*
