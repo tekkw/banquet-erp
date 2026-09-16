@@ -2509,3 +2509,61 @@ select {
     width: fit-content;
   }
 }
+
+/* Upload preview: dark cards for AI analysis only. */
+#uploadPage .ai-analysis-header h2,
+#uploadPage .ai-analysis-card h3,
+#uploadPage .ai-analysis-card .metric,
+#uploadPage .ai-analysis-list strong,
+#uploadPage .layout-recommendation-body strong,
+#uploadPage .similar-events-header h2,
+#uploadPage .similar-event-title strong,
+#uploadPage .similar-event-field b {
+  color: #F4F7FA;
+}
+
+#uploadPage .ai-analysis-header p,
+#uploadPage .ai-analysis-card .subtle,
+#uploadPage .ai-analysis-child-list li,
+#uploadPage .layout-recommendation-body small,
+#uploadPage .similar-events-header p,
+#uploadPage .similar-event-field span {
+  color: #96A9BA;
+}
+
+#uploadPage .ai-analysis-card,
+#uploadPage .similar-events-section,
+#uploadPage .similar-event-card {
+  border-color: var(--theme-border);
+  background: #102A40;
+  color: #C9D5DE;
+  box-shadow: none;
+}
+
+#uploadPage .ai-analysis-list,
+#uploadPage .ai-analysis-list span,
+#uploadPage .ai-analysis-fallback {
+  color: #C9D5DE;
+}
+
+#uploadPage .ai-analysis-list li,
+#uploadPage .ai-analysis-child-list {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+#uploadPage .layout-recommendation-item {
+  border-color: var(--theme-border);
+  background: #0D2235;
+  color: #C9D5DE;
+}
+
+#uploadPage .layout-recommendation-file {
+  border-color: var(--theme-border);
+  background: #0D2235;
+  color: #F4F7FA;
+}
+
+#uploadPage .risk-badge {
+  filter: saturate(1.05) brightness(1.08);
+  font-weight: 900;
+}
