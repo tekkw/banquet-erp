@@ -1148,6 +1148,79 @@ select {
   }
 }
 
+/* AI page dark-surface readability. Scoped here so other ERP pages are unchanged. */
+.erp-shell[data-active-page="ai"] .ai-assistant-page,
+.erp-shell[data-active-page="ai"] .ai-main-panel,
+.erp-shell[data-active-page="ai"] .ai-mode-panel {
+  color: #F4F7FA;
+}
+
+.erp-shell[data-active-page="ai"] .ai-page-card,
+.erp-shell[data-active-page="ai"] .ai-interview-panel,
+.erp-shell[data-active-page="ai"] .ai-interview-question-card,
+.erp-shell[data-active-page="ai"] .ai-knowledge-confirm-card,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row,
+.erp-shell[data-active-page="ai"] .ai-question-generator,
+.erp-shell[data-active-page="ai"] .ai-question-candidate,
+.erp-shell[data-active-page="ai"] .ai-direct-teach-guide,
+.erp-shell[data-active-page="ai"] .ai-summary-grid div,
+.erp-shell[data-active-page="ai"] .ai-knowledge-summary,
+.erp-shell[data-active-page="ai"] .ai-follow-up-question,
+.erp-shell[data-active-page="ai"] .ai-page-message.assistant .ai-page-bubble {
+  border-color: var(--theme-border);
+  background: #102A40;
+  color: #F4F7FA;
+}
+
+.erp-shell[data-active-page="ai"] .ai-direct-teach-guide strong,
+.erp-shell[data-active-page="ai"] .ai-interview-header strong,
+.erp-shell[data-active-page="ai"] .ai-interview-question-card h3,
+.erp-shell[data-active-page="ai"] .ai-knowledge-confirm-title h3,
+.erp-shell[data-active-page="ai"] .ai-summary-grid span,
+.erp-shell[data-active-page="ai"] .ai-page-bubble strong,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row dd,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row p {
+  color: #F4F7FA;
+}
+
+.erp-shell[data-active-page="ai"] .ai-direct-teach-guide p,
+.erp-shell[data-active-page="ai"] .ai-page-card p,
+.erp-shell[data-active-page="ai"] .ai-interview-question-card p,
+.erp-shell[data-active-page="ai"] .ai-knowledge-confirm-title p,
+.erp-shell[data-active-page="ai"] .ai-knowledge-summary p,
+.erp-shell[data-active-page="ai"] .ai-follow-up-question p,
+.erp-shell[data-active-page="ai"] .ai-page-bubble p {
+  color: #D7E2EA;
+}
+
+.erp-shell[data-active-page="ai"] .ai-interview-header span,
+.erp-shell[data-active-page="ai"] .ai-summary-grid strong,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row dt,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row .subtle,
+.erp-shell[data-active-page="ai"] .ai-knowledge-row.edit-mode label,
+.erp-shell[data-active-page="ai"] .ai-question-generator p {
+  color: #AFC0CF;
+}
+
+.erp-shell[data-active-page="ai"] input,
+.erp-shell[data-active-page="ai"] textarea,
+.erp-shell[data-active-page="ai"] select {
+  border-color: var(--theme-border) !important;
+  background: #0D2235 !important;
+  color: #F4F7FA !important;
+}
+
+.erp-shell[data-active-page="ai"] input::placeholder,
+.erp-shell[data-active-page="ai"] textarea::placeholder {
+  color: #8FA4B7 !important;
+  opacity: 1 !important;
+}
+
+.erp-shell[data-active-page="ai"] .ai-interview-meta,
+.erp-shell[data-active-page="ai"] .ai-direct-teach-count {
+  color: #96A9BA;
+}
+
 .ai-interview-panel {
   display: grid;
   gap: 12px;
