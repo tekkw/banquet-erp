@@ -6,8 +6,13 @@ const publicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const privateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const subject = Deno.env.get("VAPID_SUBJECT") ?? "https://banquet-erp.vercel.app";
 const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
 
-function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
+function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 async function rest(path: string, options: RequestInit = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, { ...options, headers: { ...headers, ...(options.headers || {}) } });
   if (!response.ok) throw new Error(`${path}: ${response.status} ${await response.text()}`);
@@ -24,6 +29,7 @@ function scheduledAt(date: string, time: string, offset: number) {
 }
 
 Deno.serve(async (request) => {
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (request.method === "GET") return publicKey ? json({ publicKey }) : json({ message: "VAPID_PUBLIC_KEY is not configured" }, 503);
   if (request.method !== "POST") return json({ message: "POST only" }, 405);
   if (!url || !serviceKey || !publicKey || !privateKey) return json({ message: "Push secrets are not configured" }, 503);

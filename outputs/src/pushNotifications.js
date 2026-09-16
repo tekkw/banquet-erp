@@ -8,18 +8,28 @@
     return Uint8Array.from(bytes, (char) => char.charCodeAt(0));
   }
 
+  function stageError(message, error) {
+    console.error(`[Push Notifications] ${message}`, error);
+    const detail = error?.message && error.message !== "Failed to fetch" ? ` (${error.message})` : "";
+    return new Error(`${message}${detail}`);
+  }
+
   async function request(path, options = {}) {
     const response = await fetch(`${config.url}/rest/v1/${path}`, {
       ...options,
       headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) },
     });
-    if (!response.ok) throw new Error(`Push subscription storage ${response.status}`);
+    if (!response.ok) throw new Error(`${response.status} ${await response.text()}`.trim());
     return response;
   }
 
   async function registration() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("이 브라우저는 Web Push를 지원하지 않습니다.");
-    return navigator.serviceWorker.register("./push-sw.js", { scope: "./" });
+    try {
+      return await navigator.serviceWorker.register("./push-sw.js", { scope: "./" });
+    } catch (error) {
+      throw stageError("서비스워커 등록 실패", error);
+    }
   }
 
   async function currentSubscription() {
@@ -31,15 +41,32 @@
     const permission = await Notification.requestPermission();
     if (permission !== "granted") throw new Error("알림 권한이 허용되지 않았습니다.");
     const { worker, subscription: existing } = await currentSubscription();
-    const keyResponse = await fetch(functionUrl, { headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` } });
-    if (!keyResponse.ok) throw new Error("Push 공개키를 불러오지 못했습니다.");
-    const { publicKey } = await keyResponse.json();
-    const subscription = existing || await worker.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(publicKey) });
+    let publicKey;
+    try {
+      const keyResponse = await fetch(functionUrl, { headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` } });
+      if (!keyResponse.ok) throw new Error(`${keyResponse.status} ${await keyResponse.text()}`.trim());
+      ({ publicKey } = await keyResponse.json());
+      if (!publicKey) throw new Error("응답에 publicKey가 없습니다.");
+    } catch (error) {
+      throw stageError("Push 공개키 요청 실패", error);
+    }
+    let subscription = existing;
+    if (!subscription) {
+      try {
+        subscription = await worker.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(publicKey) });
+      } catch (error) {
+        throw stageError("Push 구독 생성 실패", error);
+      }
+    }
     const json = subscription.toJSON();
-    await request("push_subscriptions?on_conflict=endpoint", {
-      method: "POST", headers: { Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify({ endpoint: subscription.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth, device_name: navigator.userAgentData?.platform || navigator.platform || "Web device", is_active: true, updated_at: new Date().toISOString() }),
-    });
+    try {
+      await request("push_subscriptions?on_conflict=endpoint", {
+        method: "POST", headers: { Prefer: "resolution=merge-duplicates" },
+        body: JSON.stringify({ endpoint: subscription.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth, device_name: navigator.userAgentData?.platform || navigator.platform || "Web device", is_active: true, updated_at: new Date().toISOString() }),
+      });
+    } catch (error) {
+      throw stageError("구독 DB 저장 실패", error);
+    }
     bind();
   }
 
@@ -63,10 +90,14 @@
       button.onclick = async () => {
         button.disabled = true;
         try { if (button.dataset.pushEnabled === "true") await disable(); else await enable(); }
-        catch (error) { alert(error.message || "알림 설정에 실패했습니다."); }
+        catch (error) {
+          console.error("[Push Notifications] 알림 설정 실패", error);
+          alert(error.message || "알림 설정에 실패했습니다.");
+        }
         finally { button.disabled = false; }
       };
     } catch (error) {
+      console.error("[Push Notifications] 초기화 실패", error);
       button.textContent = "알림 미지원"; button.disabled = true; button.title = error.message;
     }
   }
