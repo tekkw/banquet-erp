@@ -386,6 +386,21 @@
       });
     }
 
+    function buildCorrectionRecords({ originalValues = {}, correctedValues = {}, sources = {}, fileName = "", eventName = "", correctedAt = "" } = {}) {
+      const timestamp = correctedAt || new Date().toISOString();
+      return ["eventName", "eventDate", "place", "guestCount"]
+        .filter((field) => cleanValue(originalValues[field]) !== cleanValue(correctedValues[field]))
+        .map((field) => ({
+          field,
+          originalValue: cleanValue(originalValues[field]),
+          correctedValue: cleanValue(correctedValues[field]),
+          source: sources[field] || "manual",
+          fileName: cleanValue(fileName),
+          eventName: cleanValue(eventName || correctedValues.eventName),
+          correctedAt: timestamp,
+        }));
+    }
+
     /*
      * 왜 이 함수를 만들었는지:
      * - Items 섹션에서 항목명, 단가, 수량, 금액을 구조화하기 위해 만들었다.
@@ -665,6 +680,7 @@
       extractEventOrderInfo,
       detectMealTypes,
       deriveEventSpaces,
+      buildCorrectionRecords,
     };
   }
 

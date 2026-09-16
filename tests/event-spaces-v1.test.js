@@ -76,4 +76,18 @@ const blank = service.extractEventOrderInfo([{ name: "Blank", rows: [] }]);
 assert.strictEqual(blank.validation.status, "review");
 assert.ok(blank.validation.issues.some((issue) => issue.field === "eventName"));
 assert.ok(blank.validation.issues.some((issue) => issue.field === "schedule"));
+
+const corrections = service.buildCorrectionRecords({
+  originalValues: { eventName: "행사", eventDate: "2026-09-11", place: "부라노", guestCount: "34" },
+  correctedValues: { eventName: "행사", eventDate: "2026-09-11", place: "부라노1", guestCount: "31" },
+  sources: { place: "manual", guestCount: "manual" },
+  fileName: "sample.xlsx",
+  eventName: "행사",
+  correctedAt: "2026-09-16T00:00:00.000Z",
+});
+assert.deepStrictEqual(JSON.parse(JSON.stringify(corrections.map((record) => record.field))), ["place", "guestCount"]);
+assert.strictEqual(corrections[0].correctedValue, "부라노1");
+assert.strictEqual(corrections[1].originalValue, "34");
+assert.strictEqual(corrections[1].correctedValue, "31");
+assert.ok(corrections.every((record) => record.source === "manual"));
 console.log("event-spaces-v1 tests passed");

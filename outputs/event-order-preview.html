@@ -1377,6 +1377,7 @@
     let loadedSheets = [];
     let pendingEvent = null;
     let previewExtracted = null;
+    let extractionOriginalValues = {};
     let similarEvents = [];
     let similarEventsLoading = false;
     let similarEventsExpanded = false;
@@ -1457,7 +1458,7 @@
         normalizeMealTypes,
       },
     });
-    const { extractEventOrderInfo, detectMealTypes, deriveEventSpaces } = eventOrderService;
+    const { extractEventOrderInfo, detectMealTypes, deriveEventSpaces, buildCorrectionRecords } = eventOrderService;
     const assetManager = window.BANQUET_ERP_ASSET_MANAGER.createAssetManager({
       elements: {
         assetPanel,
@@ -1892,6 +1893,7 @@
       selectedSaveDates = [];
       resetEventOrderAiReviewState();
       previewExtracted = null;
+      extractionOriginalValues = {};
       pendingEvent = null;
       showErpPage("upload");
       setStatus("엑셀 파일을 읽는 중입니다...");
@@ -1905,6 +1907,7 @@
         }
 
         previewExtracted = extractEventOrderInfo(loadedSheets);
+        extractionOriginalValues = captureExtractionValues(previewExtracted);
         previewExtracted.originalFileName = file.name;
         previewExtracted.originalFilename = file.name;
         previewExtracted.originalFileObject = file;
@@ -3105,6 +3108,8 @@
         return;
       }
 
+      persistExtractionCorrections(savedEvent.id, eventToSave);
+
       savedEvents = [...savedEvents, savedEvent];
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
@@ -3112,6 +3117,39 @@
       setStatus("이벤트오더가 저장되었습니다. AI가 내용을 검토하고 있습니다.");
       showToast("이벤트오더가 저장되었습니다.");
       await reviewSavedEventOrderWithAi(savedEvent.id);
+    }
+
+    function captureExtractionValues(extracted) {
+      return {
+        eventName: cleanValue(extracted?.eventName),
+        eventDate: cleanValue(extracted?.eventDate),
+        place: cleanValue(extracted?.place),
+        guestCount: cleanValue(extracted?.guestCount),
+      };
+    }
+
+    function persistExtractionCorrections(eventOrderId, eventItem) {
+      const records = buildCorrectionRecords({
+        originalValues: extractionOriginalValues,
+        correctedValues: {
+          eventName: eventItem.eventName,
+          eventDate: eventItem.eventDateTime,
+          place: eventItem.venue,
+          guestCount: eventItem.guestCount,
+        },
+        sources: previewExtracted?.sources || {},
+        fileName: eventItem.originalFilename || uploadedOriginalFile?.name || "",
+        eventName: eventItem.eventName,
+      }).map((record) => ({ ...record, eventOrderId }));
+      if (!records.length) return;
+      const storageKey = "banquetErp.eventOrderCorrections.v1";
+      try {
+        const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
+        const history = Array.isArray(existing) ? existing : [];
+        localStorage.setItem(storageKey, JSON.stringify([...history, ...records].slice(-500)));
+      } catch (error) {
+        console.warn("이벤트오더 수정 이력 저장을 건너뜁니다.", error);
+      }
     }
 
     async function reviewSavedEventOrderWithAi(eventOrderId) {
