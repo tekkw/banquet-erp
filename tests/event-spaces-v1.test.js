@@ -42,14 +42,38 @@ assert.strictEqual(wedding.place, "1F 피렌체, 3F 컨벤션센터, 올리비�
 const rows = Array.from({ length: 16 }, () => []);
 rows[0] = ["행사명(Name of Event)", "", "", "일반 세미나"];
 rows[1] = ["장소(Venue)", "", "", "페스타"];
-rows[13] = ["2026-09-11", "09:00", "행사시작", "", "페스타", "", "100"];
+rows[2] = ["행사일시(Date / Time)", "", "", "2026-09-11 09:00"];
+rows[13] = ["2026-09-11", "09:00", "세미나", "", "페스타", "", "100"];
 rows[14] = ["Items"];
 const general = service.extractEventOrderInfo([{ name: "Sheet1", rows }]);
 assert.strictEqual(general.eventName, "일반 세미나");
 assert.strictEqual(general.place, "페스타");
 assert.strictEqual(general.schedule[0].venue, "페스타");
+assert.strictEqual(general.validation.status, "ok");
+assert.strictEqual(general.sources.eventName, "fixed");
 assert.deepStrictEqual(
   JSON.parse(JSON.stringify(general.eventSpaces)),
   [{ spaceName: "페스타", role: "unspecified", roleLabel: "사용 공간" }]
 );
+
+const variantRows = Array.from({ length: 12 }, () => []);
+variantRows[0] = ["", "행사명(Name of Event)", "", "", "", "변형 세미나"];
+variantRows[1] = ["", "행사일시(Date / Time)", "", "", "", "2026-09-11"];
+variantRows[2] = ["", "장소(Venue)", "", "", "", "부라노1"];
+variantRows[4] = ["시간/날짜", "", "내용", "", "장소", "", "인원"];
+variantRows[5] = ["09. 11", "17:30", "세미나", "", "부라노1", "", "31"];
+variantRows[6] = ["", "20:00", "행사 종료", "", "부라노1", "", "31"];
+variantRows[7] = ["Items"];
+const variant = service.extractEventOrderInfo([{ name: "Variant", rows: variantRows }]);
+assert.strictEqual(variant.eventName, "변형 세미나");
+assert.strictEqual(variant.schedule.length, 2);
+assert.strictEqual(variant.schedule[1].date, "09. 11");
+assert.strictEqual(variant.validation.status, "ok");
+assert.strictEqual(variant.sources.eventName, "fallback");
+assert.strictEqual(variant.sources.schedule, "fallback");
+
+const blank = service.extractEventOrderInfo([{ name: "Blank", rows: [] }]);
+assert.strictEqual(blank.validation.status, "review");
+assert.ok(blank.validation.issues.some((issue) => issue.field === "eventName"));
+assert.ok(blank.validation.issues.some((issue) => issue.field === "schedule"));
 console.log("event-spaces-v1 tests passed");

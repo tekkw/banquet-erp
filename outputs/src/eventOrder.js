@@ -40,12 +40,13 @@
      * - 호텔 이벤트오더 양식은 계속 바뀔 수 있으므로 추출 규칙은 화면/저장/AI 코드와 분리해서 관리해야 한다.
      */
     function extractEventOrderInfo(sheets) {
+      const scheduleResult = extractScheduleRows(sheets);
       const extracted = {
         eventName: findFixedRowValue(sheets, "행사명(Name of Event)"),
         host: findFixedRowValue(sheets, "행사주최(Name of Company)"),
         eventDate: findFixedRowValue(sheets, "행사일시(Date / Time)"),
         place: findFixedRowValue(sheets, "장소(Venue)"),
-        schedule: extractScheduleRows(sheets),
+        schedule: scheduleResult.rows,
         items: extractItems(sheets),
         beveragesText: extractNamedSectionText(sheets, ["Beverages", "BEV"]),
         layoutEqpText: extractNamedSectionText(sheets, ["Lay out & EQP", "Lay out", "Layout", "Layout & EQP", "Layout & Equipment", "EQP"]),
@@ -71,9 +72,19 @@
           ? extracted.place
           : findFallbackDColumnValue(sheets, ["장소", "Venue"], "장소", "place"),
       };
+      const guestCount = inferRepresentativeGuestCount(sheets, result.schedule);
+      const sources = {
+        eventName: isValidParsedValue(extracted.eventName, "eventName") ? "fixed" : "fallback",
+        eventDate: isValidParsedValue(extracted.eventDate, "eventDate") ? "fixed" : "fallback",
+        place: isValidParsedValue(extracted.place, "place") ? "fixed" : "fallback",
+        guestCount: hasExplicitGuestCount(sheets) ? "fixed" : scheduleResult.source,
+        schedule: scheduleResult.source,
+      };
       return {
         ...result,
-        guestCount: inferRepresentativeGuestCount(sheets, result.schedule),
+        guestCount,
+        sources,
+        validation: validateExtractedResult({ ...result, guestCount }, sheets),
         eventSpaces: deriveEventSpaces(result),
       };
     }
@@ -160,9 +171,9 @@
     function extractScheduleRows(sheets) {
       for (const sheet of sheets) {
         const scheduleRows = readFixedScheduleRows(sheet.rows);
-        if (scheduleRows.length > 0) return scheduleRows;
+        if (scheduleRows.length > 0) return { rows: scheduleRows, source: "fixed" };
       }
-      return extractFallbackScheduleRows(sheets);
+      return { rows: extractFallbackScheduleRows(sheets), source: "fallback" };
     }
 
     function readFixedScheduleRows(rows) {
@@ -324,6 +335,55 @@
       return (lines || [])
         .map((line) => cleanValue(line).replace(/class\s*ttpe/ig, "Class").replace(/class\s*type/ig, "Class"))
         .filter(Boolean);
+    }
+
+    function validateExtractedResult(result, sheets) {
+      const issues = [];
+      if (!isValidParsedValue(result.eventName, "eventName")) {
+        issues.push({ field: "eventName", message: "행사명 확인 필요" });
+      }
+      if (!isParsableEventDate(result.eventDate)) {
+        issues.push({ field: "eventDate", message: "행사일시 확인 필요" });
+      }
+      if (!isValidParsedValue(result.place, "place")) {
+        issues.push({ field: "place", message: "장소 확인 필요" });
+      }
+      const scheduleRows = Array.isArray(result.schedule) ? result.schedule : [];
+      if (!scheduleRows.length) {
+        issues.push({ field: "schedule", message: "Schedule 확인 필요" });
+      } else {
+        const timedRows = scheduleRows.filter((row) => cleanValue(row?.time));
+        if (timedRows.length && timedRows.every((row) => !cleanValue(row?.content))) {
+          issues.push({ field: "schedule", message: "Schedule 내용 확인 필요" });
+        }
+      }
+      if (!extractPeopleCount(result.guestCount)
+        || (!hasExplicitGuestCount(sheets) && !hasMainEventGuestCandidate(scheduleRows))) {
+        issues.push({ field: "guestCount", message: "대표 행사 인원 확인 필요" });
+      }
+      return { status: issues.length ? "review" : "ok", issues };
+    }
+
+    function isParsableEventDate(value) {
+      const text = cleanValue(value);
+      if (!text) return false;
+      return /(?:19|20)\d{2}\D{0,3}\d{1,2}\D{0,3}\d{1,2}/.test(text)
+        || /\d{1,2}\s*[.\/-]\s*\d{1,2}/.test(text);
+    }
+
+    function hasExplicitGuestCount(sheets) {
+      return sheets.some((sheet) => sheet.rows.some((row) => (row || []).some((cell) =>
+        /(최저\s*보증|최대\s*인원|minimum\s*guarantee|maximum\s*(?:people|pax))/i.test(cleanValue(cell))
+      )));
+    }
+
+    function hasMainEventGuestCandidate(scheduleRows) {
+      return scheduleRows.some((row) => {
+        if (!extractPeopleCount(row?.people)) return false;
+        const text = `${cleanValue(row?.content)} ${cleanValue(row?.venue)}`;
+        return /(세미나|행사|예식|개회|회의|seminar|event|ceremony|conference)/i.test(text)
+          && !/(조식|중식|석식|런치|디너|breakfast|lunch|dinner|커피\s*브레이크|coffee\s*break)/i.test(text);
+      });
     }
 
     /*

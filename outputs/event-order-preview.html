@@ -1929,8 +1929,7 @@
           const value = previewExtracted[field.key];
           return Array.isArray(value) ? value.length > 0 : cleanValue(value);
         }).length;
-        const statusType = foundCount < fields.length ? "warn" : "";
-        setStatus(`${loadedSheets.length}개 시트, 총 ${totalRows.toLocaleString("ko-KR")}개 행에서 ${foundCount}/${fields.length}개 항목을 추출했습니다.`, statusType);
+        updateExtractionValidationStatus();
       } catch (error) {
         console.error(error);
         setStatus(error.message || "엑셀 파일을 읽는 중 오류가 발생했습니다.", "error");
@@ -1974,7 +1973,8 @@
 
       const scheduleCard = document.createElement("div");
       scheduleCard.className = "info-card schedule-card";
-      scheduleCard.innerHTML = '<div class="info-label">Schedule</div>';
+      scheduleCard.dataset.validationField = "schedule";
+      scheduleCard.innerHTML = `<div class="info-label">Schedule${createValidationBadgeHtml(extracted, "schedule")}</div>`;
       scheduleCard.append(createScheduleTable(extracted.schedule || []));
 
       const itemsCard = document.createElement("div");
@@ -2003,7 +2003,8 @@
 
       const label = document.createElement("div");
       label.className = "info-label";
-      label.textContent = field.label;
+      label.innerHTML = `${field.label}${createValidationBadgeHtml(previewExtracted, field.key)}`;
+      card.dataset.validationField = field.key;
 
       const control = document.createElement(multiline ? "textarea" : "input");
       control.className = multiline ? "preview-textarea" : "preview-input";
@@ -2019,10 +2020,36 @@
       if (["eventDate", "place"].includes(field.key)) {
         control.setAttribute("aria-required", "true");
       }
-      control.addEventListener("input", () => updatePreviewField(field, control.value));
+      control.addEventListener("input", () => {
+        updatePreviewField(field, control.value);
+        markPreviewFieldManual(field.key, card);
+      });
 
       card.append(label, control);
       return card;
+    }
+
+    function createValidationBadgeHtml(extracted, fieldKey) {
+      const hasIssue = extracted?.validation?.issues?.some((issue) => issue.field === fieldKey);
+      return hasIssue ? ' <span class="validation-review-badge">확인 필요</span>' : "";
+    }
+
+    function markPreviewFieldManual(fieldKey, card) {
+      if (!previewExtracted) return;
+      previewExtracted.sources = { ...(previewExtracted.sources || {}), [fieldKey]: "manual" };
+      const issues = (previewExtracted.validation?.issues || []).filter((issue) => issue.field !== fieldKey);
+      previewExtracted.validation = { status: issues.length ? "review" : "ok", issues };
+      card?.querySelector(".validation-review-badge")?.remove();
+      updateExtractionValidationStatus();
+    }
+
+    function updateExtractionValidationStatus() {
+      const issues = previewExtracted?.validation?.issues || [];
+      if (issues.length) {
+        setStatus(`⚠ 확인 필요한 항목 ${issues.length}개`, "warn");
+        return;
+      }
+      setStatus("추출 완료");
     }
 
     function getPreviewPlaceholder(field) {

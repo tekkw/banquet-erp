@@ -158,6 +158,19 @@ h1 {
   font-size: var(--font-sm);
 }
 
+.validation-review-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 7px;
+  border: 1px solid rgba(212, 167, 52, 0.55);
+  border-radius: 999px;
+  color: #d4a734;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .card-grid {
   gap: 10px;
 }
