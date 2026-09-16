@@ -13,6 +13,168 @@
   display: none;
 }
 
+/* Mobile app shell: keep desktop dashboard untouched and expose only operational essentials. */
+.ai-mobile-back-button,
+.ai-mobile-reference-button {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .erp-sidebar {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    padding-inline: 4px;
+  }
+
+  .mobile-bottom-nav button {
+    min-width: 0;
+    padding-inline: 2px;
+    font-size: 10px;
+  }
+
+  .mobile-bottom-nav .mobile-nav-icon {
+    display: grid;
+    width: 28px;
+    height: 28px;
+    place-items: center;
+    margin-inline: auto;
+    border-radius: 9px;
+    font-size: 14px;
+  }
+
+  .mobile-bottom-nav button.active .mobile-nav-icon {
+    background: color-mix(in srgb, var(--theme-gold) 18%, transparent);
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="mini-calendar"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="quick"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="ai-assistant"] {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="today-board"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="weekly-setup"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="operations-status"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="today-operations"] {
+    display: block !important;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-edit-actions,
+  .erp-shell[data-active-page="home"] .dashboard-edit-toolbar {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-assistant-page {
+    height: calc(100dvh - var(--mobile-bottom-nav-height));
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-header {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+  }
+
+  .ai-mobile-back-button,
+  .ai-mobile-reference-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    border: 1px solid var(--theme-border);
+    border-radius: 9px;
+    color: var(--theme-text);
+    background: var(--theme-card);
+  }
+
+  .ai-mobile-back-button {
+    width: 40px;
+    font-size: 20px;
+  }
+
+  .ai-mobile-reference-button {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-title {
+    min-width: 0;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-title .ai-page-bot-icon,
+  .erp-shell[data-active-page="ai"] .ai-page-title .eyebrow,
+  .erp-shell[data-active-page="ai"] .ai-page-title p,
+  .erp-shell[data-active-page="ai"] #aiNewConversationButton,
+  .erp-shell[data-active-page="ai"] #aiMobileMenuButton,
+  .erp-shell[data-active-page="ai"] .ai-mode-tabs,
+  .erp-shell[data-active-page="ai"] .ai-conversation-panel,
+  .erp-shell[data-active-page="ai"] #aiInterviewModePanel,
+  .erp-shell[data-active-page="ai"] #aiDirectTeachModePanel {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-title h2 {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-layout,
+  .erp-shell[data-active-page="ai"] .ai-main-panel,
+  .erp-shell[data-active-page="ai"] .ai-main-scroll,
+  .erp-shell[data-active-page="ai"] #aiChatModePanel.active {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .erp-shell[data-active-page="ai"] #aiChatModePanel.active {
+    display: flex !important;
+    flex-direction: column;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-chat-form {
+    grid-template-columns: minmax(0, 1fr) 58px;
+    margin-top: auto;
+    padding: 10px 12px calc(env(safe-area-inset-bottom) + 8px);
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-chat-form .ai-tool-button,
+  .erp-shell[data-active-page="ai"] .ai-page-attachment-preview {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-reference-panel {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-reference-panel.mobile-open {
+    position: fixed;
+    z-index: 1500;
+    top: 0;
+    right: 0;
+    bottom: var(--mobile-bottom-nav-height);
+    display: block !important;
+    width: min(88vw, 360px);
+    padding: 18px;
+    overflow-y: auto;
+    border-left: 1px solid var(--theme-border);
+    background: var(--theme-card);
+    box-shadow: -18px 0 40px rgba(0, 0, 0, 0.3);
+  }
+}
+
 @media (max-width: 768px) {
   :root {
     --mobile-content-width: max(100vw, 700px);
@@ -1483,5 +1645,55 @@
 
   .ai-conversation-panel.mobile-open {
     display: flex;
+  }
+}
+
+/* Final mobile-shell overrides intentionally follow legacy responsive rules. */
+@media (max-width: 768px) {
+  .erp-sidebar {
+    display: none !important;
+  }
+
+  .mobile-bottom-nav {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    padding-inline: 4px;
+  }
+
+  .mobile-bottom-nav button {
+    min-width: 0;
+    padding-inline: 2px;
+    font-size: 10px;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="mini-calendar"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="quick"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="ai-assistant"] {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="today-board"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="weekly-setup"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="operations-status"],
+  .erp-shell[data-active-page="home"] .dashboard-widget-shell[data-widget-id="today-operations"] {
+    display: block !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-conversation-panel,
+  .erp-shell[data-active-page="ai"] .ai-reference-panel {
+    display: none !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-reference-panel.mobile-open {
+    display: block !important;
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-chat-form {
+    grid-template-columns: minmax(0, 1fr) 58px !important;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 8px);
+  }
+
+  .erp-shell[data-active-page="ai"] .ai-page-chat-form .ai-tool-button,
+  .erp-shell[data-active-page="ai"] .ai-page-attachment-preview {
+    display: none !important;
   }
 }
