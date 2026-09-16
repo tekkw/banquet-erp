@@ -1705,3 +1705,35 @@
     display: none !important;
   }
 }
+
+@media (max-width: 768px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+
+  main.erp-shell:not([data-active-page="ai"]),
+  main.erp-shell:not([data-active-page="ai"]) .erp-workspace,
+  main.erp-shell:not([data-active-page="ai"]) .erp-page,
+  main.erp-shell:not([data-active-page="ai"]) .dashboard-overview,
+  main.erp-shell:not([data-active-page="ai"]) .dashboard-widget-layout {
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+  }
+
+  main.erp-shell:not([data-active-page="ai"]) {
+    min-height: 100dvh;
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 24px);
+  }
+
+  .mobile-bottom-nav .lucide-icon {
+    width: 24px;
+    height: 24px;
+    stroke-width: 1.9;
+  }
+}
