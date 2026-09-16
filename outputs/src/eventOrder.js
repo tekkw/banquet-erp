@@ -42,8 +42,7 @@
     function extractEventOrderInfo(sheets) {
       const extracted = {
         eventName: findFixedRowValue(sheets, "행사명(Name of Event)"),
-        host: findFixedRowValue(sheets, "행사주최(Name of Company)")
-          || findFixedRowValue(sheets, "행사주관(Name of Company)"),
+        host: findFixedRowValue(sheets, "행사주최(Name of Company)"),
         eventDate: findFixedRowValue(sheets, "행사일시(Date / Time)"),
         place: findFixedRowValue(sheets, "장소(Venue)"),
         schedule: extractScheduleRows(sheets),
@@ -59,10 +58,18 @@
       extracted.others = splitEditorLines(extracted.othersText || extractSectionColumnValues(sheets, "Others", "시설(Engineering)").join("\n"));
       const result = {
         ...extracted,
-        eventName: extracted.eventName || findFallbackDColumnValue(sheets, ["행사명"], "행사명 D열"),
-        host: extracted.host || findFallbackDColumnValue(sheets, ["행사주관", "행사주최"], "행사주관 D열"),
-        eventDate: extracted.eventDate || findFallbackDColumnValue(sheets, ["행사일시"], "행사일시 D열"),
-        place: extracted.place || findFallbackDColumnValue(sheets, ["장소"], "장소 D열"),
+        eventName: isValidParsedValue(extracted.eventName, "eventName")
+          ? extracted.eventName
+          : findFallbackDColumnValue(sheets, ["행사명", "Name of Event"], "행사명", "eventName"),
+        host: isValidParsedValue(extracted.host, "host")
+          ? extracted.host
+          : findFallbackDColumnValue(sheets, ["행사주관", "행사주최", "Name of Company"], "행사주관", "host"),
+        eventDate: isValidParsedValue(extracted.eventDate, "eventDate")
+          ? extracted.eventDate
+          : findFallbackDColumnValue(sheets, ["행사일시", "Date / Time"], "행사일시", "eventDate"),
+        place: isValidParsedValue(extracted.place, "place")
+          ? extracted.place
+          : findFallbackDColumnValue(sheets, ["장소", "Venue"], "장소", "place"),
       };
       return {
         ...result,
@@ -85,21 +92,33 @@
       const normalizedLabel = normalizeLabel(label);
       for (const sheet of sheets) {
         for (const row of sheet.rows) {
-          const labelIndex = (row || []).findIndex((cell) => normalizeLabel(cell) === normalizedLabel);
-          if (labelIndex < 0) continue;
-          const value = findFirstValueToRight(row, labelIndex);
-          if (value) return value;
+          const hasLabel = (row || []).some((cell) => normalizeLabel(cell) === normalizedLabel);
+          if (hasLabel) return cleanValue(row?.[3]);
         }
       }
       return "";
     }
 
-    function findFirstValueToRight(row, labelIndex, maxOffset = 4) {
+    function findFirstValueToRight(row, labelIndex, maxOffset = 5) {
       for (let offset = 1; offset <= maxOffset; offset += 1) {
         const value = cleanValue(row?.[labelIndex + offset]);
         if (value) return value;
       }
       return "";
+    }
+
+    function isValidParsedValue(value, fieldType) {
+      const text = cleanValue(value);
+      if (!text) return false;
+      const normalized = normalizeLabel(text);
+      if (/(nameofevent|nameofcompany|datetime|venue)/i.test(normalized)
+        || ["행사명", "행사주관", "행사주최", "행사일시", "장소"].some((label) => normalized === normalizeLabel(label))) {
+        return false;
+      }
+      if (["일자", "날짜", "시간", "내용", "인원"].some((label) => normalized === normalizeLabel(label))) return false;
+      if (fieldType === "eventDate") return text.length >= 4 && /\d/.test(text);
+      if (fieldType === "eventName" || fieldType === "place") return text.length >= 2;
+      return true;
     }
 
     /*
@@ -112,15 +131,16 @@
      * 실무 설계 이유:
      * - 운영 문서는 양식 변형이 잦으므로, 실패 시 어떤 라벨을 못 찾았는지도 console.warn으로 남겨야 추적이 쉽다.
      */
-    function findFallbackDColumnValue(sheets, labels, warningLabel) {
+    function findFallbackDColumnValue(sheets, labels, warningLabel, fieldType) {
       for (const sheet of sheets) {
         for (const row of sheet.rows) {
-          const firstCell = normalizeLabel(row?.[0]);
-          if (!firstCell) continue;
-          const hasLabel = labels.some((label) => firstCell.includes(normalizeLabel(label)));
-          if (!hasLabel) continue;
-          const value = findFirstValueToRight(row, 0);
-          if (value) return value;
+          const labelIndex = (row || []).findIndex((cell) => {
+            const normalizedCell = normalizeLabel(cell);
+            return normalizedCell && labels.some((label) => normalizedCell.includes(normalizeLabel(label)));
+          });
+          if (labelIndex < 0) continue;
+          const value = findFirstValueToRight(row, labelIndex);
+          if (isValidParsedValue(value, fieldType)) return value;
         }
       }
       console.warn(`fallback extraction failed: ${warningLabel}을 찾지 못했습니다.`);
@@ -139,11 +159,6 @@
      */
     function extractScheduleRows(sheets) {
       for (const sheet of sheets) {
-        const headerIndex = findScheduleHeaderRowIndex(sheet.rows);
-        if (headerIndex >= 0) {
-          const headerRows = readScheduleRowsAfterHeader(sheet.rows, headerIndex);
-          if (headerRows.length > 0) return headerRows;
-        }
         const scheduleRows = readFixedScheduleRows(sheet.rows);
         if (scheduleRows.length > 0) return scheduleRows;
       }
