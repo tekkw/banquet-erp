@@ -49,6 +49,11 @@ Deno.serve(async (request) => {
       return jsonResponse({ analysis });
     }
 
+    if (mode === "analyze_correction_learning") {
+      const analysis = await analyzeCorrectionLearning(payload.correction ?? {});
+      return jsonResponse({ analysis });
+    }
+
     if (mode === "generate_interview_questions") {
       const questions = await generateInterviewQuestions();
       return jsonResponse({ questions });
@@ -1141,6 +1146,66 @@ async function askAiForEventOrderAnalysis(input: {
   return {
     analysis: analysisRecord,
     rawText,
+  };
+}
+
+async function analyzeCorrectionLearning(correction: Record<string, unknown>) {
+  const allowedFields = new Set(["guestCount", "venue", "place", "eventDate", "eventType", "mealType", "layout"]);
+  const field = String(correction.field ?? "").trim();
+  const originalValue = String(correction.originalValue ?? "").trim();
+  const correctedValue = String(correction.correctedValue ?? "").trim();
+  const eventOrderId = String(correction.eventOrderId ?? "").trim();
+  if (!allowedFields.has(field) || !originalValue || !correctedValue || originalValue === correctedValue) {
+    throw new Error("학습 대상으로 사용할 수 없는 수정 이력입니다.");
+  }
+
+  const [eventRows, scheduleRows, existingKnowledge] = await Promise.all([
+    eventOrderId ? safeSupabaseSelect("event_orders", `select=*&id=eq.${encodeURIComponent(eventOrderId)}&limit=1`) : Promise.resolve([]),
+    eventOrderId ? safeSupabaseSelect("event_schedules", `select=*&event_order_id=eq.${encodeURIComponent(eventOrderId)}&order=created_at.asc&limit=100`) : Promise.resolve([]),
+    safeSupabaseSelect("ai_knowledge", "select=id,category,subject,predicate,natural_language,explanation,confidence&status=eq.approved&order=updated_at.desc&limit=150"),
+  ]);
+
+  const systemPrompt = [
+    "You analyze user corrections to banquet event-order extraction and propose one reusable learning rule for user approval.",
+    "Never modify venue_spaces, venue mappings, event_orders, schedules, or any operational source table.",
+    "Treat meal headcounts (breakfast/lunch/dinner/coffee break) as weaker representative guest-count candidates than the main seminar/event/ceremony unless context proves otherwise.",
+    "If the reason is uncertain, do not assert it as fact. Put the uncertainty in reasonGuess and ask a practical question.",
+    "For venue corrections such as FOYER versus corridor/lobby or another hall, preserve the physical-space distinction and use category space_knowledge.",
+    "Compare the candidate with existing approved knowledge. If substantially similar, set similarKnowledge=true and identify it.",
+    "Return only valid JSON without markdown.",
+    "Required JSON shape:",
+    '{"summary":"수정 요약","reasonGuess":"추정 이유","question":"확인 질문","ruleCandidate":"재사용 가능한 한국어 규칙","category":"operation_rule|space_knowledge|layout|event_classification","subject":"구체적인 규칙 주제","predicate":"stable_snake_case_predicate","value":"짧은 규칙 값","confidence":0.0,"similarKnowledge":false,"similarKnowledgeTitle":""}',
+    "confidence must be between 0 and 1.",
+  ].join("\n");
+
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: JSON.stringify({ correction, eventOrder: eventRows[0] ?? null, schedules: scheduleRows, existingKnowledge }) },
+      ],
+    }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message || "OpenAI correction analysis request failed");
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
+  const analysis = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!analysis || !analysis.summary || !analysis.ruleCandidate) throw new Error("AI correction analysis JSON parsing failed.");
+  return {
+    summary: String(analysis.summary ?? ""),
+    reasonGuess: String(analysis.reasonGuess ?? ""),
+    question: String(analysis.question ?? ""),
+    ruleCandidate: String(analysis.ruleCandidate ?? ""),
+    category: String(analysis.category ?? (field === "venue" || field === "place" ? "space_knowledge" : "operation_rule")),
+    subject: String(analysis.subject ?? field),
+    predicate: String(analysis.predicate ?? `${field}_rule`),
+    value: String(analysis.value ?? correctedValue),
+    confidence: Math.max(0, Math.min(1, Number(analysis.confidence ?? 0.7))),
+    similarKnowledge: Boolean(analysis.similarKnowledge),
+    similarKnowledgeTitle: String(analysis.similarKnowledgeTitle ?? ""),
   };
 }
 

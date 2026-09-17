@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-app-shell-v4">
+  <link rel="stylesheet" href="./src/styles/app.css?v=correction-learning-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -850,6 +850,8 @@
                 <button type="button" data-ai-mode="teach">직접 가르치기</button>
               </div>
 
+              <section id="aiCorrectionSuggestions" class="ai-correction-suggestions" aria-label="이벤트오더 수정 학습 제안" hidden></section>
+
               <div class="ai-main-scroll">
                 <div id="aiChatModePanel" class="ai-mode-panel active" data-ai-mode-panel="chat">
                   <div id="aiPageMessages" class="ai-page-messages" aria-live="polite">
@@ -1095,12 +1097,12 @@
   <script src="./src/storage.js"></script>
   <script src="./src/auth.js"></script>
   <script src="./src/eventCalendar.js"></script>
-  <script src="./src/eventOrder.js?v=multi-space-v1"></script>
+  <script src="./src/eventOrder.js?v=correction-learning-v1"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=base-floorplan-management-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
-  <script src="./src/aiAssistant.js"></script>
+  <script src="./src/aiAssistant.js?v=correction-learning-v1"></script>
   <script src="./src/operationBoard.js?v=multi-space-dashboard-v1"></script>
   <script src="./src/pushNotifications.js?v=web-push-v1"></script>
   <script src="./src/dashboardWidgets.js?v=dashboard-ai-overlay-v1"></script>
@@ -1335,6 +1337,7 @@
     const aiChatModePanel = document.querySelector("#aiChatModePanel");
     const aiInterviewModePanel = document.querySelector("#aiInterviewModePanel");
     const aiDirectTeachModePanel = document.querySelector("#aiDirectTeachModePanel");
+    const aiCorrectionSuggestions = document.querySelector("#aiCorrectionSuggestions");
     const aiModeButtons = document.querySelectorAll("[data-ai-mode]");
     const aiReferenceStats = document.querySelector("#aiReferenceStats");
     const aiKnowledgeStats = document.querySelector("#aiKnowledgeStats");
@@ -1739,6 +1742,7 @@
         aiChatModePanel,
         aiInterviewModePanel,
         aiDirectTeachModePanel,
+        aiCorrectionSuggestions,
         aiModeButtons,
         aiReferenceStats,
         aiKnowledgeStats,
@@ -3137,6 +3141,9 @@
         eventDate: cleanValue(extracted?.eventDate),
         place: cleanValue(extracted?.place),
         guestCount: cleanValue(extracted?.guestCount),
+        eventType: cleanValue(extracted?.eventType),
+        mealType: normalizeMealTypes(extracted?.mealTypes || extracted?.mealType || []).join(", "),
+        layout: cleanValue(extracted?.layoutType || extracted?.layout || extracted?.layoutEqp),
       };
     }
 
@@ -3148,6 +3155,9 @@
           eventDate: eventItem.eventDateTime,
           place: eventItem.venue,
           guestCount: eventItem.guestCount,
+          eventType: eventItem.eventType,
+          mealType: normalizeMealTypes(eventItem.mealTypes || []).join(", "),
+          layout: cleanValue(eventItem.layoutType || eventItem.layout || eventItem.layoutEqp),
         },
         sources: previewExtracted?.sources || {},
         fileName: eventItem.originalFilename || uploadedOriginalFile?.name || "",
@@ -3159,6 +3169,7 @@
         const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
         const history = Array.isArray(existing) ? existing : [];
         localStorage.setItem(storageKey, JSON.stringify([...history, ...records].slice(-500)));
+        window.dispatchEvent(new CustomEvent("banquet:correction-recorded", { detail: { records } }));
       } catch (error) {
         console.warn("이벤트오더 수정 이력 저장을 건너뜁니다.", error);
       }

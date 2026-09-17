@@ -388,7 +388,7 @@
 
     function buildCorrectionRecords({ originalValues = {}, correctedValues = {}, sources = {}, fileName = "", eventName = "", correctedAt = "" } = {}) {
       const timestamp = correctedAt || new Date().toISOString();
-      return ["eventName", "eventDate", "place", "guestCount"]
+      return ["eventName", "eventDate", "place", "venue", "guestCount", "eventType", "mealType", "layout"]
         .filter((field) => cleanValue(originalValues[field]) !== cleanValue(correctedValues[field]))
         .map((field) => ({
           field,

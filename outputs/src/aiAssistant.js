@@ -42,6 +42,7 @@
       aiChatModePanel,
       aiInterviewModePanel,
       aiDirectTeachModePanel,
+      aiCorrectionSuggestions,
       aiModeButtons,
       aiReferenceStats,
       aiKnowledgeStats,
@@ -89,6 +90,16 @@
     let aiMessagesLoading = false;
     let aiConversationPersistenceAvailable = true;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
+    const CORRECTION_LOG_KEY = "banquetErp.eventOrderCorrections.v1";
+    const CORRECTION_SUGGESTION_KEY = "banquetErp.aiCorrectionSuggestions.v1";
+    const CORRECTION_FIELDS = new Map([
+      ["guestcount", "guestCount"], ["venue", "venue"], ["place", "venue"],
+      ["eventdate", "eventDate"], ["eventtype", "eventType"], ["mealtype", "mealType"],
+      ["mealtypes", "mealType"], ["layout", "layout"], ["layouttype", "layout"],
+    ]);
+    let correctionSuggestions = loadCorrectionSuggestions();
+    let correctionLearningLoaded = false;
+    let correctionLearningLoading = false;
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -161,6 +172,7 @@
       setAiPageMode(mode);
       renderConversationList();
       loadAiReferenceStats();
+      loadCorrectionLearningSuggestions();
       if (mode === "interview") loadCurrentInterview();
       if (mode === "teach") renderDirectTeachPanel();
       if (aiPageChatInput && mode === "chat") aiPageChatInput.focus();
@@ -2858,6 +2870,260 @@
       if (interview?.event_name) badges.push(interview.event_name);
       return badges;
     }
+
+    function loadCorrectionSuggestions() {
+      try {
+        const rows = JSON.parse(localStorage.getItem(CORRECTION_SUGGESTION_KEY) || "[]");
+        return Array.isArray(rows) ? rows : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveCorrectionSuggestions() {
+      localStorage.setItem(CORRECTION_SUGGESTION_KEY, JSON.stringify(correctionSuggestions.slice(-200)));
+    }
+
+    function normalizedCorrectionField(value) {
+      return CORRECTION_FIELDS.get(cleanValue(value).replace(/[_\s-]/g, "").toLowerCase()) || "";
+    }
+
+    function correctionComparable(value) {
+      return cleanValue(value).normalize("NFKC").toLowerCase().replace(/[\s.,/()\[\]{}'"_-]+/g, "");
+    }
+
+    function correctionDistance(left, right) {
+      const a = [...left];
+      const b = [...right];
+      const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+      for (let i = 1; i <= a.length; i += 1) {
+        let previous = row[0];
+        row[0] = i;
+        for (let j = 1; j <= b.length; j += 1) {
+          const current = row[j];
+          row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+          previous = current;
+        }
+      }
+      return row[b.length];
+    }
+
+    function isMeaningfulCorrection(record) {
+      const field = normalizedCorrectionField(record?.field);
+      if (!field) return false;
+      const original = correctionComparable(record?.originalValue);
+      const corrected = correctionComparable(record?.correctedValue);
+      if (!original || !corrected || original === corrected) return false;
+      if (Math.max(original.length, corrected.length) >= 4 && correctionDistance(original, corrected) <= 1) return false;
+      return true;
+    }
+
+    function correctionKey(record) {
+      return [
+        cleanValue(record?.eventOrderId),
+        normalizedCorrectionField(record?.field),
+        correctionComparable(record?.originalValue),
+        correctionComparable(record?.correctedValue),
+      ].join("||");
+    }
+
+    function readMeaningfulCorrections() {
+      try {
+        const rows = JSON.parse(localStorage.getItem(CORRECTION_LOG_KEY) || "[]");
+        return (Array.isArray(rows) ? rows : []).filter(isMeaningfulCorrection);
+      } catch {
+        return [];
+      }
+    }
+
+    async function loadCorrectionLearningSuggestions({ force = false } = {}) {
+      if (!aiCorrectionSuggestions || correctionLearningLoading || (correctionLearningLoaded && !force)) return;
+      correctionLearningLoaded = true;
+      correctionLearningLoading = true;
+      renderCorrectionLearningSuggestions();
+      const knownKeys = new Set(correctionSuggestions.map((item) => item.key));
+      const pending = readMeaningfulCorrections().filter((record) => !knownKeys.has(correctionKey(record))).slice(-3);
+      for (const correction of pending) {
+        const key = correctionKey(correction);
+        try {
+          const analysis = await requestCorrectionLearningAnalysis(correction);
+          correctionSuggestions.push({ key, correction: { ...correction, field: normalizedCorrectionField(correction.field) }, analysis, status: "pending", createdAt: new Date().toISOString() });
+        } catch (error) {
+          console.error("correction learning analysis failed:", error);
+          correctionSuggestions.push({ key, correction, status: "error", error: error.message || "학습 제안 생성 실패", createdAt: new Date().toISOString() });
+        }
+        saveCorrectionSuggestions();
+        renderCorrectionLearningSuggestions();
+      }
+      correctionLearningLoading = false;
+      renderCorrectionLearningSuggestions();
+    }
+
+    async function requestCorrectionLearningAnalysis(correction) {
+      const response = await fetch(supabaseConfig.functionUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: supabaseConfig.anonKey, Authorization: `Bearer ${supabaseConfig.anonKey}` },
+        body: JSON.stringify({ mode: "analyze_correction_learning", correction }),
+      });
+      const body = await parseSupabaseResponse(response);
+      if (!response.ok) throw new Error(body.message || "수정 이력 분석에 실패했습니다.");
+      const analysis = body.analysis || {};
+      if (!cleanValue(analysis.ruleCandidate) || !cleanValue(analysis.summary)) throw new Error("AI 학습 제안 형식이 올바르지 않습니다.");
+      return {
+        summary: cleanValue(analysis.summary),
+        reasonGuess: cleanValue(analysis.reasonGuess),
+        question: cleanValue(analysis.question),
+        ruleCandidate: cleanValue(analysis.ruleCandidate),
+        category: cleanValue(analysis.category) || "operation_rule",
+        subject: cleanValue(analysis.subject) || correction.field,
+        predicate: cleanValue(analysis.predicate) || `${normalizedCorrectionField(correction.field)}_rule`,
+        value: cleanValue(analysis.value || correction.correctedValue),
+        confidence: Math.max(0, Math.min(1, Number(analysis.confidence || 0.7))),
+        similarKnowledge: Boolean(analysis.similarKnowledge),
+        similarKnowledgeTitle: cleanValue(analysis.similarKnowledgeTitle),
+      };
+    }
+
+    function renderCorrectionLearningSuggestions() {
+      if (!aiCorrectionSuggestions) return;
+      const pending = correctionSuggestions.filter((item) => item.status === "pending");
+      aiCorrectionSuggestions.innerHTML = "";
+      aiCorrectionSuggestions.hidden = !pending.length && !correctionLearningLoading;
+      if (aiCorrectionSuggestions.hidden) return;
+      const heading = document.createElement("div");
+      heading.className = "ai-correction-heading";
+      heading.innerHTML = `<div><span>학습 제안</span><strong>AI가 새로운 운영 규칙을 발견했습니다.</strong></div><em>${pending.length}건</em>`;
+      aiCorrectionSuggestions.append(heading);
+      if (correctionLearningLoading && !pending.length) {
+        aiCorrectionSuggestions.append(createInterviewStatus("수정 이력을 분석하는 중입니다."));
+        return;
+      }
+      aiCorrectionSuggestions.append(createCorrectionSuggestionCard(pending[0]));
+    }
+
+    function createCorrectionSuggestionCard(suggestion) {
+      const card = document.createElement("article");
+      card.className = "ai-correction-card";
+      const { correction, analysis } = suggestion;
+      const comparison = document.createElement("strong");
+      comparison.className = "ai-correction-comparison";
+      comparison.textContent = `${correction.field}: ${correction.originalValue} → ${correction.correctedValue}`;
+      const summary = document.createElement("p");
+      summary.textContent = analysis.summary;
+      const reason = document.createElement("div");
+      reason.className = "ai-correction-reason";
+      reason.innerHTML = `<span>추정 이유</span><p>${escapeHtml(analysis.reasonGuess || analysis.question || "수정 이유를 확인해 주세요.")}</p>`;
+      card.append(comparison, summary, reason);
+      if (analysis.question) {
+        const question = document.createElement("p");
+        question.className = "ai-correction-question";
+        question.textContent = analysis.question;
+        card.append(question);
+      }
+      if (analysis.similarKnowledge) {
+        const duplicate = document.createElement("div");
+        duplicate.className = "ai-correction-duplicate";
+        duplicate.textContent = `기존 지식과 유사함${analysis.similarKnowledgeTitle ? ` · ${analysis.similarKnowledgeTitle}` : ""}`;
+        card.append(duplicate);
+      }
+      const editor = document.createElement("textarea");
+      editor.className = "ai-correction-reason-editor";
+      editor.value = analysis.reasonGuess;
+      editor.placeholder = "실제 수정 이유를 입력하세요.";
+      editor.hidden = true;
+      card.append(editor);
+      const actions = document.createElement("div");
+      actions.className = "ai-correction-actions";
+      const approve = createInterviewButton(analysis.similarKnowledge ? "강화 후보 저장" : "맞아요", "primary-button", async () => {
+        await approveCorrectionSuggestion(suggestion, editor.hidden ? analysis.reasonGuess : editor.value);
+      });
+      const edit = createInterviewButton("이유 수정", "secondary-button", () => {
+        editor.hidden = false;
+        editor.focus();
+        approve.textContent = "저장";
+      });
+      const ignore = createInterviewButton("무시", "text-button", () => dismissCorrectionSuggestion(suggestion, "ignored"));
+      actions.append(approve, edit, ignore);
+      card.append(actions);
+      return card;
+    }
+
+    function dismissCorrectionSuggestion(suggestion, status = "ignored") {
+      suggestion.status = status;
+      suggestion.resolvedAt = new Date().toISOString();
+      saveCorrectionSuggestions();
+      renderCorrectionLearningSuggestions();
+    }
+
+    async function approveCorrectionSuggestion(suggestion, correctedReason) {
+      const { correction, analysis } = suggestion;
+      const existing = await supabaseRequest("ai_knowledge?select=id,subject,predicate,natural_language,status&status=eq.approved&order=updated_at.desc&limit=300");
+      const ruleKey = correctionComparable(analysis.ruleCandidate);
+      const duplicate = (existing || []).find((item) => (
+        correctionComparable(item.natural_language) === ruleKey
+        || (correctionComparable(item.subject) === correctionComparable(analysis.subject)
+          && correctionComparable(item.predicate) === correctionComparable(analysis.predicate))
+      ));
+      if (duplicate) {
+        analysis.similarKnowledge = true;
+        analysis.similarKnowledgeTitle = duplicate.natural_language || duplicate.subject;
+        suggestion.status = "duplicate";
+        suggestion.resolvedAt = new Date().toISOString();
+        saveCorrectionSuggestions();
+        renderCorrectionLearningSuggestions();
+        return;
+      }
+      const now = new Date().toISOString();
+      const metadata = {
+        source: "correction_learning",
+        field: correction.field,
+        originalValue: correction.originalValue,
+        correctedValue: correction.correctedValue,
+        eventOrderId: correction.eventOrderId || null,
+        confidence: analysis.confidence,
+        createdFromCorrection: true,
+        fileName: correction.fileName || "",
+      };
+      const row = {
+        category: analysis.category,
+        subject: analysis.subject,
+        predicate: analysis.predicate,
+        object: correction.originalValue || null,
+        value: analysis.value || correction.correctedValue,
+        natural_language: analysis.ruleCandidate,
+        object_value: correction.correctedValue,
+        explanation: cleanValue(correctedReason || analysis.reasonGuess || analysis.summary),
+        reason: cleanValue(correctedReason || analysis.reasonGuess) || null,
+        entity_type: "event_order_correction",
+        entity_id: correction.eventOrderId || null,
+        confidence: analysis.confidence,
+        status: "approved",
+        original_answer: JSON.stringify(metadata),
+        confirmed_at: now,
+        updated_at: now,
+      };
+      try {
+        await supabaseRequest("ai_knowledge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+          body: JSON.stringify(row),
+        });
+        suggestion.status = "approved";
+        suggestion.resolvedAt = now;
+        suggestion.savedKnowledge = { category: row.category, subject: row.subject, predicate: row.predicate };
+        saveCorrectionSuggestions();
+        renderCorrectionLearningSuggestions();
+        loadAiReferenceStats();
+      } catch (error) {
+        console.error("correction learning save failed:", error);
+        window.alert(error.message || "학습 제안 저장에 실패했습니다.");
+      }
+    }
+
+    window.addEventListener("banquet:correction-recorded", () => {
+      correctionLearningLoaded = false;
+      if (aiPageInitialized) loadCorrectionLearningSuggestions({ force: true });
+    });
 
     function getPendingPostReviewCountHint() {
       return isPostEventReviewInterview(currentInterview) ? 1 : 0;
