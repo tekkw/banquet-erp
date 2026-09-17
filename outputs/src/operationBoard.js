@@ -109,7 +109,9 @@
       && (left.member === "*" || rightPlace.member === "*" || left.member === rightPlace.member)));
   }
   function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
-    return physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
+    const existingResult = physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
+    const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
+    return knowledgeResult ?? existingResult;
   }
   function colorForSpace(key) {
     let hash = 0;
@@ -142,7 +144,9 @@
       const candidates = [];
       events.forEach((event) => (event.schedule || []).forEach((row) => {
         const day = scheduleDate(row, event);
-        if (day > today && physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row))) candidates.push({ day, event, row });
+        const existingOverlap = physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row));
+        const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
+        if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
       }));
       candidates.sort((a, b) => a.day.localeCompare(b.day));
       const next = candidates[0];
@@ -161,7 +165,9 @@
     const ranked = (layouts || []).filter((x) => x.is_active !== false).map((layout) => {
       const typeMatch = !!type && layout.layout_type === type;
       const rangeMatch = !!count && (!layout.min_people || count >= layout.min_people) && (!layout.max_people || count <= layout.max_people);
-      return { layout, score: (typeMatch ? 2 : 0) + (rangeMatch ? 1 : 0) };
+      const baseScore = (typeMatch ? 2 : 0) + (rangeMatch ? 1 : 0);
+      const score = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.adjustLayoutScore(layout, { layoutType: type, eventType: type, people: count }, baseScore) ?? baseScore;
+      return { layout, score };
     }).sort((a, b) => b.score - a.score);
     return ranked[0]?.score ? ranked[0].layout.layout_name : "추천 레이아웃 없음";
   }

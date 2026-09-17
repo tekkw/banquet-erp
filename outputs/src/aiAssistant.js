@@ -2977,6 +2977,7 @@
         category: cleanValue(analysis.category) || "operation_rule",
         subject: cleanValue(analysis.subject) || correction.field,
         predicate: cleanValue(analysis.predicate) || `${normalizedCorrectionField(correction.field)}_rule`,
+        object: cleanValue(analysis.object),
         value: cleanValue(analysis.value || correction.correctedValue),
         confidence: Math.max(0, Math.min(1, Number(analysis.confidence || 0.7))),
         similarKnowledge: Boolean(analysis.similarKnowledge),
@@ -3074,6 +3075,7 @@
         return;
       }
       const now = new Date().toISOString();
+      const executionRule = buildCorrectionExecutionRule(correction, analysis);
       const metadata = {
         source: "correction_learning",
         field: correction.field,
@@ -3083,6 +3085,7 @@
         confidence: analysis.confidence,
         createdFromCorrection: true,
         fileName: correction.fileName || "",
+        ...(executionRule ? { executionRule } : {}),
       };
       const row = {
         category: analysis.category,
@@ -3114,10 +3117,25 @@
         saveCorrectionSuggestions();
         renderCorrectionLearningSuggestions();
         loadAiReferenceStats();
+        window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.load({ force: true });
       } catch (error) {
         console.error("correction learning save failed:", error);
         window.alert(error.message || "학습 제안 저장에 실패했습니다.");
       }
+    }
+
+    function buildCorrectionExecutionRule(correction, analysis) {
+      const field = normalizedCorrectionField(correction.field);
+      if (field === "guestCount") {
+        return { ruleType: "guest_count_priority", prefer: ["main_event", "seminar"], deprioritize: ["breakfast", "lunch", "dinner", "coffee_break"], approved: true };
+      }
+      if (field === "venue" && /not[_\s-]?overlap|다른\s*공간|겹치지/i.test(`${analysis.predicate} ${analysis.ruleCandidate}`)) {
+        return { ruleType: "space_relation", subject: analysis.subject || correction.originalValue, relation: "not_overlap", object: analysis.object || analysis.value || correction.correctedValue, approved: true };
+      }
+      if (field === "layout") {
+        return { ruleType: "layout_preference", eventType: correction.eventType || analysis.subject || "", preferLayoutType: correction.correctedValue, approved: true };
+      }
+      return null;
     }
 
     window.addEventListener("banquet:correction-recorded", () => {

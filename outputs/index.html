@@ -1097,6 +1097,7 @@
   <script src="./src/storage.js"></script>
   <script src="./src/auth.js"></script>
   <script src="./src/eventCalendar.js"></script>
+  <script src="./src/aiKnowledgeRules.js?v=ai-knowledge-execution-v1"></script>
   <script src="./src/eventOrder.js?v=correction-learning-v1"></script>
   <script src="./src/assetManager.js"></script>
   <script src="./src/venueLayoutManager.js"></script>
@@ -1381,6 +1382,7 @@
       uploadOriginalFile,
       buildPublicStorageUrl,
     } = window.BANQUET_ERP_STORAGE.createStorageService({ supabaseConfig });
+    window.BANQUET_ERP_AI_KNOWLEDGE_RULES.configure({ supabaseRequest });
 
     let loadedSheets = [];
     let pendingEvent = null;
@@ -5285,6 +5287,7 @@
         return;
       }
       appInitialized = true;
+      window.BANQUET_ERP_AI_KNOWLEDGE_RULES.load();
       renderCalendar();
       loadEventsFromSupabase();
       loadBanquetAssets();

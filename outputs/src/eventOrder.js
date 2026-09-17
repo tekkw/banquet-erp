@@ -72,7 +72,12 @@
           ? extracted.place
           : findFallbackDColumnValue(sheets, ["장소", "Venue"], "장소", "place"),
       };
-      const guestCount = inferRepresentativeGuestCount(sheets, result.schedule);
+      const inferredGuestCount = inferRepresentativeGuestCount(sheets, result.schedule);
+      const guestCount = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.applyGuestCount(
+        result.schedule,
+        inferredGuestCount,
+        { explicit: hasExplicitGuestCount(sheets) },
+      ) ?? inferredGuestCount;
       const sources = {
         eventName: isValidParsedValue(extracted.eventName, "eventName") ? "fixed" : "fallback",
         eventDate: isValidParsedValue(extracted.eventDate, "eventDate") ? "fixed" : "fallback",
