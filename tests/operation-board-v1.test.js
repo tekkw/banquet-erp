@@ -110,7 +110,7 @@ const boundaryFixture = [{
   ],
 }];
 const filteredBlocks = board.buildAutoBlocks(boundaryFixture, today);
-assert.strictEqual(filteredBlocks.filter((item) => item.type !== "next_setup").map((item) => `${item.time}:${item.type}`).join(","), "12:00:lunch,13:00:coffee,09:00:start,18:00:end");
+assert.strictEqual(filteredBlocks.filter((item) => item.type !== "next_setup").map((item) => `${item.time}:${item.type}`).join(","), "09:00:schedule,12:00:lunch,13:00:coffee,09:00:start,18:00:end");
 assert(!filteredBlocks.some((item) => /프론트|조식/.test(`${item.venue} ${item.title}`)), "프론트와 피렌체 조식은 완전히 제외해야 한다");
 
 board._setStateForTest({ completions: {}, plans: {}, manual: [], checklist: [] });

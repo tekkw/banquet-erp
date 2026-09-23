@@ -3,7 +3,7 @@
   const REMINDER_DEFAULT_KEY = "banquet-erp-operation-reminder-default-v1";
   const SELECTED_DATE_KEY = "banquet-erp-operation-board-selected-date-v2";
   const OPEN_GROUPS_KEY = "banquet-erp-operation-board-open-groups-v2";
-  const TYPES = { start: "행사 시작", lunch: "중식", dinner: "석식", coffee: "커피브레이크", checkin: "체크인", checkout: "체크아웃", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
+  const TYPES = { start: "행사 시작", schedule: "운영 일정", lunch: "중식", dinner: "석식", coffee: "커피브레이크", checkin: "체크인", checkout: "체크아웃", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
   const SPACE_GROUP_ORDER = ["컨벤션", "페스타", "부라노", "올리비아", "카프리", "기타"];
   const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#c2410c", "#be123c", "#4f46e5", "#15803d", "#a16207"];
   let root;
@@ -61,13 +61,24 @@
   function scheduleDate(row, event) {
     const raw = normalize(row.date);
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const partial = raw.match(/(\d{1,2})\s*[.\/-]\s*(\d{1,2})/);
+    const full = raw.match(/(\d{4})\s*[.\/-년]\s*(\d{1,2})\s*[.\/-월]\s*(\d{1,2})/);
+    if (full) return `${full[1]}-${String(Number(full[2])).padStart(2, "0")}-${String(Number(full[3])).padStart(2, "0")}`;
+    const partial = raw.match(/(\d{1,2})\s*(?:[.\/-]|월)\s*(\d{1,2})/);
     if (partial) {
       const suffix = `-${String(Number(partial[1])).padStart(2, "0")}-${String(Number(partial[2])).padStart(2, "0")}`;
       const matched = eventDates(event).find((value) => value.endsWith(suffix));
       if (matched) return matched;
     }
     return eventDates(event).length === 1 ? eventDates(event)[0] : "";
+  }
+  function normalizedScheduleRows(event) {
+    let inheritedDate = "";
+    return (event.schedule || []).map((row, index) => {
+      const explicitDate = scheduleDate({ ...row, date: row.date }, event);
+      if (normalize(row.date) && explicitDate) inheritedDate = explicitDate;
+      const day = explicitDate || inheritedDate;
+      return { row, index, day, time: timeValue(row.time), endTime: scheduleEndTime(row) };
+    });
   }
   function venueName(row, event) { return normalize(row.venue || event.venue) || "장소 미입력"; }
   function eventSpaceNames(event) {
@@ -181,32 +192,35 @@
     for (const char of String(key || "")) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
     return COLORS[Math.abs(hash) % COLORS.length];
   }
-  function blockKey(event, row, type, index) { return `auto:${event.id}:${scheduleDate(row, event)}:${timeValue(row.time)}:${type}:${index}`; }
+  function blockKey(event, row, type, index, day = scheduleDate(row, event)) { return `auto:${event.id}:${day}:${timeValue(row.time)}:${type}:${index}`; }
   function buildAutoBlocks(events, today = dateKey()) {
     const blocks = [];
     events.forEach((event) => {
-      const boundaryRows = (event.schedule || []).map((row, index) => ({ row, index, day: scheduleDate(row, event), time: timeValue(row.time), endTime: scheduleEndTime(row) })).filter((item) => item.day === today && item.time && isBoundarySchedule(item.row, event)).sort((a, b) => a.time.localeCompare(b.time));
-      (event.schedule || []).forEach((row, index) => {
-        if (scheduleDate(row, event) !== today) return;
-        const type = visibleScheduleType(row, event);
+      const scheduleRows = normalizedScheduleRows(event);
+      const boundaryRows = scheduleRows.filter((item) => item.day === today && item.time && isBoundarySchedule(item.row, event)).sort((a, b) => a.time.localeCompare(b.time));
+      scheduleRows.forEach(({ row, index, day }) => {
+        if (day !== today) return;
+        const classifiedType = visibleScheduleType(row, event);
+        if (!classifiedType && (isFrontSchedule(row, event) || isFirenzeSchedule(row, event))) return;
+        const type = classifiedType || (normalize(row.content) && timeValue(row.time) ? "schedule" : "");
         if (!type) return;
-        const key = blockKey(event, row, type, index);
-        blocks.push({ key, kind: "auto", type, date: today, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), eventOrderId: event.id, title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
+        const key = blockKey(event, row, type, index, day);
+        const title = type === "start" ? (event.eventName || "행사 시작") : type === "schedule" ? normalize(row.content) : TYPES[type];
+        blocks.push({ key, kind: "auto", type, date: today, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), eventOrderId: event.id, title, eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
       });
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
-        const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index);
+        const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index, first.day);
         blocks.push({ key, kind: "auto", type: "start", date: today, time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), physicalSpaces: physicalSpaceKeys(event, first.row), eventOrderId: event.id, title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
       }
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
-        const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index)}:${endTime}`;
+        const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index, last.day)}:${endTime}`;
         blocks.push({ key, kind: "auto", type: "end", date: today, time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), eventOrderId: event.id, title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
       }
     });
     const endedBySpace = new Map(blocks.filter((b) => b.type === "end").map((b) => [b.spaceId, b]));
     endedBySpace.forEach((ended, key) => {
       const candidates = [];
-      events.forEach((event) => (event.schedule || []).forEach((row) => {
-        const day = scheduleDate(row, event);
+      events.forEach((event) => normalizedScheduleRows(event).forEach(({ row, day }) => {
         const existingOverlap = physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row));
         const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
         if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
@@ -428,5 +442,5 @@
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
     dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, allBlocks, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, spacesOverlap, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, allBlocks, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
 })();

@@ -77,4 +77,44 @@ const groupedNext = board.groupBlocksBySpace(board.buildAutoBlocks([
 ], targetDate));
 assert(groupedNext.find((group) => group.name === "컨벤션").blocks.some((block) => block.type === "next_setup"));
 
+// 다일 행사 병합 셀의 빈 날짜는 직전 유효 날짜를 상속하고 일반 일정도 버리지 않는다.
+const multiDayEvents = [{
+  id: "burano-multi",
+  eventName: "부라노 다일 행사",
+  calendarDates: ["2026-09-29", "2026-09-30", "2026-10-01"],
+  venue: "부라노1",
+  schedule: [
+    { date: "09.29", time: "15:00", content: "CHECK IN", venue: "부라노1" },
+    { date: "", time: "13:00~18:00", content: "세미나", venue: "부라노1" },
+    { date: "09.30", time: "07:00~09:30", content: "조식/뷔페", venue: "부라노1" },
+    { date: "", time: "~11:00", content: "CHECK OUT", venue: "부라노1" },
+    { date: "10.01", time: "09:00", content: "교육", venue: "부라노1" },
+    { date: "", time: "14:00~16:00", content: "회의", venue: "부라노1" },
+  ],
+}];
+const inheritedRows = board.normalizedScheduleRows(multiDayEvents[0]);
+assert.strictEqual(inheritedRows.map((item) => item.day).join(","), "2026-09-29,2026-09-29,2026-09-30,2026-09-30,2026-10-01,2026-10-01");
+assert.strictEqual(board.normalizedScheduleRows({ ...multiDayEvents[0], schedule: [{ date: "2026.09.30", time: "09:00", content: "교육" }] })[0].day, "2026-09-30");
+assert.strictEqual(board.normalizedScheduleRows({ ...multiDayEvents[0], schedule: [{ date: "10월 1일", time: "09:00", content: "교육" }] })[0].day, "2026-10-01");
+assert(board.buildAutoBlocks(multiDayEvents, "2026-09-29").some((item) => item.type === "schedule" && item.title === "세미나"));
+assert(board.buildAutoBlocks(multiDayEvents, "2026-09-30").some((item) => item.type === "checkout"));
+assert(board.buildAutoBlocks(multiDayEvents, "2026-10-01").some((item) => item.type === "schedule" && item.title === "회의"));
+
+// 실데이터 증상과 같은 행사 수로 각 날짜에 모든 행사가 최소 한 블록을 만든다.
+const datedEvent = (id, date, venue, content, time = "09:00") => ({
+  id, eventName: id, calendarDates: [date], venue,
+  schedule: [{ date, time, content, venue }],
+});
+const regressionEvents = [
+  datedEvent("0929-festa", "2026-09-29", "페스타", "예식"),
+  datedEvent("0929-burano", "2026-09-29", "부라노1", "세미나"),
+  datedEvent("0930-convention", "2026-09-30", "컨벤션A", "교육"),
+  datedEvent("0930-capri", "2026-09-30", "카프리1", "회의"),
+  ...[1, 2, 3, 4].map((number) => datedEvent(`1001-${number}`, "2026-10-01", `부라노${number}`, "강연")),
+];
+for (const [date, expected] of [["2026-09-29", 2], ["2026-09-30", 2], ["2026-10-01", 4]]) {
+  const eventIds = new Set(board.buildAutoBlocks(regressionEvents, date).filter((item) => item.type === "schedule").map((item) => item.eventOrderId));
+  assert.strictEqual(eventIds.size, expected, `${date}의 선택 행사마다 일반 운영 일정이 생성되어야 한다`);
+}
+
 console.log("operation-board-v2 tests passed");
