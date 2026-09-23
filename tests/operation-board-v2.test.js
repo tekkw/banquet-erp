@@ -117,4 +117,19 @@ for (const [date, expected] of [["2026-09-29", 2], ["2026-09-30", 2], ["2026-10-
   assert.strictEqual(eventIds.size, expected, `${date}의 선택 행사마다 일반 운영 일정이 생성되어야 한다`);
 }
 
+// 선택 날짜의 일정 날짜를 특정할 수 없거나 유효 일정이 없어도 행사를 숨기지 않는다.
+const fallbackEvents = [{
+  id: "ambiguous-multi", eventName: "날짜 확인 행사", calendarDates: [targetDate, otherDate],
+  startDate: targetDate, endDate: otherDate, eventDateTime: `${targetDate} 14:30`, venue: "부라노1", guestCount: 31,
+  schedule: [{ date: "", time: "13:00", content: "세미나", venue: "부라노1" }],
+}, {
+  id: "empty-schedule", eventName: "일정 없는 행사", calendarDates: [targetDate], venue: "카프리1", guestCount: 20, schedule: [],
+}];
+const fallbackBlocks = board.buildAutoBlocks(fallbackEvents, targetDate).filter((item) => item.needsScheduleReview);
+assert.strictEqual(fallbackBlocks.length, 2);
+assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "ambiguous-multi").time, "14:30");
+assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "empty-schedule").time, "시간 미정");
+assert.strictEqual(board.groupBlocksBySpace(fallbackBlocks).map((group) => group.name).join(","), "부라노,카프리");
+assert(source.includes("세부 일정 확인 필요"));
+
 console.log("operation-board-v2 tests passed");
