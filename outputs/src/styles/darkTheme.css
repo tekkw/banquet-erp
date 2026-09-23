@@ -665,6 +665,21 @@ body,
   color: var(--text-primary);
 }
 
+#aiPage .ai-page-message.assistant .ai-answer-list-item {
+  background: #FFFFFF;
+  color: #102A40;
+}
+
+#aiPage .ai-page-message.assistant .ai-answer-list-item :where(small, .subtle) {
+  color: #52697C;
+}
+
+#aiPage .ai-page-message.assistant .ai-answer-list-item::selection,
+#aiPage .ai-page-message.assistant .ai-answer-list-item *::selection {
+  background: #B9D7EE;
+  color: #0D2235;
+}
+
 #aiPage .ai-page-message.user .ai-page-bubble {
   border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, transparent);
   background: #173A55;
