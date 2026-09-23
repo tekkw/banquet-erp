@@ -686,6 +686,31 @@ body,
   color: #F7FAFC;
 }
 
+/* Event-order upload meal-type pills only. */
+#uploadPage .meal-type-options .meal-type-option {
+  border-color: var(--border);
+  background: #0D2235;
+  color: #C9D5DE;
+}
+
+#uploadPage .meal-type-options .meal-type-option:has(input:checked) {
+  border-color: var(--border-strong);
+  background: #102A40;
+  color: #F4F7FA;
+}
+
+#uploadPage .meal-type-options .meal-type-option:hover,
+#uploadPage .meal-type-options .meal-type-option:focus-within {
+  border-color: var(--accent-mint);
+  color: #F4F7FA;
+  outline: none;
+}
+
+#uploadPage .meal-type-options .meal-type-option:has(input:disabled) {
+  color: #70879A;
+  opacity: 1;
+}
+
 #aiPage .ai-page-message.error .ai-page-bubble {
   border-color: rgba(220, 38, 38, 0.38);
   background: rgba(127, 29, 29, 0.28);
