@@ -953,6 +953,33 @@ table {
   filter: drop-shadow(0 8px 14px rgba(15, 42, 67, 0.18));
 }
 
+.layout-workspace-base-label {
+  paint-order: stroke;
+  stroke: rgba(255, 255, 255, .94);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  fill: #102B55;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.layout-workspace-marquee { vector-effect: non-scaling-stroke; }
+
+.layout-editor-properties.multi-selection .layout-property-grid { display: none; }
+.layout-editor-properties.multi-selection .layout-panel-title p {
+  display: grid;
+  min-height: 120px;
+  place-items: center;
+  margin: 0;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  color: var(--navy);
+  background: rgba(212, 175, 55, .08);
+  font-size: 16px;
+  font-weight: 900;
+  text-align: center;
+}
+
 .layout-workspace-dimension {
   cursor: text;
   pointer-events: none;

@@ -34,6 +34,27 @@
     };
   }
 
+  function floorplanObjectIntersectsBox(object, box, scale = 1000) {
+    if (!object || !box) return false;
+    const halfWidth = Math.max(0, Number(object.widthM || 0) * scale / 2);
+    const halfHeight = Math.max(0, Number(object.heightM || 0) * scale / 2);
+    return Number(object.x || 0) + halfWidth >= box.x
+      && Number(object.x || 0) - halfWidth <= box.x + box.width
+      && Number(object.y || 0) + halfHeight >= box.y
+      && Number(object.y || 0) - halfHeight <= box.y + box.height;
+  }
+
+  function duplicateFloorplanObjects(objects, offset = 200, idFactory = () => crypto.randomUUID()) {
+    const delta = typeof offset === "number" ? { x: offset, y: offset } : { x: Number(offset?.x || 0), y: Number(offset?.y || 0) };
+    return (objects || []).map((object, index) => ({
+      ...JSON.parse(JSON.stringify(object)),
+      instanceId: idFactory(object, index),
+      x: Number(object.x || 0) + delta.x,
+      y: Number(object.y || 0) + delta.y,
+      zIndex: Number(object.zIndex || 0) + index + 1,
+    }));
+  }
+
   function createFloorplanEditor({ elements, deps }) {
     const {
       modal,
@@ -294,6 +315,7 @@
     let workspaceLayouts = [];
     let workspaceObjects = [];
     let workspaceSelectedId = "";
+    let workspaceSelectedIds = new Set();
     let workspaceSourceRow = null;
     let workspaceSourceFile = null;
     let workspaceFloorplanRecord = null;
@@ -723,15 +745,14 @@
         const active = document.activeElement;
         if (active && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)) return;
         if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
-          const object = findWorkspaceObject(workspaceSelectedId);
-          if (!object || isWorkspaceBaseObject(object)) return;
+          const selected = [...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject);
+          if (!selected.length) return;
           event.preventDefault();
           pushWorkspaceHistory();
           const distance = event.shiftKey ? 500 : 100;
-          if (event.key === "ArrowLeft") object.x = clampNumber(object.x - distance, 0, workspaceSize.width);
-          if (event.key === "ArrowRight") object.x = clampNumber(object.x + distance, 0, workspaceSize.width);
-          if (event.key === "ArrowUp") object.y = clampNumber(object.y - distance, 0, workspaceSize.height);
-          if (event.key === "ArrowDown") object.y = clampNumber(object.y + distance, 0, workspaceSize.height);
+          const requested = { x: event.key === "ArrowLeft" ? -distance : event.key === "ArrowRight" ? distance : 0, y: event.key === "ArrowUp" ? -distance : event.key === "ArrowDown" ? distance : 0 };
+          const delta = { x: clampNumber(requested.x, -Math.min(...selected.map((object) => object.x)), workspaceSize.width - Math.max(...selected.map((object) => object.x))), y: clampNumber(requested.y, -Math.min(...selected.map((object) => object.y)), workspaceSize.height - Math.max(...selected.map((object) => object.y))) };
+          selected.forEach((object) => { object.x += delta.x; object.y += delta.y; });
           markWorkspaceDirty();
           renderWorkspace();
           return;
@@ -2039,6 +2060,20 @@
         beginWorkspaceObjectMove(event, hitObject);
         return;
       }
+      if (workspaceTool === "select" && (!hitObject || !canWorkspaceEditObject(hitObject))) {
+        event.preventDefault();
+        const point = getWorkspaceSvgPoint(event);
+        workspaceDragState = {
+          mode: "marquee",
+          start: point,
+          end: point,
+          initialIds: event.ctrlKey || event.metaKey || event.shiftKey ? [...workspaceSelectedIds] : [],
+          moved: false,
+        };
+        workspaceSvg.setPointerCapture?.(event.pointerId);
+        renderWorkspace();
+        return;
+      }
       if (workspaceTool === "wall" || workspaceTool === "calibrate") {
         event.preventDefault();
         const point = getWorkspaceSnappedPoint(event);
@@ -2136,6 +2171,9 @@
 
     function renderWorkspace() {
       if (!workspaceObjectLayer) return;
+      if (!workspaceSelectedId) workspaceSelectedIds.clear();
+      else if (!workspaceSelectedIds.has(workspaceSelectedId)) workspaceSelectedIds = new Set([workspaceSelectedId]);
+      workspaceSelectedIds = new Set([...workspaceSelectedIds].filter((id) => workspaceObjects.some((object) => object.instanceId === id)));
       updateWorkspaceSvgViewBox();
       workspaceObjectLayer.innerHTML = "";
       if (workspaceSelectionLayer) workspaceSelectionLayer.innerHTML = "";
@@ -2197,6 +2235,22 @@
     }
 
     function renderWorkspaceGuide() {
+      if (workspaceGuideLayer && workspaceDragState?.mode === "marquee" && workspaceDragState.start && workspaceDragState.end) {
+        const box = getDraftBox(workspaceDragState.start, workspaceDragState.end);
+        const marquee = document.createElementNS(svgNs, "rect");
+        marquee.classList.add("layout-workspace-marquee");
+        marquee.setAttribute("x", String(box.x));
+        marquee.setAttribute("y", String(box.y));
+        marquee.setAttribute("width", String(box.width));
+        marquee.setAttribute("height", String(box.height));
+        marquee.setAttribute("fill", "rgba(37, 99, 235, .12)");
+        marquee.setAttribute("stroke", "#2563eb");
+        marquee.setAttribute("stroke-width", String(2 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
+        marquee.setAttribute("stroke-dasharray", `${7 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)} ${5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)}`);
+        marquee.setAttribute("pointer-events", "none");
+        workspaceGuideLayer.append(marquee);
+        return;
+      }
       if (!workspaceGuideLayer || !workspaceDraftShape?.start || !workspaceDraftShape?.end) return;
       const { start, end, type } = workspaceDraftShape;
       if (type === "rect") {
@@ -2367,7 +2421,7 @@
     function renderWorkspaceObject(object) {
       if (["wall", "calibration"].includes(object.objectType)) syncWorkspaceLineObjectFromMetadata(object);
       const group = document.createElementNS(svgNs, "g");
-      const selected = object.instanceId === workspaceSelectedId;
+      const selected = workspaceSelectedIds.has(object.instanceId);
       const width = object.widthM * workspaceMeterScale;
       const height = object.heightM * workspaceMeterScale;
       const x = -width / 2;
@@ -2383,7 +2437,7 @@
       } else {
         group.addEventListener("click", (event) => {
           event.stopPropagation();
-          selectWorkspaceObject(object.instanceId);
+          if (!event.ctrlKey && !event.metaKey && !event.shiftKey) selectWorkspaceObject(object.instanceId);
         });
         group.addEventListener("pointerdown", (event) => startWorkspaceDrag(event, object.instanceId));
       }
@@ -2426,33 +2480,31 @@
     }
 
     function renderWorkspaceSelection() {
-      if (!workspaceSelectionLayer || !workspaceSelectedId) return;
-      const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object) return;
-      const width = object.widthM * workspaceMeterScale;
-      const height = object.heightM * workspaceMeterScale;
-      const x = -width / 2;
-      const y = -height / 2;
+      if (!workspaceSelectionLayer || !workspaceSelectedIds.size) return;
       const screenStroke = Math.max(1.5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE), 1);
-      const group = document.createElementNS(svgNs, "g");
-      group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0})`);
-      const box = document.createElementNS(svgNs, "rect");
-      box.setAttribute("x", String(x));
-      box.setAttribute("y", String(y));
-      box.setAttribute("width", String(width));
-      box.setAttribute("height", String(height));
-      box.setAttribute("rx", "6");
-      box.setAttribute("fill", "none");
-      box.setAttribute("stroke", "#d4af37");
-      box.setAttribute("stroke-width", String(screenStroke));
-      box.setAttribute("stroke-dasharray", `${8 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)} ${5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)}`);
-      box.setAttribute("pointer-events", "none");
-      group.append(box);
-      if (canWorkspaceEditObject(object)) {
-        group.append(createWorkspaceResizeHandle(object, width, height));
-        group.append(createWorkspaceRotateHandle(object, height));
-      }
-      workspaceSelectionLayer.append(group);
+      [...workspaceSelectedIds].map(findWorkspaceObject).filter(Boolean).forEach((object) => {
+        const width = object.widthM * workspaceMeterScale;
+        const height = object.heightM * workspaceMeterScale;
+        const group = document.createElementNS(svgNs, "g");
+        group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0})`);
+        const box = document.createElementNS(svgNs, "rect");
+        box.setAttribute("x", String(-width / 2));
+        box.setAttribute("y", String(-height / 2));
+        box.setAttribute("width", String(width));
+        box.setAttribute("height", String(height));
+        box.setAttribute("rx", "6");
+        box.setAttribute("fill", "none");
+        box.setAttribute("stroke", "#d4af37");
+        box.setAttribute("stroke-width", String(screenStroke));
+        box.setAttribute("stroke-dasharray", `${8 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)} ${5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)}`);
+        box.setAttribute("pointer-events", "none");
+        group.append(box);
+        if (workspaceSelectedIds.size === 1 && canWorkspaceEditObject(object)) {
+          group.append(createWorkspaceResizeHandle(object, width, height));
+          group.append(createWorkspaceRotateHandle(object, height));
+        }
+        workspaceSelectionLayer.append(group);
+      });
     }
 
     function createWorkspaceResizeHandle(object, width, height) {
@@ -2598,17 +2650,22 @@
       }
       const label = ["buffet_table", "av_table", "podium"].includes(object.objectType)
         ? ({ buffet_table: "BUFFET", av_table: "AV", podium: "P" }[object.objectType])
-        : object.label;
-      const showNames = options.showNames ?? workspaceShowNames;
+        : (object.label || object.metadata?.label || objectLabels[object.objectType] || "고정 구조물");
+      const showNames = isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames);
       if (showNames) {
         const text = document.createElementNS(svgNs, "text");
         text.textContent = label || "";
         text.setAttribute("x", "0");
-        text.setAttribute("y", "5");
+        text.setAttribute("y", String(Math.min(width, height) < 70 ? height / 2 + 22 : 5));
         text.setAttribute("text-anchor", "middle");
         text.setAttribute("font-size", "14");
         text.setAttribute("font-weight", "800");
         text.setAttribute("fill", "#102B55");
+        text.setAttribute("class", isWorkspaceBaseObject(object) ? "layout-workspace-base-label" : "layout-workspace-object-label");
+        text.setAttribute("paint-order", "stroke");
+        text.setAttribute("stroke", "rgba(255,255,255,.92)");
+        text.setAttribute("stroke-width", "4");
+        text.setAttribute("stroke-linejoin", "round");
         text.setAttribute("pointer-events", "none");
         group.append(text);
       }
@@ -2655,6 +2712,10 @@
       if (event.button !== 0) return;
       const object = findWorkspaceObject(instanceId);
       if (!object || !canWorkspaceEditObject(object)) return;
+      if (event.ctrlKey || event.metaKey || event.shiftKey) {
+        selectWorkspaceObject(instanceId, true);
+        return;
+      }
       logWorkspacePointerDown(event, { ...pointerHit, type: pointerHit?.type || "object", object }, "move");
       beginWorkspaceObjectMove(event, object);
     }
@@ -2664,13 +2725,17 @@
       event.preventDefault();
       event.stopPropagation();
       workspaceSuppressCanvasClick = true;
-      workspaceSelectedId = object.instanceId;
+      if (!workspaceSelectedIds.has(object.instanceId)) {
+        workspaceSelectedId = object.instanceId;
+        workspaceSelectedIds = new Set([object.instanceId]);
+      }
       renderWorkspaceProperties();
       if (workspaceSelectionLayer) workspaceSelectionLayer.innerHTML = "";
       renderWorkspaceSelection();
       updateWorkspaceStatusbar();
       pushWorkspaceHistory();
       const point = getWorkspaceSvgPoint(event);
+      const selectedObjects = [...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject);
       workspaceDragState = {
         mode: "move",
         instanceId: object.instanceId,
@@ -2682,6 +2747,7 @@
         startClientY: event.clientY,
         startCenter: { x: object.x, y: object.y },
         startMetadata: JSON.parse(JSON.stringify(object.metadata || {})),
+        selectedStarts: selectedObjects.map((item) => ({ id: item.instanceId, x: item.x, y: item.y, metadata: JSON.parse(JSON.stringify(item.metadata || {})) })),
         moved: false,
       };
       captureWorkspacePointer(event);
@@ -2756,6 +2822,12 @@
         renderWorkspace();
         return;
       }
+      if (workspaceDragState.mode === "marquee") {
+        workspaceDragState.end = getWorkspaceSvgPoint(event);
+        workspaceDragState.moved = true;
+        renderWorkspace();
+        return;
+      }
       if (workspaceDragState.mode === "pan") {
         view.panX = workspaceDragState.viewX + (event.clientX - workspaceDragState.clientX) * WORKSPACE_PAN_SPEED;
         view.panY = workspaceDragState.viewY + (event.clientY - workspaceDragState.clientY) * WORKSPACE_PAN_SPEED;
@@ -2796,24 +2868,28 @@
           y: clampNumber(workspaceDragState.startObjectY + deltaY, 0, workspaceSize.height),
         });
         logWorkspacePointerMove(event, { dxWorld: deltaX, dyWorld: deltaY, nextCenter });
-        if (["wall", "calibration"].includes(object.objectType)) {
-          const startMetadata = migrateLegacyWallMetadata({ ...object, metadata: workspaceDragState.startMetadata });
-          const startCenterMm = workspacePointToMillimeters(workspaceDragState.startCenter);
-          const nextCenterMm = workspacePointToMillimeters(nextCenter);
-          const deltaX = nextCenterMm.x - startCenterMm.x;
-          const deltaY = nextCenterMm.y - startCenterMm.y;
-          object.metadata = {
-            ...startMetadata,
-            start_x_mm: Math.round(Number(startMetadata.start_x_mm || 0) + deltaX),
-            start_y_mm: Math.round(Number(startMetadata.start_y_mm || 0) + deltaY),
-            end_x_mm: Math.round(Number(startMetadata.end_x_mm || 0) + deltaX),
-            end_y_mm: Math.round(Number(startMetadata.end_y_mm || 0) + deltaY),
-          };
-          syncWorkspaceLineObjectFromMetadata(object);
-        } else {
-          object.x = nextCenter.x;
-          object.y = nextCenter.y;
-        }
+        const snappedDelta = { x: nextCenter.x - workspaceDragState.startObjectX, y: nextCenter.y - workspaceDragState.startObjectY };
+        const starts = workspaceDragState.selectedStarts || [{ id: object.instanceId, x: workspaceDragState.startObjectX, y: workspaceDragState.startObjectY, metadata: workspaceDragState.startMetadata }];
+        const boundedDelta = {
+          x: clampNumber(snappedDelta.x, -Math.min(...starts.map((item) => item.x)), workspaceSize.width - Math.max(...starts.map((item) => item.x))),
+          y: clampNumber(snappedDelta.y, -Math.min(...starts.map((item) => item.y)), workspaceSize.height - Math.max(...starts.map((item) => item.y))),
+        };
+        starts.forEach((start) => {
+          const selectedObject = findWorkspaceObject(start.id);
+          if (!selectedObject || !canWorkspaceEditObject(selectedObject)) return;
+          if (["wall", "calibration"].includes(selectedObject.objectType)) {
+            const startMetadata = migrateLegacyWallMetadata({ ...selectedObject, metadata: start.metadata });
+            const startCenterMm = workspacePointToMillimeters({ x: start.x, y: start.y });
+            const nextCenterMm = workspacePointToMillimeters({ x: start.x + boundedDelta.x, y: start.y + boundedDelta.y });
+            const deltaMmX = nextCenterMm.x - startCenterMm.x;
+            const deltaMmY = nextCenterMm.y - startCenterMm.y;
+            selectedObject.metadata = { ...startMetadata, start_x_mm: Math.round(Number(startMetadata.start_x_mm || 0) + deltaMmX), start_y_mm: Math.round(Number(startMetadata.start_y_mm || 0) + deltaMmY), end_x_mm: Math.round(Number(startMetadata.end_x_mm || 0) + deltaMmX), end_y_mm: Math.round(Number(startMetadata.end_y_mm || 0) + deltaMmY) };
+            syncWorkspaceLineObjectFromMetadata(selectedObject);
+          } else {
+            selectedObject.x = start.x + boundedDelta.x;
+            selectedObject.y = start.y + boundedDelta.y;
+          }
+        });
         workspaceDragState.moved = true;
       }
       markWorkspaceDirty();
@@ -2852,9 +2928,17 @@
       if (workspaceDragState?.mode === "draw-rect" && workspaceDraftShape?.type === "rect") {
         finishWorkspaceRectDraft();
       }
+      if (workspaceDragState?.mode === "marquee") {
+        const box = getDraftBox(workspaceDragState.start, workspaceDragState.end);
+        const matched = workspaceObjects.filter((object) => canWorkspaceEditObject(object) && floorplanObjectIntersectsBox(object, box, workspaceMeterScale)).map((object) => object.instanceId);
+        workspaceSelectedIds = new Set([...(workspaceDragState.initialIds || []), ...matched]);
+        workspaceSelectedId = [...workspaceSelectedIds].at(-1) || "";
+        workspaceSuppressCanvasClick = true;
+      }
       workspaceDragState = null;
       workspaceSvg?.classList.remove("is-panning");
       releaseWorkspacePointer(event);
+      renderWorkspace();
     }
 
     function handleWorkspaceWheel(event) {
@@ -2973,8 +3057,13 @@
       renderWorkspace();
     }
 
-    function selectWorkspaceObject(instanceId) {
-      workspaceSelectedId = instanceId || "";
+    function selectWorkspaceObject(instanceId, additive = false) {
+      const object = findWorkspaceObject(instanceId);
+      if (object && !canWorkspaceEditObject(object)) return;
+      if (!additive) workspaceSelectedIds = new Set(instanceId ? [instanceId] : []);
+      else if (workspaceSelectedIds.has(instanceId)) workspaceSelectedIds.delete(instanceId);
+      else if (instanceId) workspaceSelectedIds.add(instanceId);
+      workspaceSelectedId = [...workspaceSelectedIds].at(-1) || "";
       renderWorkspace();
     }
 
@@ -2986,6 +3075,7 @@
 
     function renderWorkspaceProperties() {
       const object = findWorkspaceObject(workspaceSelectedId);
+      const selectionCount = workspaceSelectedIds.size;
       const wallInputs = [
         workspaceWallStartXInput,
         workspaceWallStartYInput,
@@ -3002,9 +3092,19 @@
       ];
       const inputs = [workspaceLabelInput, workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput, workspaceSeatCountInput, workspaceZIndexInput, workspaceOpacityInput, ...wallInputs];
       const buttons = [workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton, workspaceRotate90Button, workspaceDuplicateButton, workspaceDeleteButton];
+      const propertiesPanel = workspaceLabelInput?.closest?.(".layout-editor-properties");
+      const panelHelp = propertiesPanel?.querySelector?.(".layout-panel-title p");
+      propertiesPanel?.classList.toggle("multi-selection", selectionCount > 1);
+      if (panelHelp) panelHelp.textContent = selectionCount > 1 ? `${selectionCount}개 객체 선택됨` : object ? "선택한 오브젝트를 편집합니다." : "도면에서 오브젝트를 선택하세요.";
       inputs.concat(buttons).forEach((el) => {
         if (el) el.disabled = !object;
       });
+      if (selectionCount > 1) {
+        inputs.forEach((input) => { if (input) { input.value = ""; input.disabled = true; } });
+        buttons.forEach((button) => { if (button) button.disabled = false; });
+        if (workspaceRotate90Button) workspaceRotate90Button.disabled = true;
+        return;
+      }
       if (!object) {
         if (workspaceLabelInput) workspaceLabelInput.value = "";
         if (workspaceXInput) workspaceXInput.value = "";
@@ -3177,30 +3277,33 @@
     }
 
     function moveWorkspaceLayer(mode) {
-      const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || !canWorkspaceEditObject(object)) return;
+      const selected = [...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject);
+      if (!selected.length) return;
       pushWorkspaceHistory();
-      if (mode === "front") object.zIndex = getWorkspaceMaxZIndex() + 1;
-      if (mode === "forward") object.zIndex += 1;
-      if (mode === "backward") object.zIndex -= 1;
-      if (mode === "back") object.zIndex = getWorkspaceMinZIndex() - 1;
+      selected.forEach((object, index) => {
+        if (mode === "front") object.zIndex = getWorkspaceMaxZIndex() + index + 1;
+        if (mode === "forward") object.zIndex += 1;
+        if (mode === "backward") object.zIndex -= 1;
+        if (mode === "back") object.zIndex = getWorkspaceMinZIndex() - selected.length + index;
+      });
       markWorkspaceDirty();
       renderWorkspace();
     }
 
     function duplicateWorkspaceObject() {
-      const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || !canWorkspaceEditObject(object)) return;
+      const selected = [...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject);
+      if (!selected.length) return;
       pushWorkspaceHistory();
-      const copy = {
-        ...object,
-        instanceId: crypto.randomUUID ? crypto.randomUUID() : `object_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-        x: clampNumber(object.x + 200, 0, workspaceSize.width),
-        y: clampNumber(object.y + 200, 0, workspaceSize.height),
-        zIndex: getWorkspaceMaxZIndex() + 1,
+      const maxZ = getWorkspaceMaxZIndex();
+      const offset = {
+        x: clampNumber(200, -Math.min(...selected.map((object) => object.x)), workspaceSize.width - Math.max(...selected.map((object) => object.x))),
+        y: clampNumber(200, -Math.min(...selected.map((object) => object.y)), workspaceSize.height - Math.max(...selected.map((object) => object.y))),
       };
-      workspaceObjects.push(copy);
-      workspaceSelectedId = copy.instanceId;
+      const copies = duplicateFloorplanObjects(selected, offset, (_, index) => crypto.randomUUID ? crypto.randomUUID() : `object_${Date.now()}_${index}_${Math.random().toString(16).slice(2)}`)
+        .map((copy, index) => ({ ...copy, zIndex: maxZ + index + 1 }));
+      workspaceObjects.push(...copies);
+      workspaceSelectedIds = new Set(copies.map((copy) => copy.instanceId));
+      workspaceSelectedId = copies.at(-1)?.instanceId || "";
       markWorkspaceDirty();
       renderWorkspace();
     }
@@ -3215,10 +3318,11 @@
     }
 
     function deleteSelectedWorkspaceObject() {
-      const object = findWorkspaceObject(workspaceSelectedId);
-      if (!object || !canWorkspaceEditObject(object)) return;
+      const deletableIds = new Set([...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject).map((object) => object.instanceId));
+      if (!deletableIds.size) return;
       pushWorkspaceHistory();
-      workspaceObjects = workspaceObjects.filter((object) => object.instanceId !== workspaceSelectedId);
+      workspaceObjects = workspaceObjects.filter((object) => !deletableIds.has(object.instanceId));
+      workspaceSelectedIds.clear();
       workspaceSelectedId = "";
       markWorkspaceDirty();
       renderWorkspace();
@@ -3375,7 +3479,7 @@
       const snap = workspaceStatusbar?.querySelector('[data-layout-status="snap"]');
       const count = workspaceStatusbar?.querySelector('[data-layout-status="count"]');
       const object = findWorkspaceObject(workspaceSelectedId);
-      if (selected) selected.textContent = `\uC120\uD0DD: ${object?.label || "\uC5C6\uC74C"}`;
+      if (selected) selected.textContent = workspaceSelectedIds.size > 1 ? `선택: ${workspaceSelectedIds.size}개 객체` : `\uC120\uD0DD: ${object?.label || "\uC5C6\uC74C"}`;
       if (zoom) zoom.textContent = `\uBC30\uC728: ${Math.round(view.scale * 100)}%`;
       if (grid) grid.textContent = `\uACA9\uC790: ${workspaceGrid ? String(workspaceGridSizeMm) + "mm" : "\uB044\uAE30"}`;
       if (snap) snap.textContent = `\uC2A4\uB0C5: ${workspaceSnap ? "\uC0AC\uC6A9" : "\uB044\uAE30"}`;
@@ -3427,6 +3531,7 @@
       workspaceUndoStack.push({
         objects: cloneWorkspaceObjects(),
         selectedId: workspaceSelectedId,
+        selectedIds: [...workspaceSelectedIds],
         activeLayoutId: workspaceActiveLayout?.id || "",
       });
       if (workspaceUndoStack.length > 60) workspaceUndoStack.shift();
@@ -3439,6 +3544,7 @@
       workspaceRedoStack.push({
         objects: cloneWorkspaceObjects(),
         selectedId: workspaceSelectedId,
+        selectedIds: [...workspaceSelectedIds],
         activeLayoutId: workspaceActiveLayout?.id || "",
       });
       restoreWorkspaceSnapshot(workspaceUndoStack.pop());
@@ -3449,6 +3555,7 @@
       workspaceUndoStack.push({
         objects: cloneWorkspaceObjects(),
         selectedId: workspaceSelectedId,
+        selectedIds: [...workspaceSelectedIds],
         activeLayoutId: workspaceActiveLayout?.id || "",
       });
       restoreWorkspaceSnapshot(workspaceRedoStack.pop());
@@ -3457,6 +3564,7 @@
     function restoreWorkspaceSnapshot(snapshot) {
       workspaceObjects = JSON.parse(JSON.stringify(snapshot?.objects || []));
       workspaceSelectedId = snapshot?.selectedId || "";
+      workspaceSelectedIds = new Set(snapshot?.selectedIds || (workspaceSelectedId ? [workspaceSelectedId] : []));
       workspaceDirty = true;
       updateWorkspaceStatus("蹂寃쎌궗???덉쓬");
       renderWorkspace();
@@ -4684,6 +4792,8 @@
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {
     createFloorplanEditor,
     floorplanOutlineMetrics,
+    floorplanObjectIntersectsBox,
+    duplicateFloorplanObjects,
   };
 })();
 

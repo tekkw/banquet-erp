@@ -561,6 +561,26 @@ body,
   color: var(--text-primary);
 }
 
+/* Layout editor controls stay readable while the technical canvas remains light. */
+#layoutsPage :where(.layout-editor-heading h2, .layout-panel-title h3, .layout-editor-properties h3, .layout-editor-palette h3) { color: #F4F7FA; }
+#layoutsPage :where(.layout-editor-heading p, .layout-editor-toolbar, .layout-editor-palette, .layout-editor-properties, .layout-property-grid label, .layout-inline-control, .layout-inline-check, .layout-view-menu summary, .layout-editor-statusbar, .layout-floorplan-info) { color: #C9D5DE; }
+#layoutsPage :where(.layout-panel-title p, .layout-editor-palette small, .layout-editor-properties small, .layout-editor-status-pill, .layout-library-state) { color: #96A9BA; }
+#layoutsPage :where(.layout-editor-toolbar select, .layout-editor-toolbar button, .layout-editor-palette input, .layout-property-grid input, .layout-property-grid select, .layout-inline-control input, .layout-inline-control select, .layout-property-actions button, .layout-view-menu summary) {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: #F4F7FA;
+}
+#layoutsPage :where(.layout-editor-toolbar input, .layout-editor-palette input, .layout-property-grid input)::placeholder { color: #70879A; opacity: 1; }
+#layoutsPage :where(.layout-editor-toolbar button, .layout-property-actions button, .layout-editor-toolbar select, .layout-property-grid input, .layout-property-grid select):disabled {
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--surface-primary) 82%, #000);
+  color: #70879A;
+  opacity: .78;
+}
+#layoutsPage .layout-editor-workbench .floorplan-library-item { border-color: var(--border); background: var(--surface-elevated); color: #C9D5DE; }
+#layoutsPage .layout-editor-workbench .floorplan-library-item span { color: #F4F7FA; }
+#layoutsPage .layout-editor-workbench .floorplan-library-item small { color: #96A9BA; }
+
 /* Keep technical drawing surfaces light for precise geometry work. */
 #layoutsPage #floorplanV2Preview,
 #layoutsPage .layout-editor-canvas-svg,
