@@ -101,7 +101,7 @@ for (const value of ["09.30", "9. 30", "09.30 (수)", "9. 30 (수)", "2026.09.30
 }
 assert.strictEqual(board.normalizedScheduleRows({ calendarDates: ["2026-09-30"], schedule: [{ date: "10. 01 (목)", time: "09:00", content: "교육" }] })[0].day, "2026-10-01");
 assert(board.buildAutoBlocks(multiDayEvents, "2026-09-29").some((item) => item.type === "schedule" && item.title === "세미나"));
-assert(board.buildAutoBlocks(multiDayEvents, "2026-09-30").some((item) => item.type === "checkout"));
+assert(!board.buildAutoBlocks(multiDayEvents, "2026-09-30").some((item) => item.type === "checkout"));
 assert(board.buildAutoBlocks(multiDayEvents, "2026-10-01").some((item) => item.type === "schedule" && item.title === "회의"));
 
 // 실데이터 증상과 같은 행사 수로 각 날짜에 모든 행사가 최소 한 블록을 만든다.
@@ -147,5 +147,21 @@ const productionFormatBlocks = board.buildAutoBlocks([productionDateFormatEvent]
 assert(productionFormatBlocks.some((item) => item.type === "checkin" && item.time === "15:00"));
 assert(productionFormatBlocks.some((item) => item.type === "schedule" && item.time === "13:00" && item.title === "세미나"));
 assert(!productionFormatBlocks.some((item) => item.needsScheduleReview));
+
+const shinanCouncilEvent = {
+  id: "4c72d6f8-7358-40e4-987f-ec628d341b81", eventName: "신안군의회",
+  startDate: "2026-09-29", endDate: "2026-09-29", calendarDates: ["2026-09-29"],
+  venue: "3F 부라노 I", guestCount: 31,
+  schedule: [
+    { date: "09. 29 (화)", time: "15:00~", content: "CHECK IN", venue: "1F 프론트" },
+    { date: "09. 29 (화)", time: "13:00~18:00", content: "세미나", venue: "3F 부라노 I" },
+    { date: "09. 30 (수)", time: "07:00~09:30", content: "조식/뷔페", venue: "1F 피렌체", people: 31 },
+    { date: "09. 30 (수)", time: "~11:00", content: "CHECK OUT", venue: "1F 프론트" },
+  ],
+};
+const shinanBlocks = board.buildAutoBlocks([shinanCouncilEvent], "2026-09-29");
+assert(shinanBlocks.some((item) => item.type === "schedule" && item.time === "13:00" && item.title === "세미나"));
+assert(shinanBlocks.some((item) => item.type === "checkin" && item.time === "15:00"));
+assert(!shinanBlocks.some((item) => item.type === "checkout" || item.needsScheduleReview));
 
 console.log("operation-board-v2 tests passed");

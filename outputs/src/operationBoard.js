@@ -111,12 +111,13 @@
   function isFirenzeSchedule(row, event) { return /피렌체/.test(scheduleContext(row, event)); }
   function visibleScheduleType(row, event) {
     const type = classifySchedule(row.content);
+    if (type === "checkout") return "";
     if (isFrontSchedule(row, event) && !["checkin", "checkout"].includes(type)) return "";
     return isFirenzeSchedule(row, event) && !["lunch", "dinner"].includes(type) ? "" : type;
   }
   function isBoundarySchedule(row, event) {
     if (isFrontSchedule(row, event) || isFirenzeSchedule(row, event)) return false;
-    return !["lunch", "dinner", "coffee"].includes(classifySchedule(row.content));
+    return !["lunch", "dinner", "coffee", "checkout"].includes(classifySchedule(row.content));
   }
   function scheduleEndTime(row) { return normalize(row.time).match(/~\s*(\d{1,2}:\d{2})/)?.[1] || timeValue(row.time); }
   function spaceKey(row, event) {
