@@ -245,6 +245,12 @@ body {
 .operation-board-actions label, .operation-reminder { display: flex; align-items: center; gap: 6px; color: var(--dash-muted); font-size: 12px; }
 .operation-reminder { align-self: flex-start; margin-left: auto; }
 .operation-reminder select, .operation-board-actions select { min-height: 34px; width: auto; }
+.operation-date-controls { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.operation-date-controls button,
+.operation-date-controls input { box-sizing: border-box; min-height: 34px; border: 1px solid var(--dash-border); border-radius: 7px; background: #081a2b; color: var(--dash-text); font: inherit; }
+.operation-date-controls button { padding: 6px 10px; cursor: pointer; }
+.operation-date-controls input { width: 148px; padding: 6px 8px; color-scheme: dark; }
+.operation-date-controls button:hover { border-color: var(--dash-border-strong); background: rgba(21, 52, 77, .8); }
 
 .dashboard-overview h2,
 .dashboard-overview h3,
@@ -446,6 +452,11 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .ai-widget-modal .dashboard-ai-widget .chat-messages { padding: 14px 12px; }
   .ai-widget-modal .dashboard-ai-widget .chat-form { grid-template-columns: minmax(0, 1fr) auto; padding: 10px 12px; }
   .operation-briefing-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .operation-board-heading { align-items: flex-start; flex-direction: column; }
+  .operation-board-actions { width: 100%; justify-content: flex-start; }
+  .operation-date-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; width: 100%; }
+  .operation-date-controls input { width: 100%; min-width: 0; }
+  .operation-date-controls button { padding-inline: 9px; }
   .operation-time-group { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
   .operation-block { flex-wrap: wrap; }
   .operation-block-actions { width: 100%; justify-content: flex-end; }

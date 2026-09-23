@@ -1,18 +1,33 @@
 (function registerOperationBoard() {
   const STORAGE_KEY = "banquet-erp-operation-board-v1";
   const REMINDER_DEFAULT_KEY = "banquet-erp-operation-reminder-default-v1";
-  const TYPES = { start: "행사 시작", lunch: "중식", dinner: "석식", coffee: "커피브레이크", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
+  const SELECTED_DATE_KEY = "banquet-erp-operation-board-selected-date-v2";
+  const TYPES = { start: "행사 시작", lunch: "중식", dinner: "석식", coffee: "커피브레이크", checkin: "체크인", checkout: "체크아웃", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
   const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#c2410c", "#be123c", "#4f46e5", "#15803d", "#a16207"];
   let root;
   let weeklyRoot;
   let currentEvents = [];
   let state = loadState();
   let remoteStatus = "idle";
+  const remoteLoadedDates = new Set();
+  const remoteLoadingDates = new Set();
   let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
 
   function dateKey(date = new Date()) {
     const offset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  }
+  function storedSelectedDate() {
+    try {
+      const value = sessionStorage.getItem(SELECTED_DATE_KEY);
+      return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : dateKey();
+    } catch { return dateKey(); }
+  }
+  let selectedDate = storedSelectedDate();
+  function selectDate(value) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return;
+    selectedDate = value;
+    try { sessionStorage.setItem(SELECTED_DATE_KEY, selectedDate); } catch { /* session storage unavailable */ }
   }
   function normalize(value) { return String(value || "").trim().replace(/\s+/g, " "); }
   function timeValue(value) {
@@ -21,6 +36,8 @@
   }
   function classifySchedule(content) {
     const text = normalize(content).toLowerCase();
+    if (/체크\s*인|check[ -]?in/.test(text)) return "checkin";
+    if (/체크\s*아웃|check[ -]?out/.test(text)) return "checkout";
     if (/중식|lunch/.test(text)) return "lunch";
     if (/석식|dinner|디너/.test(text)) return "dinner";
     if (/커피|coffee|다과|break/.test(text)) return "coffee";
@@ -128,15 +145,15 @@
         const type = visibleScheduleType(row, event);
         if (!type) return;
         const key = blockKey(event, row, type, index);
-        blocks.push({ key, kind: "auto", type, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type, date: today, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), title: type === "start" ? (event.eventName || "행사 시작") : TYPES[type], eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
       });
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
         const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index);
-        blocks.push({ key, kind: "auto", type: "start", time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), physicalSpaces: physicalSpaceKeys(event, first.row), title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type: "start", date: today, time: first.time, venue: venueName(first.row, event), spaceId: spaceKey(first.row, event), physicalSpaces: physicalSpaceKeys(event, first.row), title: event.eventName || "행사 시작", eventName: event.eventName || "행사", people: first.row.people || event.guestCount || "", completed: !!state.completions[key] });
       }
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
         const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index)}:${endTime}`;
-        blocks.push({ key, kind: "auto", type: "end", time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type: "end", date: today, time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
       }
     });
     const endedBySpace = new Map(blocks.filter((b) => b.type === "end").map((b) => [b.spaceId, b]));
@@ -151,7 +168,7 @@
       candidates.sort((a, b) => a.day.localeCompare(b.day));
       const next = candidates[0];
       const itemKey = `next:${today}:${key}`;
-      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", time: ended.time, venue: ended.venue, spaceId: key, title: "다음 세팅", eventName: ended.eventName, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, name: next.event.eventName || "행사", people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
+      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: ended.venue, spaceId: key, title: "다음 세팅", eventName: ended.eventName, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, name: next.event.eventName || "행사", people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
     });
     return blocks;
   }
@@ -183,14 +200,14 @@
     if (!response.ok) throw new Error(`operation board storage ${response.status}`);
     const text = await response.text(); return text ? JSON.parse(text) : null;
   }
-  async function hydrateRemote() {
-    if (remoteStatus !== "idle") return;
+  async function hydrateRemote(boardDate = selectedDate) {
+    if (remoteStatus === "fallback" || remoteLoadedDates.has(boardDate) || remoteLoadingDates.has(boardDate)) return;
     remoteStatus = "loading";
-    const today = dateKey();
+    remoteLoadingDates.add(boardDate);
     try {
       const [items, checklist] = await Promise.all([
-        remoteRequest(`operation_board_items?select=*&board_date=eq.${today}`),
-        remoteRequest(`operation_board_checklist_items?select=*&board_date=eq.${today}&order=sort_order.asc`),
+        remoteRequest(`operation_board_items?select=*&board_date=eq.${boardDate}`),
+        remoteRequest(`operation_board_checklist_items?select=*&board_date=eq.${boardDate}&order=sort_order.asc`),
       ]);
       (items || []).forEach((row) => {
         state.completions[row.item_key] = !!row.is_completed;
@@ -198,9 +215,12 @@
         if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
         if (row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, title: row.title, memo: row.memo || "", completed: !!row.is_completed }];
       });
-      state.checklist = (checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }));
-      saveState(); remoteStatus = "ready"; render();
+      state.checklist = [...state.checklist.filter((item) => item.date !== boardDate), ...(checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, date: boardDate, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }))];
+      remoteLoadedDates.add(boardDate);
+      saveState(); remoteStatus = "ready";
+      if (selectedDate === boardDate) render();
     } catch (error) { remoteStatus = "fallback"; console.info("운영보드 DB migration 적용 전: 브라우저 저장소를 사용합니다.", error.message); }
+    finally { remoteLoadingDates.delete(boardDate); }
   }
   function syncItem(item) {
     if (remoteStatus !== "ready") return;
@@ -211,12 +231,11 @@
   function syncChecklist(item, removed = false) {
     if (remoteStatus !== "ready") return;
     if (removed) { remoteRequest(`operation_board_checklist_items?id=eq.${item.id}`, { method: "DELETE" }).catch(console.error); return; }
-    remoteRequest("operation_board_checklist_items?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: item.id, board_date: dateKey(), parent_item_key: item.parentKey, item_name: item.name, quantity: Number(item.quantity) || null, unit: item.unit || null, memo: item.memo || "", is_completed: !!item.completed }) }).catch(console.error);
+    remoteRequest("operation_board_checklist_items?on_conflict=id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ id: item.id, board_date: item.date || selectedDate, parent_item_key: item.parentKey, item_name: item.name, quantity: Number(item.quantity) || null, unit: item.unit || null, memo: item.memo || "", is_completed: !!item.completed }) }).catch(console.error);
   }
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
-  function allBlocks() {
-    const today = dateKey();
-    return [...buildAutoBlocks(currentEvents, today), ...state.manual.filter((x) => x.date === today)].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
+  function allBlocks(boardDate = selectedDate, events = currentEvents) {
+    return [...buildAutoBlocks(events, boardDate), ...state.manual.filter((x) => x.date === boardDate)].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
@@ -240,15 +259,16 @@
     weeklyRoot = weeklyRoot || document.getElementById("weeklySetupWidget");
     if (!root) return;
     currentEvents = events;
-    hydrateRemote();
-    const blocks = allBlocks();
-    const todayEvents = currentEvents.filter((event) => eventDates(event).includes(dateKey()));
+    hydrateRemote(selectedDate);
+    const blocks = allBlocks(selectedDate);
+    const selectedEvents = currentEvents.filter((event) => eventDates(event).includes(selectedDate));
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
     const groups = blocks.reduce((map, block) => { (map[block.time] ||= []).push(block); return map; }, {});
-    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>오늘 운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
-      <div class="operation-briefing-counts"><span>오늘 행사 <strong>${todayEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">오늘 표시할 운영 일정이 없습니다. 직접 작업을 추가할 수 있습니다.</p>'}</div>
+    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
+      <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
+      <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
+      <div class="operation-timeline">${Object.keys(groups).length ? Object.entries(groups).map(([time, items]) => `<section class="operation-time-group"><time>${escapeHtml(time)}</time><div>${items.map(renderBlock).join("")}</div></section>`).join("") : '<p class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br>직접 작업을 추가할 수 있습니다.</p>'}</div>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>`;
     if (weeklyRoot) weeklyRoot.innerHTML = renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents));
     bindEvents();
@@ -283,6 +303,9 @@
     });
     root.querySelector("[data-board-add]").onclick = () => openDialog();
     root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
+    root.querySelector("[data-board-date]").onchange = (event) => { selectDate(event.target.value); render(); };
+    root.querySelectorAll("[data-board-date-step]").forEach((button) => button.onclick = () => { selectDate(addDays(selectedDate, Number(button.dataset.boardDateStep))); render(); });
+    root.querySelector("[data-board-today]").onclick = () => { selectDate(dateKey()); render(); };
     root.querySelectorAll("[data-reminder-key]").forEach((select) => select.onchange = () => {
       let value = select.value;
       if (value === "custom") { const entered = prompt("몇 분 전에 알릴까요?", "45"); value = String(Math.max(1, Number.parseInt(entered, 10) || 45)); }
@@ -298,7 +321,7 @@
     root.querySelectorAll("[data-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-key]").dataset.key; state.completions[key] = input.checked; const block = allBlocks().find((x) => x.key === key); if (block) block.completed = input.checked; const manual = state.manual.find((x) => x.key === key); if (manual) manual.completed = input.checked; saveState(); if (block) syncItem(block); render(); });
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
     root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = state.manual.find((x) => x.key === key); state.manual = state.manual.filter((x) => x.key !== key); delete state.completions[key]; saveState(); if (remoteStatus === "ready" && item) remoteRequest(`operation_board_items?board_date=eq.${item.date}&item_key=eq.${encodeURIComponent(key)}`, { method: "DELETE" }).catch(console.error); render(); });
-    root.querySelectorAll("[data-add-item]").forEach((button) => button.onclick = () => { const name = prompt("세팅 항목명"); if (!normalize(name)) return; const quantity = prompt("수량 (선택)", "") || ""; const unit = prompt("단위 (선택)", "") || ""; const memo = prompt("메모 (선택)", "") || ""; const item = { id: crypto.randomUUID(), parentKey: button.closest("[data-key]").dataset.key, name: normalize(name), quantity, unit, memo, completed: false }; state.checklist.push(item); saveState(); syncChecklist(item); render(); });
+    root.querySelectorAll("[data-add-item]").forEach((button) => button.onclick = () => { const name = prompt("세팅 항목명"); if (!normalize(name)) return; const quantity = prompt("수량 (선택)", "") || ""; const unit = prompt("단위 (선택)", "") || ""; const memo = prompt("메모 (선택)", "") || ""; const item = { id: crypto.randomUUID(), parentKey: button.closest("[data-key]").dataset.key, date: selectedDate, name: normalize(name), quantity, unit, memo, completed: false }; state.checklist.push(item); saveState(); syncChecklist(item); render(); });
     root.querySelectorAll("[data-check-item]").forEach((input) => input.onchange = () => { const item = state.checklist.find((x) => x.id === input.closest("[data-item-id]").dataset.itemId); if (item) { item.completed = input.checked; syncChecklist(item); } saveState(); render(); });
     root.querySelectorAll("[data-delete-item]").forEach((button) => button.onclick = () => { const id = button.closest("[data-item-id]").dataset.itemId; const item = state.checklist.find((x) => x.id === id); state.checklist = state.checklist.filter((x) => x.id !== id); saveState(); if (item) syncChecklist(item, true); render(); });
   }
@@ -306,7 +329,7 @@
   function openDialog(item) {
     const dialog = root.querySelector(".operation-dialog"); const form = dialog.querySelector("form"); form.reset();
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
-    dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: dateKey(), time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
+    dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, colorForSpace, physicalSpaceKeys, spacesOverlap, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, allBlocks, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], ...value }; } };
 })();
