@@ -1738,7 +1738,7 @@
   }
 }
 
-/* Keep the mobile sheet viewport bounded; preserve the workbook's intrinsic size. */
+/* Keep the mobile workbook viewport bounded while the embedded viewer handles sheet panning. */
 @media (max-width: 768px) {
   html.excel-viewer-open,
   html.excel-viewer-open body { overflow: hidden !important; }
@@ -1746,14 +1746,9 @@
   .excel-viewer-dialog { height: 100dvh; max-height: 100dvh; min-width: 0; max-width: 100%; }
   .excel-viewer-dialog > .modal-header { flex: 0 0 auto; }
   .excel-viewer-body { display: flex; overflow: hidden; min-width: 0; }
-  .excel-viewer-frame { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-  .excel-sheet-tabs { flex: 0 0 auto; }
-  .excel-sheet-panels { flex: 1 1 0; display: flex; min-width: 0; min-height: 0; overflow: hidden; }
-  .excel-sheet-preview { display: flex; width: 100%; min-width: 0; min-height: 0; }
-  .excel-sheet-table-wrap {
-    width: 100%; max-width: 100%; min-width: 0; min-height: 0; max-height: 100%;
+  .excel-viewer-frame {
+    display: block; width: 100%; max-width: 100%; min-width: 0; min-height: 0;
     overflow: auto; -webkit-overflow-scrolling: touch;
     touch-action: pan-x pan-y; overscroll-behavior: contain;
   }
-  .excel-sheet-preview table { flex-shrink: 0; width: max-content; max-width: none; }
 }

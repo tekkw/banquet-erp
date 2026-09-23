@@ -96,6 +96,10 @@ const inheritedRows = board.normalizedScheduleRows(multiDayEvents[0]);
 assert.strictEqual(inheritedRows.map((item) => item.day).join(","), "2026-09-29,2026-09-29,2026-09-30,2026-09-30,2026-10-01,2026-10-01");
 assert.strictEqual(board.normalizedScheduleRows({ ...multiDayEvents[0], schedule: [{ date: "2026.09.30", time: "09:00", content: "교육" }] })[0].day, "2026-09-30");
 assert.strictEqual(board.normalizedScheduleRows({ ...multiDayEvents[0], schedule: [{ date: "10월 1일", time: "09:00", content: "교육" }] })[0].day, "2026-10-01");
+for (const value of ["09.30", "9. 30", "09.30 (수)", "9. 30 (수)", "2026.09.30", "2026년 09월 30일"]) {
+  assert.strictEqual(board.normalizedScheduleRows({ ...multiDayEvents[0], schedule: [{ date: value, time: "09:00", content: "교육" }] })[0].day, "2026-09-30", value);
+}
+assert.strictEqual(board.normalizedScheduleRows({ calendarDates: ["2026-09-30"], schedule: [{ date: "10. 01 (목)", time: "09:00", content: "교육" }] })[0].day, "2026-10-01");
 assert(board.buildAutoBlocks(multiDayEvents, "2026-09-29").some((item) => item.type === "schedule" && item.title === "세미나"));
 assert(board.buildAutoBlocks(multiDayEvents, "2026-09-30").some((item) => item.type === "checkout"));
 assert(board.buildAutoBlocks(multiDayEvents, "2026-10-01").some((item) => item.type === "schedule" && item.title === "회의"));
@@ -131,5 +135,17 @@ assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "ambiguou
 assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "empty-schedule").time, "시간 미정");
 assert.strictEqual(board.groupBlocksBySpace(fallbackBlocks).map((group) => group.name).join(","), "부라노,카프리");
 assert(source.includes("세부 일정 확인 필요"));
+
+const productionDateFormatEvent = {
+  id: "production-date-format", eventName: "부라노 행사", calendarDates: ["2026-09-30"], venue: "3F 부라노 I",
+  schedule: [
+    { date: "09. 30 (수)", time: "15:00~", content: "CHECK IN", venue: "1F 프론트" },
+    { date: "09. 30 (수)", time: "13:00~18:00", content: "세미나", venue: "3F 부라노 I" },
+  ],
+};
+const productionFormatBlocks = board.buildAutoBlocks([productionDateFormatEvent], "2026-09-30");
+assert(productionFormatBlocks.some((item) => item.type === "checkin" && item.time === "15:00"));
+assert(productionFormatBlocks.some((item) => item.type === "schedule" && item.time === "13:00" && item.title === "세미나"));
+assert(!productionFormatBlocks.some((item) => item.needsScheduleReview));
 
 console.log("operation-board-v2 tests passed");

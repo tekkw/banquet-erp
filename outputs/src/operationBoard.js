@@ -61,15 +61,20 @@
   function scheduleDate(row, event) {
     const raw = normalize(row.date);
     if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-    const full = raw.match(/(\d{4})\s*[.\/-년]\s*(\d{1,2})\s*[.\/-월]\s*(\d{1,2})/);
+    const dateText = raw.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+    const full = dateText.match(/(\d{4})\s*(?:[.\/-]|년)\s*(\d{1,2})\s*(?:[.\/-]|월)\s*(\d{1,2})(?:\s*일)?/);
     if (full) return `${full[1]}-${String(Number(full[2])).padStart(2, "0")}-${String(Number(full[3])).padStart(2, "0")}`;
-    const partial = raw.match(/(\d{1,2})\s*(?:[.\/-]|월)\s*(\d{1,2})/);
+    const partial = dateText.match(/(\d{1,2})\s*(?:[.\/-]|월)\s*(\d{1,2})(?:\s*일)?/);
     if (partial) {
-      const suffix = `-${String(Number(partial[1])).padStart(2, "0")}-${String(Number(partial[2])).padStart(2, "0")}`;
+      const month = String(Number(partial[1])).padStart(2, "0");
+      const day = String(Number(partial[2])).padStart(2, "0");
+      const suffix = `-${month}-${day}`;
       const matched = eventDates(event).find((value) => value.endsWith(suffix));
       if (matched) return matched;
+      const eventYear = eventDates(event).map((value) => String(value).match(/^(\d{4})-/)?.[1]).find(Boolean);
+      if (eventYear) return `${eventYear}-${month}-${day}`;
     }
-    return eventDates(event).length === 1 ? eventDates(event)[0] : "";
+    return !raw && eventDates(event).length === 1 ? eventDates(event)[0] : "";
   }
   function normalizedScheduleRows(event) {
     let inheritedDate = "";
@@ -105,8 +110,8 @@
   function isFrontSchedule(row, event) { return /프론트/.test(scheduleContext(row, event)); }
   function isFirenzeSchedule(row, event) { return /피렌체/.test(scheduleContext(row, event)); }
   function visibleScheduleType(row, event) {
-    if (isFrontSchedule(row, event)) return "";
     const type = classifySchedule(row.content);
+    if (isFrontSchedule(row, event) && !["checkin", "checkout"].includes(type)) return "";
     return isFirenzeSchedule(row, event) && !["lunch", "dinner"].includes(type) ? "" : type;
   }
   function isBoundarySchedule(row, event) {
