@@ -4,6 +4,16 @@
  * Connections: JavaScript still renders the same dashboard class names.
  */
 
+.dashboard-data-sync-status {
+  margin: 8px 2px 12px;
+  color: #7b8794;
+  font-size: 12px;
+  text-align: right;
+}
+
+.dashboard-data-sync-status[data-state="offline"],
+.dashboard-data-sync-status[data-state="stale"] { color: #9a6a20; }
+
 .similar-events-section {
   margin-top: 16px;
   padding: 18px;

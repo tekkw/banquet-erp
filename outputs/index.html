@@ -84,6 +84,7 @@
             <small>연회 운영 정보를 확인하고 AI와 대화하세요.</small>
           </button>
         </div>
+        <p class="dashboard-data-sync-status" data-events-sync-status hidden></p>
 
         <section class="dashboard-operations-row" aria-label="운영 일정과 월간 캘린더">
           <article class="today-operations-card" aria-label="오늘 운영 일정">
@@ -1393,8 +1394,12 @@
     let similarEventsLoading = false;
     let similarEventsExpanded = false;
     let uploadedOriginalFile = null;
+    const EVENTS_CACHE_KEY = "banquet-erp-events-cache-v1";
+    const EVENTS_CACHE_VERSION = 1;
+    const EVENTS_CACHE_STALE_MS = 24 * 60 * 60 * 1000;
     let savedEvents = [];
     let eventsLoaded = false;
+    let showingEventsCache = false;
     let banquetAssets = [];
     let venueDirectoryCache = null;
     let calendarDate = new Date();
@@ -3474,20 +3479,68 @@
       }
     }
 
+    function setEventsSyncStatus(message, state = "") {
+      const element = document.querySelector("[data-events-sync-status]");
+      if (!element) return;
+      element.textContent = message || "";
+      element.dataset.state = state;
+      element.hidden = !message;
+    }
+
+    function readEventsCache() {
+      try {
+        const cached = JSON.parse(localStorage.getItem(EVENTS_CACHE_KEY) || "null");
+        return cached?.version === EVENTS_CACHE_VERSION && Array.isArray(cached.events) ? cached : null;
+      } catch { return null; }
+    }
+
+    function writeEventsCache(events) {
+      try {
+        localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({ version: EVENTS_CACHE_VERSION, savedAt: Date.now(), events }));
+      } catch (error) { console.warn("event cache write skipped", error); }
+    }
+
+    function eventsSignature(events) {
+      try { return JSON.stringify(events || []); } catch { return ""; }
+    }
+
+    function restoreCachedEvents() {
+      const cached = readEventsCache();
+      if (!cached) return false;
+      savedEvents = cached.events;
+      eventsLoaded = true;
+      showingEventsCache = true;
+      renderCalendar();
+      const stale = Date.now() - Number(cached.savedAt || 0) > EVENTS_CACHE_STALE_MS;
+      setEventsSyncStatus(stale ? "오래된 최근 데이터 표시 중 · 최신 정보 확인 중" : "최근 데이터 표시 중 · 최신 정보 확인 중", stale ? "stale" : "checking");
+      return true;
+    }
+
     async function loadEventsFromSupabase() {
       try {
         const rows = await fetchEventRowsFromSupabase();
-        savedEvents = rows.map(mapDatabaseEvent).map((eventItem) => ({
+        const latestEvents = rows.map(mapDatabaseEvent).map((eventItem) => ({
           ...eventItem,
           originalVenue: eventItem.venue,
           eventSpaces: deriveEventSpaces(eventItem),
         }));
-        await enrichEventsForOperationBoard(savedEvents);
+        await enrichEventsForOperationBoard(latestEvents);
+        const changed = eventsSignature(savedEvents) !== eventsSignature(latestEvents);
+        const hadRenderedEvents = eventsLoaded;
+        savedEvents = latestEvents;
         eventsLoaded = true;
-        renderCalendar();
+        showingEventsCache = false;
+        writeEventsCache(savedEvents);
+        if (changed || !hadRenderedEvents) renderCalendar();
+        setEventsSyncStatus("최신 데이터 동기화 완료", "synced");
       } catch (error) {
         console.error(error);
-        setStatus("Supabase Database에서 행사 데이터를 불러오지 못했습니다.", "warn");
+        if (showingEventsCache) {
+          setEventsSyncStatus("네트워크 연결 실패 · 최근 저장 데이터 표시 중", "offline");
+        } else {
+          setEventsSyncStatus("네트워크 연결 실패", "offline");
+          setStatus("Supabase Database에서 행사 데이터를 불러오지 못했습니다.", "warn");
+        }
       }
     }
 
@@ -5291,14 +5344,18 @@
       }
       appInitialized = true;
       window.BANQUET_ERP_AI_KNOWLEDGE_RULES.load();
-      renderCalendar();
+      if (!restoreCachedEvents()) renderCalendar();
       loadEventsFromSupabase();
-      loadBanquetAssets();
-      loadVenueLayoutImages();
-      createPostEventReviewQuestions().finally(() => {
-        updateAiPendingBadges();
-        loadCurrentInterview();
-      });
+      const loadDeferredData = () => {
+        loadBanquetAssets();
+        loadVenueLayoutImages();
+        createPostEventReviewQuestions().finally(() => {
+          updateAiPendingBadges();
+          loadCurrentInterview();
+        });
+      };
+      if ("requestIdleCallback" in window) window.requestIdleCallback(loadDeferredData, { timeout: 1500 });
+      else setTimeout(loadDeferredData, 0);
     }
 
     /*
