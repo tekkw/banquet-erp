@@ -270,6 +270,13 @@ body {
 .operation-briefing-counts span { padding: 9px 8px; border: 1px solid rgba(150, 180, 205, .1); border-radius: 8px; background: rgba(6, 17, 31, .34); color: var(--dash-muted); font-size: 11px; text-align: center; }
 .operation-briefing-counts strong { display: inline-block; margin-left: 3px; color: var(--dash-text); font-size: 17px; }
 .operation-timeline { position: relative; margin-top: 4px; }
+.operation-space-groups { display: grid; gap: 14px; min-width: 0; }
+.operation-space-group { min-width: 0; border: 1px solid rgba(150, 180, 205, .13); border-radius: 10px; background: rgba(6, 17, 31, .2); overflow: hidden; }
+.operation-space-group-toggle { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 9px 12px; border: 0; border-bottom: 1px solid rgba(150, 180, 205, .13); background: rgba(19, 47, 70, .72); color: var(--dash-text); text-align: left; }
+.operation-space-group-toggle > span { color: var(--dash-blue); font-size: 11px; }
+.operation-space-group-toggle > strong { font-size: 15px; }
+.operation-space-group-toggle > small { margin-left: auto; color: var(--dash-muted); font-size: 11px; }
+.operation-space-group-body { min-width: 0; padding: 10px 10px 2px; }
 .operation-time-group { grid-template-columns: 58px minmax(0, 1fr); gap: 11px; margin-bottom: 9px; }
 .operation-time-group > time { padding-top: 13px; color: #c9d6e0; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .operation-time-group > div { gap: 7px; }
@@ -295,6 +302,16 @@ body {
 .next-setup-detail { border: 1px solid rgba(150, 180, 205, .1); background: rgba(6, 17, 31, .34); color: #bdcbd5; }
 .setup-item { color: #d6e0e7; font-size: 12px; }
 .operation-board-empty { padding: 24px; border: 1px dashed var(--dash-border-strong); border-radius: 10px; color: var(--dash-muted); text-align: center; }
+.operation-detail-dialog { padding: 0; overflow: hidden; background: #102a40; color: var(--dash-text); }
+.operation-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--dash-border); }
+.operation-detail-header h3 { margin: 0; font-size: 18px; }
+.operation-detail-header button { width: 36px; height: 36px; border: 0; border-radius: 7px; background: transparent; color: var(--dash-text); font-size: 24px; }
+.operation-detail-list { display: grid; gap: 0; margin: 0; padding: 8px 16px; }
+.operation-detail-list > div { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--dash-border); }
+.operation-detail-list dt { color: var(--dash-muted); font-size: 12px; }
+.operation-detail-list dd { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 13px; }
+.operation-detail-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; }
+.operation-detail-actions button { min-height: 38px; padding: 7px 11px; border: 1px solid var(--dash-border-strong); border-radius: 7px; background: rgba(6, 17, 31, .42); color: var(--dash-text); }
 
 /* Weekly setup */
 .weekly-setup-section { margin: 0; padding: 0; border: 0; }
@@ -458,7 +475,13 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .operation-date-controls input { width: 100%; min-width: 0; }
   .operation-date-controls button { padding-inline: 9px; }
   .operation-time-group { grid-template-columns: 48px minmax(0, 1fr); gap: 8px; }
+  .operation-space-groups { padding-bottom: calc(var(--mobile-bottom-nav-height, 72px) + env(safe-area-inset-bottom) + 12px); }
+  .operation-space-group-toggle { cursor: pointer; }
+  .operation-space-group-toggle[aria-expanded="false"] + .operation-space-group-body { display: none; }
+  .operation-space-group-body { padding: 8px 8px 1px; }
   .operation-block { flex-wrap: wrap; }
+  .operation-block { max-width: 100%; overflow: hidden; cursor: pointer; }
+  .operation-detail-dialog { width: min(430px, calc(100vw - 20px)); max-height: calc(100dvh - var(--mobile-bottom-nav-height, 72px) - 24px); }
   .operation-block-actions { width: 100%; justify-content: flex-end; }
   .weekly-setup-item { align-items: stretch; flex-direction: column; }
   .setup-plan-date { grid-template-columns: auto 1fr; align-items: center; }

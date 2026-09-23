@@ -60,4 +60,21 @@ assert.strictEqual(board.getSelectedDate(), today);
 assert(source.includes('root.querySelector("[data-board-today]").onclick = () => { selectDate(dateKey()); render(); };'));
 assert.strictEqual(sessionMemory.get("banquet-erp-operation-board-selected-date-v2"), today);
 
+// 공간 그룹은 기존 physicalSpaceKeys 결과를 사용하고 지정 우선순위로 정렬한다.
+const grouped = board.groupBlocksBySpace([
+  { key: "capri", venue: "카프리2", time: "13:00" },
+  { key: "burano-late", venue: "부라노1", time: "16:00" },
+  { key: "convention", venue: "컨벤션센터 A", time: "09:00" },
+  { key: "burano-early", venue: "부라노1", time: "10:00" },
+]);
+assert.strictEqual(grouped.map((group) => group.name).join(","), "컨벤션,부라노,카프리");
+assert.strictEqual(grouped.find((group) => group.name === "부라노").venues[0].blocks.map((block) => block.time).join(","), "10:00,16:00");
+
+// 다음 세팅은 종료 행사의 physical space를 이어받아 같은 공간 그룹에 남는다.
+const groupedNext = board.groupBlocksBySpace(board.buildAutoBlocks([
+  { id: "convention-today", eventName: "컨벤션 행사", calendarDates: [targetDate], venue: "컨벤션 A", schedule: [{ date: targetDate, time: "18:00", content: "행사 종료", venue: "컨벤션 A" }] },
+  { id: "convention-next", eventName: "다음 컨벤션 행사", calendarDates: [otherDate], venue: "컨벤션 A", schedule: [{ date: otherDate, time: "09:00", content: "행사 시작", venue: "컨벤션 A" }] },
+], targetDate));
+assert(groupedNext.find((group) => group.name === "컨벤션").blocks.some((block) => block.type === "next_setup"));
+
 console.log("operation-board-v2 tests passed");
