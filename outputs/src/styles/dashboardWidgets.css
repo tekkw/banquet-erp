@@ -460,3 +460,12 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .dashboard-widget .widget-icon { width: 27px; height: 27px; }
   .dashboard-widget small { display: none; }
 }
+
+.weekly-setup-item { flex-wrap: wrap; }
+.setup-original-action { flex-basis: 100%; }
+.setup-original-action button {
+  min-height: 36px; padding: 6px 10px; border: 1px solid rgba(198, 166, 103, .25);
+  border-radius: 6px; background: transparent; color: var(--dash-gold, #c6a667);
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.setup-original-action button:focus-visible { outline: 2px solid var(--dash-gold, #c6a667); outline-offset: 2px; }

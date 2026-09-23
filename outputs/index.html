@@ -981,7 +981,7 @@
         <button id="closeExcelViewerModal" class="icon-button" type="button" aria-label="닫기">×</button>
       </div>
       <div class="modal-body excel-viewer-body">
-        <iframe id="excelViewerFrame" class="excel-viewer-frame" title="원본 엑셀 미리보기"></iframe>
+        <div id="excelViewerFrame" class="excel-viewer-frame" aria-live="polite"></div>
       </div>
       </div>
     </div>
@@ -1381,6 +1381,7 @@
       insertRowsWithLog,
       uploadOriginalFile,
       buildPublicStorageUrl,
+      fetchStoredFile,
     } = window.BANQUET_ERP_STORAGE.createStorageService({ supabaseConfig });
     window.BANQUET_ERP_AI_KNOWLEDGE_RULES.configure({ supabaseRequest });
 
@@ -4741,16 +4742,144 @@
       setStatus(scope === "current" ? "현재 날짜의 일정을 삭제했습니다." : "행사를 삭제했습니다.");
     }
 
-    function openStoredExcel(storagePath) {
-      const fileUrl = buildPublicStorageUrl(storagePath);
+    async function openStoredExcel(storagePath) {
       excelViewerTitle.textContent = "원본 엑셀 보기";
-      excelViewerFrame.src = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+      excelViewerFrame.innerHTML = '<div class="excel-viewer-status"><span class="excel-viewer-spinner" aria-hidden="true"></span><strong>원본 엑셀을 불러오는 중입니다.</strong></div>';
       excelViewerModal.classList.add("visible");
+      document.documentElement.classList.add("excel-viewer-open");
+      try {
+        const buffer = await fetchStoredFile(storagePath);
+        if (!window.XLSX) throw new Error("엑셀 렌더링 라이브러리를 불러오지 못했습니다.");
+        const workbook = window.XLSX.read(buffer, {
+          type: "array",
+          cellDates: true,
+          cellNF: true,
+          cellStyles: true,
+          cellText: true,
+          sheetStubs: true,
+        });
+        renderStoredWorkbook(workbook);
+      } catch (error) {
+        console.error("stored Excel viewer failed:", { storagePath, error });
+        excelViewerFrame.innerHTML = `<div class="excel-viewer-status error"><strong>원본 엑셀을 표시하지 못했습니다.</strong><span>${escapeHtml(error.message || "알 수 없는 오류가 발생했습니다.")}</span></div>`;
+      }
     }
 
+    function renderStoredWorkbook(workbook) {
+      excelViewerFrame.replaceChildren();
+      const sheetNames = workbook?.SheetNames || [];
+      if (!sheetNames.length) {
+        excelViewerFrame.innerHTML = '<div class="excel-viewer-status error"><strong>표시할 시트가 없습니다.</strong><span>파일에 읽을 수 있는 워크시트가 없습니다.</span></div>';
+        return;
+      }
+
+      const tabs = document.createElement("div");
+      tabs.className = "excel-sheet-tabs";
+      tabs.setAttribute("role", "tablist");
+      const panels = document.createElement("div");
+      panels.className = "excel-sheet-panels";
+
+      sheetNames.forEach((sheetName, index) => {
+        const tab = document.createElement("button");
+        tab.type = "button";
+        tab.className = "excel-sheet-tab";
+        tab.textContent = sheetName;
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(index === 0));
+
+        const panel = createStoredSheetPanel(workbook.Sheets[sheetName], sheetName);
+        panel.hidden = index !== 0;
+        tab.addEventListener("click", () => {
+          tabs.querySelectorAll(".excel-sheet-tab").forEach((item) => {
+            item.classList.toggle("active", item === tab);
+            item.setAttribute("aria-selected", String(item === tab));
+          });
+          panels.querySelectorAll(".excel-sheet-preview").forEach((item) => { item.hidden = item !== panel; });
+        });
+        if (index === 0) tab.classList.add("active");
+        tabs.append(tab);
+        panels.append(panel);
+      });
+      excelViewerFrame.append(tabs, panels);
+    }
+
+    function createStoredSheetPanel(sheet, sheetName) {
+      const section = document.createElement("section");
+      section.className = "excel-sheet-preview";
+      section.setAttribute("role", "tabpanel");
+      section.setAttribute("aria-label", sheetName);
+      const wrap = document.createElement("div");
+      wrap.className = "excel-sheet-table-wrap";
+      const table = document.createElement("table");
+      const range = sheet?.["!ref"] ? window.XLSX.utils.decode_range(sheet["!ref"]) : { s: { r: 0, c: 0 }, e: { r: 0, c: 0 } };
+      const merges = sheet?.["!merges"] || [];
+      const covered = new Set();
+      const mergeStarts = new Map();
+      merges.forEach((merge) => {
+        const startKey = `${merge.s.r}:${merge.s.c}`;
+        mergeStarts.set(startKey, { rowspan: merge.e.r - merge.s.r + 1, colspan: merge.e.c - merge.s.c + 1 });
+        for (let row = merge.s.r; row <= merge.e.r; row += 1) {
+          for (let column = merge.s.c; column <= merge.e.c; column += 1) {
+            if (row !== merge.s.r || column !== merge.s.c) covered.add(`${row}:${column}`);
+          }
+        }
+      });
+
+      const colgroup = document.createElement("colgroup");
+      for (let column = range.s.c; column <= range.e.c; column += 1) {
+        const col = document.createElement("col");
+        const columnInfo = sheet?.["!cols"]?.[column];
+        const width = columnInfo?.wpx || (columnInfo?.wch ? Math.round(columnInfo.wch * 7 + 12) : 96);
+        col.style.width = `${Math.max(28, width)}px`;
+        colgroup.append(col);
+      }
+      table.append(colgroup);
+
+      for (let row = range.s.r; row <= range.e.r; row += 1) {
+        const tr = document.createElement("tr");
+        const rowInfo = sheet?.["!rows"]?.[row];
+        if (rowInfo?.hpx || rowInfo?.hpt) tr.style.height = `${rowInfo.hpx || Math.round(rowInfo.hpt * 96 / 72)}px`;
+        for (let column = range.s.c; column <= range.e.c; column += 1) {
+          const key = `${row}:${column}`;
+          if (covered.has(key)) continue;
+          const td = document.createElement("td");
+          const merge = mergeStarts.get(key);
+          if (merge?.rowspan > 1) td.rowSpan = merge.rowspan;
+          if (merge?.colspan > 1) td.colSpan = merge.colspan;
+          const cell = sheet?.[window.XLSX.utils.encode_cell({ r: row, c: column })];
+          td.textContent = cell?.w ?? (cell ? window.XLSX.utils.format_cell(cell) : "");
+          applyStoredCellStyle(td, cell);
+          tr.append(td);
+        }
+        table.append(tr);
+      }
+      wrap.append(table);
+      section.append(wrap);
+      return section;
+    }
+
+    function applyStoredCellStyle(element, cell) {
+      const style = cell?.s;
+      if (!style || typeof style !== "object") return;
+      if (style.font?.bold) element.style.fontWeight = "700";
+      if (style.font?.italic) element.style.fontStyle = "italic";
+      const fontColor = excelColor(style.font?.color);
+      const fillColor = excelColor(style.fill?.fgColor);
+      if (fontColor) element.style.color = fontColor;
+      if (fillColor) element.style.backgroundColor = fillColor;
+      if (style.alignment?.horizontal) element.style.textAlign = style.alignment.horizontal;
+      if (style.alignment?.vertical) element.style.verticalAlign = style.alignment.vertical;
+      if (style.alignment?.wrapText) element.style.whiteSpace = "pre-wrap";
+    }
+
+    function excelColor(color) {
+      const rgb = String(color?.rgb || "").replace(/^FF/i, "");
+      return /^[0-9a-f]{6}$/i.test(rgb) ? `#${rgb}` : "";
+    }
     function closeExcelViewerModal() {
       excelViewerModal.classList.remove("visible");
-      excelViewerFrame.removeAttribute("src");
+      document.documentElement.classList.remove("excel-viewer-open");
+      excelViewerFrame.replaceChildren();
     }
 
     function downloadStoredExcel(storagePath, filename = "") {

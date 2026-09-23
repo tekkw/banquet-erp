@@ -213,8 +213,45 @@
      * - 파일 열기 기능이 늘어나도 URL 인코딩과 bucket 경로 실수를 줄일 수 있다.
      */
     function buildPublicStorageUrl(storagePath) {
-      const encodedPath = encodeURIComponent(storagePath);
+      const normalizedPath = normalizeStoragePath(storagePath);
+      const encodedPath = normalizedPath.split("/").map(encodeURIComponent).join("/");
       return `${supabaseConfig.url}/storage/v1/object/public/${supabaseConfig.bucket}/${encodedPath}`;
+    }
+
+    function normalizeStoragePath(storagePath) {
+      const raw = String(storagePath || "").trim();
+      if (!raw) return "";
+      try {
+        if (/^https?:\/\//i.test(raw)) {
+          const pathname = decodeURIComponent(new URL(raw).pathname);
+          const publicMarker = `/storage/v1/object/public/${supabaseConfig.bucket}/`;
+          const privateMarker = `/storage/v1/object/${supabaseConfig.bucket}/`;
+          if (pathname.includes(publicMarker)) return pathname.split(publicMarker)[1];
+          if (pathname.includes(privateMarker)) return pathname.split(privateMarker)[1];
+        }
+      } catch (error) {
+        console.warn("storage path URL normalization failed:", error);
+      }
+      return raw.replace(/^\/+/, "").replace(new RegExp(`^${supabaseConfig.bucket}/`), "");
+    }
+
+    async function fetchStoredFile(storagePath) {
+      const normalizedPath = normalizeStoragePath(storagePath);
+      if (!normalizedPath) throw new Error("저장된 원본 파일 경로가 없습니다.");
+      const encodedPath = normalizedPath.split("/").map(encodeURIComponent).join("/");
+      const publicResponse = await fetch(buildPublicStorageUrl(normalizedPath), { cache: "no-store" });
+      if (publicResponse.ok) return publicResponse.arrayBuffer();
+      const response = await fetch(`${supabaseConfig.url}/storage/v1/object/${supabaseConfig.bucket}/${encodedPath}`, {
+        cache: "no-store",
+        headers: { apikey: supabaseConfig.anonKey, Authorization: `Bearer ${supabaseConfig.anonKey}` },
+      });
+      if (!response.ok) {
+        const error = await supabaseErrorFromResponse(response, `원본 파일을 불러오지 못했습니다. (public ${publicResponse.status}, authenticated ${response.status})`);
+        error.publicStatus = publicResponse.status;
+        error.authenticatedStatus = response.status;
+        throw error;
+      }
+      return response.arrayBuffer();
     }
 
     return {
@@ -226,6 +263,7 @@
       insertRowsWithLog,
       uploadOriginalFile,
       buildPublicStorageUrl,
+      fetchStoredFile,
     };
   }
 
