@@ -144,7 +144,7 @@ const productionDateFormatEvent = {
   ],
 };
 const productionFormatBlocks = board.buildAutoBlocks([productionDateFormatEvent], "2026-09-30");
-assert(productionFormatBlocks.some((item) => item.type === "checkin" && item.time === "15:00"));
+assert(!productionFormatBlocks.some((item) => item.type === "checkin" || /CHECK IN|프론트/.test(`${item.title} ${item.venue}`)));
 assert(productionFormatBlocks.some((item) => item.type === "schedule" && item.time === "13:00" && item.title === "세미나"));
 assert(!productionFormatBlocks.some((item) => item.needsScheduleReview));
 
@@ -161,7 +161,42 @@ const shinanCouncilEvent = {
 };
 const shinanBlocks = board.buildAutoBlocks([shinanCouncilEvent], "2026-09-29");
 assert(shinanBlocks.some((item) => item.type === "schedule" && item.time === "13:00" && item.title === "세미나"));
-assert(shinanBlocks.some((item) => item.type === "checkin" && item.time === "15:00"));
+assert(!shinanBlocks.some((item) => item.type === "checkin" || /CHECK IN|프론트/.test(`${item.title} ${item.venue}`)));
 assert(!shinanBlocks.some((item) => item.type === "checkout" || item.needsScheduleReview));
+
+// 호텔 일정은 일반 일정 및 fallback으로도 재생성하지 않는다.
+for (const content of ["CHECK IN", "CHECK OUT", "체크인", "체크아웃"]) {
+  for (const venue of ["1F 프론트", "부라노1"]) {
+    const event = datedEvent("hotel-only", targetDate, venue, content);
+    assert.strictEqual(board.buildAutoBlocks([event], targetDate).length, 0, `${venue} ${content}`);
+  }
+}
+assert.strictEqual(board.buildAutoBlocks([datedEvent("front-only", targetDate, "1F 프론트", "안내")], targetDate).length, 0);
+
+const seminar = datedEvent("seminar", targetDate, "부라노1", "세미나", "10:00~17:00");
+const seminarWithHotel = {
+  ...seminar,
+  schedule: [
+    { date: targetDate, time: "06:00", content: "CHECK IN", venue: "부라노1" },
+    ...seminar.schedule,
+    { date: targetDate, time: "23:00", content: "CHECK OUT", venue: "부라노1" },
+  ],
+};
+const original = JSON.stringify(seminarWithHotel);
+const seminarBlocks = board.buildAutoBlocks([seminarWithHotel], targetDate);
+assert.strictEqual(seminarBlocks.filter((item) => item.type === "schedule").map((item) => item.title).join(","), "세미나");
+assert.strictEqual(seminarBlocks.find((item) => item.type === "start").time, "10:00");
+assert.strictEqual(seminarBlocks.find((item) => item.type === "end").time, "17:00");
+assert(seminarBlocks.some((item) => item.type === "next_setup"));
+assert.strictEqual(JSON.stringify(seminarWithHotel), original, "원본 일정은 변경하지 않는다");
+assert.strictEqual(board.buildAutoBlocks([
+  seminar, datedEvent("future-hotel", otherDate, "부라노1", "CHECK IN"),
+], targetDate).find((item) => item.type === "next_setup").next, null);
+const hotelDayOnly = { ...seminarWithHotel, calendarDates: [targetDate, otherDate], schedule: [
+  ...seminar.schedule, { date: otherDate, time: "11:00", content: "CHECK OUT", venue: "부라노1" },
+] };
+assert.strictEqual(board.buildAutoBlocks([hotelDayOnly], otherDate).length, 0);
+const meals = ["중식", "석식", "커피브레이크"].map((content, index) => datedEvent(`meal-${index}`, targetDate, "부라노1", content));
+assert.strictEqual(board.buildAutoBlocks(meals, targetDate).map((item) => item.type).join(","), "lunch,dinner,coffee");
 
 console.log("operation-board-v2 tests passed");

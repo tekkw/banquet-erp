@@ -109,14 +109,16 @@
   }
   function isFrontSchedule(row, event) { return /프론트/.test(scheduleContext(row, event)); }
   function isFirenzeSchedule(row, event) { return /피렌체/.test(scheduleContext(row, event)); }
+  function isHiddenHotelSchedule(row, event) {
+    return ["checkin", "checkout"].includes(classifySchedule(row.content)) || isFrontSchedule(row, event);
+  }
   function visibleScheduleType(row, event) {
     const type = classifySchedule(row.content);
-    if (type === "checkout") return "";
-    if (isFrontSchedule(row, event) && !["checkin", "checkout"].includes(type)) return "";
+    if (isHiddenHotelSchedule(row, event)) return "";
     return isFirenzeSchedule(row, event) && !["lunch", "dinner"].includes(type) ? "" : type;
   }
   function isBoundarySchedule(row, event) {
-    if (isFrontSchedule(row, event) || isFirenzeSchedule(row, event)) return false;
+    if (isHiddenHotelSchedule(row, event) || isFirenzeSchedule(row, event)) return false;
     return !["lunch", "dinner", "coffee", "checkout"].includes(classifySchedule(row.content));
   }
   function scheduleEndTime(row) { return normalize(row.time).match(/~\s*(\d{1,2}:\d{2})/)?.[1] || timeValue(row.time); }
@@ -205,7 +207,7 @@
       const scheduleRows = normalizedScheduleRows(event);
       const boundaryRows = scheduleRows.filter((item) => item.day === today && item.time && isBoundarySchedule(item.row, event)).sort((a, b) => a.time.localeCompare(b.time));
       scheduleRows.forEach(({ row, index, day }) => {
-        if (day !== today) return;
+        if (day !== today || isHiddenHotelSchedule(row, event)) return;
         const classifiedType = visibleScheduleType(row, event);
         if (!classifiedType && (isFrontSchedule(row, event) || isFirenzeSchedule(row, event))) return;
         const type = classifiedType || (normalize(row.content) && timeValue(row.time) ? "schedule" : "");
@@ -224,8 +226,11 @@
       }
       const isSelectedEvent = eventDates(event).includes(today);
       const hasEventBlock = blocks.some((block) => block.eventOrderId === event.id && block.date === today);
-      if (isSelectedEvent && !hasEventBlock) {
-        const firstSchedule = (event.schedule || [])[0] || {};
+      const fallbackRows = scheduleRows.filter((item) => !item.day || item.day === today);
+      const fallbackCandidates = fallbackRows.length ? fallbackRows : scheduleRows;
+      const firstVisibleSchedule = fallbackCandidates.find((item) => !isHiddenHotelSchedule(item.row, event));
+      if (isSelectedEvent && !hasEventBlock && (firstVisibleSchedule || (!scheduleRows.length && !isFrontSchedule({}, event)))) {
+        const firstSchedule = firstVisibleSchedule?.row || {};
         const key = `auto:${event.id}:${today}:fallback`;
         const fallbackVenue = normalize(event.venue || firstSchedule.venue) || "장소 미입력";
         blocks.push({
@@ -241,6 +246,7 @@
     endedBySpace.forEach((ended, key) => {
       const candidates = [];
       events.forEach((event) => normalizedScheduleRows(event).forEach(({ row, day }) => {
+        if (isHiddenHotelSchedule(row, event)) return;
         const existingOverlap = physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row));
         const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
         if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
