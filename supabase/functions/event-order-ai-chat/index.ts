@@ -1,3 +1,11 @@
+import "../../../outputs/src/aiKnowledgeRules.js";
+
+const knowledgeRules = (globalThis as unknown as { BANQUET_ERP_AI_KNOWLEDGE_RULES: {
+  calculationView: (event: Record<string, unknown>, category: string, rows: unknown[]) => Record<string, unknown>;
+  calculationNotices: (event: Record<string, unknown>, rows: unknown[]) => string[];
+  matchesVenue: (value: string, venue: string) => boolean;
+} }).BANQUET_ERP_AI_KNOWLEDGE_RULES;
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -24,17 +32,16 @@ Deno.serve(async (request) => {
     const payload = await request.json();
     const { question, mode, analysisData, attachments } = payload;
     if (mode === "event_order_analysis") {
-      const [banquetAssets, recommendItems] = await Promise.all([
+      const [banquetAssets, recommendItems, approvedKnowledge] = await Promise.all([
         loadBanquetAssets(),
         loadRecommendItems(),
+        supabaseSelect("ai_knowledge", "select=*&status=eq.approved&order=updated_at.desc&limit=500"),
       ]);
-      const operationalAnalysis = calculateOperationalAnalysis(analysisData);
-      const representativePeople = Number(operationalAnalysis.representativePeople || 0);
-      const calculatedStaff = calculateStaffRecommendation(analysisData, representativePeople, operationalAnalysis);
-      const recommendedItems = calculateRecommendedItems(analysisData, recommendItems, representativePeople);
+      const calculation = calculateKnowledgeAwareAnalysis(analysisData || {}, recommendItems, approvedKnowledge);
+      const { operationalAnalysis, calculatedStaff, recommendedItems } = calculation;
       const result = await askAiForEventOrderAnalysis({
         question: String(question ?? "Analyze this event order for staff, beverages, required items, and warnings."),
-        analysisData,
+        analysisData: calculation.analysisData,
         banquetAssets,
         calculatedStaff,
         recommendedItems,
@@ -1949,6 +1956,22 @@ async function supabaseInsert(table: string, rows: Array<Record<string, unknown>
   return body ? JSON.parse(body) : [];
 }
 
+function calculateKnowledgeAwareAnalysis(event: Record<string, unknown>, masterItems: unknown[], approvedKnowledge: unknown[]) {
+  const view = (category: string) => knowledgeRules.calculationView(event, category, approvedKnowledge);
+  const warningsData = view("warnings");
+  const operationalAnalysis = calculateOperationalAnalysis(warningsData);
+  const peopleFor = (data: Record<string, unknown>) => calculateOperationalAnalysis(data).representativePeople || toNumber(data.guestCount);
+  operationalAnalysis.representativePeople = peopleFor(view("guest_count"));
+  const beverageData = view("beverage");
+  operationalAnalysis.beverages = calculateBeveragesForEvent(beverageData, peopleFor(beverageData));
+  operationalAnalysis.warnings.push(...knowledgeRules.calculationNotices(event, approvedKnowledge));
+  const staffingData = view("staffing");
+  const calculatedStaff = calculateStaffRecommendation(staffingData, peopleFor(staffingData), operationalAnalysis);
+  const equipmentData = view("equipment");
+  const recommendedItems = calculateRecommendedItems(equipmentData, masterItems, peopleFor(equipmentData));
+  return { analysisData: warningsData, operationalAnalysis, calculatedStaff, recommendedItems };
+}
+
 function calculateOperationalAnalysis(analysisData: unknown) {
   const eventData = (analysisData || {}) as Record<string, unknown>;
   const schedule = getScheduleRows(eventData);
@@ -2569,8 +2592,7 @@ function extractRoundTableCount(text: string) {
 }
 
 function isFlorenceVenue(value: string) {
-  const normalized = String(value ?? "").toLowerCase().replace(/\s+/g, "");
-  return normalized.includes("\uD53C\uB80C\uCCB4") || normalized.includes("florence");
+  return knowledgeRules.matchesVenue(value, "피렌체");
 }
 
 function calculateRowStaff(content: string, people: number) {
@@ -2655,6 +2677,7 @@ function normalizeWarningText(value: unknown) {
   const warning = String(value || "").trim();
   const lowered = warning.toLowerCase();
   if (!warning) return "";
+  if (/일정 \d+건은 연회 준비 계산에서 제외되었습니다\.$/.test(warning)) return warning;
   if (lowered.includes("class type") && (lowered.includes("round") || lowered.includes("flip"))) {
     return "Class Type \u2192 Round Type \uC804\uD658\uC73C\uB85C \uB4A4\uC9D1\uAE30 \uAC00\uB2A5\uC131\uC774 \uB192\uC2B5\uB2C8\uB2E4.";
   }

@@ -108,7 +108,10 @@
     return normalize([rowLocation || event.venue, row.content].filter(Boolean).join(" ")).toLowerCase();
   }
   function isFrontSchedule(row, event) { return /프론트/.test(scheduleContext(row, event)); }
-  function isFirenzeSchedule(row, event) { return /피렌체/.test(scheduleContext(row, event)); }
+  function isFirenzeSchedule(row, event) {
+    return window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.matchesVenue(scheduleContext(row, event), "피렌체")
+      ?? /피렌체/.test(scheduleContext(row, event));
+  }
   function isHiddenHotelSchedule(row, event) {
     return ["checkin", "checkout"].includes(classifySchedule(row.content)) || isFrontSchedule(row, event);
   }

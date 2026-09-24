@@ -7,13 +7,76 @@
       .replace(/^\s*\d+\s*f\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
   }
   function metadataOf(row) {
-    if (row?.metadata && typeof row.metadata === "object") return row.metadata;
-    try { return JSON.parse(row?.original_answer || "{}"); } catch { return {}; }
+    let stored = {};
+    try { stored = JSON.parse(row?.original_answer || "{}"); } catch { /* Legacy natural-language answer. */ }
+    return { ...stored, ...(row?.metadata && typeof row.metadata === "object" ? row.metadata : {}) };
+  }
+  const calculationCategories = ["staffing", "equipment", "beverage", "layout", "guest_count", "warnings"];
+  function buildExecutionRuleCandidate(value) {
+    const source = text(value);
+    if (!/피렌체|florence|firenze/i.test(source) || !/식사|뷔페|조식|중식|석식|디너|meal|buffet/i.test(source)
+      || !/연회/.test(source) || !/준비\s*대상이\s*아니|계산에서\s*제외|산정에서\s*제외|준비에서\s*제외|준비하지\s*않/.test(source)
+      || /제외하지|제외하면\s*안|대상이\s*아닌\s*것은\s*아니/.test(source)) return null;
+    return { ruleType: "exclude_schedule_from_banquet_calculation", venue: "피렌체", categories: [...calculationCategories], approved: true };
+  }
+  function matchesVenue(value, venue) {
+    const name = comparable(value); const target = comparable(venue);
+    if (!target) return false;
+    return /^(피렌체|florence|firenze)$/.test(target) ? /피렌체|florence|firenze/.test(name) : name.includes(target);
+  }
+  function partitionSchedule(event, category, knowledgeRows = state.rules) {
+    const rules = normalizedRows(knowledgeRows).map((row) => row.executionRule).filter((rule) =>
+      rule.ruleType === "exclude_schedule_from_banquet_calculation" && Array.isArray(rule.categories)
+      && (rule.categories.includes(category) || (category === "warnings" && rule.categories.includes("staffing"))));
+    const included = []; const excluded = [];
+    for (const row of event.schedule || []) {
+      const venue = row.venue || row.location || row.place || event.venue;
+      (rules.some((rule) => matchesVenue(venue, rule.venue)) ? excluded : included).push(row);
+    }
+    return { included, excluded };
+  }
+  function calculationView(event, category, knowledgeRows = state.rules) {
+    const { included, excluded } = partitionSchedule(event, category, knowledgeRows);
+    if (!excluded.length) return { ...event, schedule: [...(event.schedule || [])] };
+    const excludedVenues = excluded.map((row) => row.venue || row.location || row.place || event.venue).filter(Boolean);
+    const includedVenues = included.map((row) => row.venue || row.location || row.place || event.venue).filter(Boolean);
+    const hasIncludedVenue = (value) => includedVenues.some((venue) => matchesVenue(value, venue));
+    const retainedMeal = included.some((row) => /식|뷔페|디너|lunch|dinner|buffet|breakfast/i.test(text(row.content)));
+    const cleanLines = (value) => text(value).split(/\r?\n/).filter((line) =>
+      !excludedVenues.some((venue) => matchesVenue(line, venue))
+      && (hasIncludedVenue(line) || !excluded.some((row) => text(row.content) && line.includes(text(row.content))))).join("\n");
+    const people = included.map((row) => Number(countOf(row.people))).filter((count) => count > 0);
+    const view = { ...event, schedule: included, guestCount: people.length ? Math.max(...people) : 0,
+      venue: [...new Set(included.map((row) => row.venue || row.location || row.place || event.venue).filter(Boolean))].join(" · "),
+      mealTypes: retainedMeal ? event.mealTypes : [],
+      items: (event.items || []).filter((item) => {
+        const venue = item.venue || item.location || item.place;
+        return venue ? !excludedVenues.some((excludedVenue) => matchesVenue(venue, excludedVenue))
+          : !!cleanLines(JSON.stringify(item)) && (retainedMeal || !/식사|뷔페|디너|조식|중식|석식|양식|맥주|소주|와인|주류|buffet|dinner|lunch|breakfast|western|beer|wine|alcohol/i.test(JSON.stringify(item)));
+      }),
+    };
+    for (const key of ["beveragesText", "fnbText", "layoutEqpText", "othersText"]) view[key] = included.length ? cleanLines(event[key]) : "";
+    if (!retainedMeal) {
+      for (const key of ["beveragesText", "fnbText"]) view[key] = view[key].split(/\r?\n/).filter(hasIncludedVenue).join("\n");
+    }
+    if (!included.length) view.items = [];
+    return view;
+  }
+  function calculationNotices(event, knowledgeRows = state.rules) {
+    const excluded = new Set(calculationCategories.flatMap((category) => partitionSchedule(event, category, knowledgeRows).excluded));
+    const counts = new Map();
+    for (const row of excluded) {
+      const venue = row.venue || row.location || row.place || event.venue || "제외 대상";
+      counts.set(venue, (counts.get(venue) || 0) + 1);
+    }
+    return [...counts].map(([venue, count]) => `${venue} 일정 ${count}건은 연회 준비 계산에서 제외되었습니다.`);
   }
   function inferExecutionRule(row) {
     const metadata = metadataOf(row);
     const explicit = metadata.executionRule || metadata.rule;
     if (explicit?.ruleType) return { ...explicit, approved: explicit.approved !== false };
+    const exclusion = buildExecutionRuleCandidate(row?.natural_language || row?.content || row?.explanation);
+    if (exclusion) return exclusion;
     const predicate = comparable(`${row?.subject || ""} ${row?.predicate || ""} ${row?.natural_language || ""}`);
     if (row?.category === "operation_rule" && /guestcount|attendance|representative|대표인원/.test(predicate)) {
       return { ruleType: "guest_count_priority", prefer: ["main_event", "seminar"], deprioritize: ["breakfast", "lunch", "dinner", "coffee_break"], approved: true };
@@ -38,7 +101,7 @@
     if (state.loaded && !force) return state.rules;
     if (state.loading && !force) return state.loading;
     if (!state.request) return state.rules;
-    state.loading = state.request("ai_knowledge?select=id,category,subject,predicate,object,value,natural_language,object_value,original_answer,status&status=eq.approved&order=updated_at.desc&limit=500")
+    state.loading = state.request("ai_knowledge?select=*&status=eq.approved&order=updated_at.desc&limit=500")
       .then((rows) => { state.rules = normalizedRows(rows); state.loaded = true; return state.rules; })
       .catch((error) => { console.warn("approved ai_knowledge load failed:", error); return state.rules; })
       .finally(() => { state.loading = null; });
@@ -87,5 +150,5 @@
   }
   function setRulesForTest(rows) { state.rules = normalizedRows(rows); state.loaded = true; }
 
-  global.BANQUET_ERP_AI_KNOWLEDGE_RULES = { configure, load, applyGuestCount, spacesOverlapOverride, adjustLayoutScore, _setRulesForTest: setRulesForTest };
+  global.BANQUET_ERP_AI_KNOWLEDGE_RULES = { configure, load, applyGuestCount, spacesOverlapOverride, adjustLayoutScore, matchesVenue, buildExecutionRuleCandidate, partitionSchedule, calculationView, calculationNotices, _setRulesForTest: setRulesForTest };
 })(typeof window !== "undefined" ? window : globalThis);

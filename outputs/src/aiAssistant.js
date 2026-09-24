@@ -1351,6 +1351,7 @@
       aiLayoutRecommendationError = "";
       callbacks.onAnalysisStateChange?.();
       try {
+        await window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.load({ force: true });
         const layoutRecommendationPromise = loadLayoutRecommendations(eventItem);
         const response = await fetch(supabaseConfig.functionUrl, {
           method: "POST",
@@ -1397,6 +1398,9 @@
     }
 
     function rankLayoutRecommendations(rows, eventItem) {
+      const hadSchedules = !!eventItem.schedule?.length;
+      eventItem = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.calculationView(eventItem, "layout") || eventItem;
+      if (hadSchedules && !eventItem.schedule?.length && Number(eventItem.guestCount) === 0) return [];
       const people = getRepresentativePeople(eventItem);
       const sourceText = normalizeSearchText([
         eventItem.eventName,
@@ -1410,6 +1414,10 @@
       const desiredLayoutType = inferLayoutType(sourceText);
 
       return (rows || [])
+        .filter((row) => {
+          const venue = row.venue_spaces?.space_name || row.venues?.venue_name;
+          return !venue || !window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.partitionSchedule({ schedule: [{ venue }] }, "layout").excluded.length;
+        })
         .map((row) => {
           const file = Array.isArray(row.files) ? row.files[0] : row.files;
           const venueName = row.venues?.venue_name || "";
@@ -2141,6 +2149,7 @@
           body: JSON.stringify({ status: "confirmed", updated_at: now }),
         });
         directTeachSuccess = "승인한 지식이 ai_knowledge에 저장되었습니다.";
+        await window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.load({ force: true });
         directTeachAnswer = "";
         directTeachInterview = null;
         directTeachAnalysis = null;
@@ -2510,6 +2519,9 @@
       const value = cleanValue(item.value || item.object_value || item.object);
       const object = cleanValue(item.object || item.object_value || item.value);
       const naturalLanguage = cleanValue(item.natural_language || item.explanation || value);
+      const rules = window.BANQUET_ERP_AI_KNOWLEDGE_RULES;
+      const executionRule = rules?.buildExecutionRuleCandidate(naturalLanguage)
+        || (rules?.matchesVenue(item.subject, "피렌체") ? rules.buildExecutionRuleCandidate(context.originalAnswer) : null);
       return {
         category: cleanValue(item.category) || context.category || "operation",
         subject: cleanValue(item.subject),
@@ -2525,7 +2537,9 @@
         entity_id: cleanValue(item.entity_id || context.entityId) || null,
         confidence: item.confidence ?? 0.8,
         status: "approved",
-        original_answer: context.originalAnswer || "",
+        original_answer: executionRule
+          ? JSON.stringify({ originalAnswer: context.originalAnswer || "", executionRule })
+          : context.originalAnswer || "",
         confirmed_at: context.approvedAt,
         updated_at: context.approvedAt,
       };
