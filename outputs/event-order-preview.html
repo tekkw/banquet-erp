@@ -3113,6 +3113,7 @@
       applyFilenameYearToEventDates(eventToSave);
       logEventDateDetection(eventToSave);
       console.log("event_calendar_dates to save", eventToSave.calendarDates || []);
+      console.log("savePendingEvent schedule length before save", (eventToSave.schedule || []).length);
       let savedEvent;
       try {
         setStatus("행사 데이터를 Supabase Database에 저장하는 중입니다...");
@@ -3132,9 +3133,33 @@
         return;
       }
 
+      let verifiedEvent;
+      try {
+        const verifiedRows = await fetchEventRowsFromSupabase([savedEvent.id]);
+        console.log("event_schedules length immediately after save", verifiedRows[0]?.event_schedules?.length || 0);
+        verifiedEvent = verifiedRows[0] ? mapDatabaseEvent(verifiedRows[0]) : null;
+      } catch (error) {
+        console.error("event schedule verification failed:", error);
+      }
+
+      const expectedScheduleCount = (eventToSave.schedule || []).length;
+      const verifiedScheduleCount = (verifiedEvent?.schedule || []).length;
+      if (!verifiedEvent || expectedScheduleCount !== verifiedScheduleCount) {
+        setStatus("행사 기본정보는 저장됐지만 Schedule 저장 검증에 실패했습니다.", "error");
+        return;
+      }
+
+      verifiedEvent = {
+        ...verifiedEvent,
+        originalVenue: verifiedEvent.venue,
+        eventSpaces: deriveEventSpaces(verifiedEvent),
+      };
+      await enrichEventsForOperationBoard([verifiedEvent]);
+
       persistExtractionCorrections(savedEvent.id, eventToSave);
 
-      savedEvents = [...savedEvents, savedEvent];
+      savedEvents = [...savedEvents.filter((eventItem) => eventItem.id !== verifiedEvent.id), verifiedEvent];
+      writeEventsCache(savedEvents);
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
       renderCalendar();
@@ -3394,11 +3419,15 @@
         venue: item.venue || "",
         people: toNullableInteger(item.people),
       }));
+      console.log("event_schedules insert payload length", schedules.length);
       if (schedules.length) {
         requests.push(loggedSupabaseRequest("event_schedules insert", "event_schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(schedules),
+        }).then((response) => {
+          console.log("event_schedules insert response", response);
+          return response;
         }));
       }
 
@@ -3496,6 +3525,7 @@
 
     function writeEventsCache(events) {
       try {
+        console.log("event cache schedule lengths before write", (events || []).map((eventItem) => ({ id: eventItem.id, length: (eventItem.schedule || []).length })));
         localStorage.setItem(EVENTS_CACHE_KEY, JSON.stringify({ version: EVENTS_CACHE_VERSION, savedAt: Date.now(), events }));
       } catch (error) { console.warn("event cache write skipped", error); }
     }
@@ -3508,6 +3538,7 @@
       const cached = readEventsCache();
       if (!cached) return false;
       savedEvents = cached.events;
+      console.log("event cache schedule lengths after restore", savedEvents.map((eventItem) => ({ id: eventItem.id, length: (eventItem.schedule || []).length })));
       eventsLoaded = true;
       showingEventsCache = true;
       renderCalendar();
@@ -3553,9 +3584,25 @@
       });
     }
 
-    async function fetchEventRowsFromSupabase() {
+    async function fetchAllEventChildRows(tableName, idFilter, orderBy) {
+      const pageSize = 1000;
+      const rows = [];
+      for (let offset = 0; ; offset += pageSize) {
+        const page = await loggedSupabaseRequest(
+          `${tableName} select page ${offset / pageSize + 1}`,
+          `${tableName}?select=*&event_order_id=${idFilter}&order=${orderBy}&limit=${pageSize}&offset=${offset}`
+        );
+        rows.push(...(page || []));
+        if ((page || []).length < pageSize) break;
+      }
+      return rows;
+    }
+
+    async function fetchEventRowsFromSupabase(eventOrderIds = []) {
       console.log("event_orders select start");
-      const eventRows = await supabaseRequest("event_orders?select=*&order=created_at.desc");
+      const requestedIds = (eventOrderIds || []).filter(Boolean);
+      const eventOrderFilter = requestedIds.length ? `&id=in.(${requestedIds.join(",")})` : "";
+      const eventRows = await supabaseRequest(`event_orders?select=*&order=created_at.desc${eventOrderFilter}`);
       console.log("event_orders select success", eventRows || []);
 
       const eventIds = (eventRows || []).map((row) => row.id).filter(Boolean);
@@ -3563,29 +3610,20 @@
 
       const idFilter = `in.(${eventIds.join(",")})`;
       const [calendarRows, scheduleRows, itemRows, noteRows] = await Promise.all([
-        loggedSupabaseRequest(
-          "event_calendar_dates select",
-          `event_calendar_dates?select=*&event_order_id=${idFilter}&order=calendar_date.asc`
-        ),
-        loggedSupabaseRequest(
-          "event_schedules select",
-          `event_schedules?select=*&event_order_id=${idFilter}&order=created_at.asc`
-        ),
-        loggedSupabaseRequest(
-          "event_items select",
-          `event_items?select=*&event_order_id=${idFilter}&order=created_at.asc`
-        ),
-        loggedSupabaseRequest(
-          "event_notes select",
-          `event_notes?select=*&event_order_id=${idFilter}&order=created_at.asc`
-        ),
+        fetchAllEventChildRows("event_calendar_dates", idFilter, "calendar_date.asc,id.asc"),
+        fetchAllEventChildRows("event_schedules", idFilter, "created_at.asc,id.asc"),
+        fetchAllEventChildRows("event_items", idFilter, "created_at.asc,id.asc"),
+        fetchAllEventChildRows("event_notes", idFilter, "created_at.asc,id.asc"),
       ]);
+
+      console.log("event_schedules DB query length", scheduleRows.length);
 
       const calendarByEvent = groupByEventOrderId(calendarRows);
       const schedulesByEvent = groupByEventOrderId(scheduleRows);
       const itemsByEvent = groupByEventOrderId(itemRows);
       const notesByEvent = groupByEventOrderId(noteRows);
 
+      console.log("event_schedules grouped lengths", eventIds.map((id) => ({ id, length: (schedulesByEvent[id] || []).length })));
       return (eventRows || []).map((row) => ({
         ...row,
         event_calendar_dates: calendarByEvent[row.id] || [],
