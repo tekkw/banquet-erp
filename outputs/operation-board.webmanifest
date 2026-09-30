@@ -1,0 +1,12 @@
+{
+  "name": "연회 운영보드",
+  "short_name": "운영보드",
+  "start_url": "/board/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#081a2b",
+  "theme_color": "#081a2b",
+  "icons": [
+    { "src": "/assets/dashboard/sidebar-hotel.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

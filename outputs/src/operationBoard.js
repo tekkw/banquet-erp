@@ -410,7 +410,9 @@
   }
   function renderBlock(block) {
     const checklist = block.type === "next_setup" ? state.checklist.filter((x) => x.parentKey === block.key) : [];
-    return `<article class="operation-block ${block.completed ? "completed" : ""}" style="--space-color:${colorForSpace(block.spaceId)}" data-key="${escapeHtml(block.key)}" data-detail-key="${escapeHtml(block.key)}" tabindex="0"><label class="operation-check"><input type="checkbox" data-complete ${block.completed ? "checked" : ""}><span></span></label><div class="operation-block-body"><div class="operation-block-meta"><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(TYPES[block.type] || TYPES.manual)}</span>${block.people ? `<span>${escapeHtml(block.people)}명</span>` : ""}${block.needsScheduleReview ? "<span>세부 일정 확인 필요</span>" : ""}</div><h4>${escapeHtml(block.title)}</h4>${block.memo ? `<p>${escapeHtml(block.memo)}</p>` : ""}${block.next ? `<div class="next-setup-detail"><span>행사 종료: ${escapeHtml(block.eventName)}</span><span>다음 행사: ${escapeHtml(block.next.date)} · ${escapeHtml(block.next.name)} · ${escapeHtml(block.next.people || "-")}명</span><span>형태: ${escapeHtml(block.next.layoutType || "미지정")}</span><strong>${escapeHtml(block.next.recommendation)}</strong>${renderOriginalAction(block.next.eventOrderId)}</div>` : block.type === "next_setup" ? '<div class="next-setup-detail">같은 장소의 다음 행사가 없습니다.</div>' : ""}${block.type === "next_setup" ? `<div class="setup-checklist">${checklist.map((item) => `<div class="setup-item ${item.completed ? "completed" : ""}" data-item-id="${item.id}"><input type="checkbox" data-check-item ${item.completed ? "checked" : ""}><span>${escapeHtml(item.name)}${item.quantity ? ` ${escapeHtml(item.quantity)}${escapeHtml(item.unit || "")}` : ""}${item.memo ? ` · ${escapeHtml(item.memo)}` : ""}</span><button type="button" data-delete-item>삭제</button></div>`).join("")}<button type="button" data-add-item>+ 세팅 항목</button></div>` : ""}</div><label class="operation-reminder">알림 ${reminderSelect(block.key, state.reminders[block.key] ?? "default")}</label>${block.kind === "manual" ? '<div class="operation-block-actions"><button type="button" data-edit>수정</button><button type="button" data-delete>삭제</button></div>' : ""}</article>`;
+    const typeLabel = TYPES[block.type] || TYPES.manual;
+    const mobileNextSummary = block.next ? `<div class="next-setup-mobile-summary"><strong>다음 세팅</strong><time>${escapeHtml(block.next.date)}</time><span>${escapeHtml(block.next.name)}</span><small>${escapeHtml(block.next.people || "-")}명</small><button type="button" data-next-detail-toggle aria-expanded="false">상세 보기</button></div>` : "";
+    return `<article class="operation-block ${block.completed ? "completed" : ""}" style="--space-color:${colorForSpace(block.spaceId)}" data-key="${escapeHtml(block.key)}" data-detail-key="${escapeHtml(block.key)}" tabindex="0"><label class="operation-check"><input type="checkbox" data-complete ${block.completed ? "checked" : ""}><span class="operation-check-mark"></span><span class="operation-mobile-only">완료</span></label><div class="operation-block-body"><div class="operation-block-mobile-header"><time>${escapeHtml(block.time)}</time><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(typeLabel)}</span></div><div class="operation-block-meta"><strong>${escapeHtml(block.venue)}</strong><span>${escapeHtml(typeLabel)}</span>${block.people ? `<span>${escapeHtml(block.people)}명</span>` : ""}${block.needsScheduleReview ? "<span>세부 일정 확인 필요</span>" : ""}</div><h4>${escapeHtml(block.title)}</h4><div class="operation-block-mobile-support">${block.people ? `<span>${escapeHtml(block.people)}명</span>` : ""}${block.needsScheduleReview ? "<span>세부 일정 확인 필요</span>" : ""}</div>${block.memo ? `<p>${escapeHtml(block.memo)}</p>` : ""}${mobileNextSummary}${block.next ? `<div class="next-setup-detail"><span>행사 종료: ${escapeHtml(block.eventName)}</span><span>다음 행사: ${escapeHtml(block.next.date)} · ${escapeHtml(block.next.name)} · ${escapeHtml(block.next.people || "-")}명</span><span>형태: ${escapeHtml(block.next.layoutType || "미지정")}</span><strong>${escapeHtml(block.next.recommendation)}</strong>${renderOriginalAction(block.next.eventOrderId)}</div>` : block.type === "next_setup" ? '<div class="next-setup-detail">같은 장소의 다음 행사가 없습니다.</div>' : ""}${block.type === "next_setup" ? `<div class="setup-checklist">${checklist.map((item) => `<div class="setup-item ${item.completed ? "completed" : ""}" data-item-id="${item.id}"><input type="checkbox" data-check-item ${item.completed ? "checked" : ""}><span>${escapeHtml(item.name)}${item.quantity ? ` ${escapeHtml(item.quantity)}${escapeHtml(item.unit || "")}` : ""}${item.memo ? ` · ${escapeHtml(item.memo)}` : ""}</span><button type="button" data-delete-item>삭제</button></div>`).join("")}<button type="button" data-add-item>+ 세팅 항목</button></div>` : ""}</div><label class="operation-reminder">알림 ${reminderSelect(block.key, state.reminders[block.key] ?? "default")}</label><div class="operation-mobile-reminder"><button type="button" data-mobile-reminder-toggle aria-expanded="false">🔔 알림</button><div class="operation-mobile-reminder-menu" hidden>${[["default","기본값"],["30","30분 전"],["60","1시간 전"],["none","없음"]].map(([value,label]) => `<button type="button" data-mobile-reminder-value="${value}">${label}</button>`).join("")}</div></div>${block.kind === "manual" ? '<div class="operation-block-actions"><button type="button" data-edit>수정</button><button type="button" data-delete>삭제</button></div>' : ""}</article>`;
   }
   function reminderSelect(key, value, isDefault = false) {
     const options = isDefault ? [["none", "없음"], ["10", "10분 전"], ["30", "30분 전"], ["60", "1시간 전"], ["custom", "직접 설정"]] : [["default", "기본값"], ["none", "없음"], ["10", "10분 전"], ["30", "30분 전"], ["60", "1시간 전"], ["custom", "직접 설정"]];
@@ -469,12 +471,23 @@
       card.onclick = open;
       card.onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); open(event); } };
     });
+    root.querySelectorAll("[data-next-detail-toggle]").forEach((button) => button.onclick = () => {
+      const card = button.closest(".operation-block"); const expanded = card.classList.toggle("next-setup-expanded");
+      button.setAttribute("aria-expanded", String(expanded)); button.textContent = expanded ? "접기" : "상세 보기";
+    });
+    root.querySelectorAll("[data-mobile-reminder-toggle]").forEach((button) => button.onclick = () => {
+      const menu = button.nextElementSibling; const open = menu.hidden;
+      root.querySelectorAll(".operation-mobile-reminder-menu").forEach((item) => { item.hidden = true; });
+      menu.hidden = !open; button.setAttribute("aria-expanded", String(open));
+    });
+    root.querySelectorAll("[data-mobile-reminder-value]").forEach((button) => button.onclick = () => {
+      const key = button.closest("[data-key]").dataset.key;
+      applyReminderValue(key, button.dataset.mobileReminderValue);
+    });
     root.querySelectorAll("[data-reminder-key]").forEach((select) => select.onchange = () => {
       let value = select.value;
       if (value === "custom") { const entered = prompt("몇 분 전에 알릴까요?", "45"); value = String(Math.max(1, Number.parseInt(entered, 10) || 45)); }
-      if (select.dataset.reminderKey === "default") { defaultReminder = value; localStorage.setItem(REMINDER_DEFAULT_KEY, value); }
-      else { state.reminders[select.dataset.reminderKey] = value; const block = allBlocks().find((item) => item.key === select.dataset.reminderKey); if (block) syncItem(block); saveState(); }
-      render();
+      applyReminderValue(select.dataset.reminderKey, value);
     });
     const dialog = root.querySelector(".operation-dialog");
     dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDialog(); });
@@ -490,6 +503,11 @@
     const detailDialog = root.querySelector("[data-operation-detail]");
     detailDialog.addEventListener("cancel", (event) => { event.preventDefault(); detailDialog.close(); });
     detailDialog.addEventListener("click", (event) => { if (event.target === detailDialog) detailDialog.close(); });
+  }
+  function applyReminderValue(key, value) {
+    if (key === "default") { defaultReminder = value; localStorage.setItem(REMINDER_DEFAULT_KEY, value); }
+    else { state.reminders[key] = value; const block = allBlocks().find((item) => item.key === key); if (block) syncItem(block); saveState(); }
+    render();
   }
   function closeDialog() { const dialog = root.querySelector(".operation-dialog"); dialog.querySelector("form").reset(); dialog.close(); }
   function openDialog(item) {

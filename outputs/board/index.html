@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#081a2b">
+  <title>연회 운영보드</title>
+  <link rel="manifest" href="../operation-board.webmanifest">
+  <link rel="stylesheet" href="../src/styles/variables.css">
+  <link rel="stylesheet" href="../src/styles/dashboard.css">
+  <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=3">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=1">
+</head>
+<body class="operation-board-page">
+  <section id="boardLogin" class="board-login" hidden>
+    <form id="boardLoginForm" class="board-login-card">
+      <span>VENEZIA BANQUET</span><h1>연회 운영보드</h1>
+      <label>아이디<input id="boardLoginId" autocomplete="username" required></label>
+      <label>비밀번호<input id="boardLoginPassword" type="password" autocomplete="current-password" required></label>
+      <p id="boardLoginError" aria-live="polite"></p><button type="submit">로그인</button>
+    </form>
+  </section>
+  <main id="boardApp" class="board-app" hidden>
+    <header class="board-app-header">
+      <button type="button" data-board-page-step="-1" aria-label="이전 날짜">‹</button>
+      <div><small>연회 운영보드</small><strong id="boardDateLabel"></strong></div>
+      <button type="button" data-board-page-step="1" aria-label="다음 날짜">›</button>
+      <button type="button" data-board-page-today>오늘</button>
+    </header>
+    <p id="boardSyncStatus" class="board-sync-status">저장된 일정 확인 중</p>
+    <section id="todayOperationBoard" class="operation-board" aria-label="운영보드"></section>
+  </main>
+  <script src="../src/constants.js"></script>
+  <script src="../src/aiKnowledgeRules.js"></script>
+  <script src="../src/operationBoard.js?v=3"></script>
+  <script src="../src/operationBoardPage.js?v=1"></script>
+</body>
+</html>
