@@ -61,6 +61,7 @@ assert(board.spacesOverlap(buranoAll, burano1), "부라노 ALL과 부라노1은 
 assert(board.spacesOverlap(burano1, buranoAll), "부라노1과 부라노 ALL은 양방향으로 겹쳐야 한다");
 assert(!board.spacesOverlap(burano1, burano2), "부라노1과 부라노2는 겹치지 않아야 한다");
 assert(board.spacesOverlap(buranoBare, buranoAll), "부라노와 부라노 ALL은 같은 전체홀로 취급해야 한다");
+assert(!board.spacesOverlap({ venue: "부라노1", venueSpaceIds: ["shared-parent"] }, { venue: "부라노3", venueSpaceIds: ["shared-parent"] }), "공통 상위 ID보다 명확한 하위 공간 관계를 우선해야 한다");
 
 const weddingSpaces = [
   { spaceName: "컨벤션센터 A", role: "ceremony", roleLabel: "예식장" },
@@ -93,6 +94,37 @@ const individualEvents = [
   { id: "all-later", eventName: "부라노 ALL", calendarDates: ["2026-09-17"], ...buranoAll, schedule: [{ date: "2026-09-17", time: "09:00", venue: "부라노 ALL", content: "행사 시작" }] },
 ];
 assert.strictEqual(board.buildAutoBlocks(individualEvents, today).find((item) => item.type === "next_setup")?.next?.name, "부라노 ALL", "개별홀은 다른 개별홀을 건너뛰고 겹치는 전체홀을 선택해야 한다");
+
+const sharedAuxiliarySpaces = [
+  { spaceName: "피렌체", role: "dining", roleLabel: "식사장" },
+  { spaceName: "프론트", role: "front", roleLabel: "프론트" },
+];
+const festaNextFixture = [
+  { id: "festa-current", eventName: "페스타 현재 행사", calendarDates: [today], venue: "페스타", eventSpaces: [{ spaceName: "페스타", role: "main" }, ...sharedAuxiliarySpaces], schedule: [{ date: today, time: "18:00", venue: "페스타", content: "행사 종료" }] },
+  { id: "capri-near", eventName: "용산구의회", calendarDates: ["2026-09-09"], venue: "카프리1", eventSpaces: [{ spaceName: "카프리1", role: "main" }, ...sharedAuxiliarySpaces], schedule: [{ date: "2026-09-09", time: "13:00", venue: "카프리1", content: "세미나" }] },
+  { id: "festa-next", eventName: "도시가스협회", calendarDates: ["2026-09-10"], venue: "페스타", eventSpaces: [{ spaceName: "페스타", role: "main" }, ...sharedAuxiliarySpaces], schedule: [{ date: "2026-09-10", time: "14:00", venue: "페스타", content: "세미나" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(festaNextFixture, today).find((item) => item.type === "next_setup")?.next?.name, "도시가스협회", "공통 피렌체/프론트 때문에 다른 홀을 다음 세팅으로 선택하면 안 된다");
+
+const buranoStrictFixture = [
+  { id: "burano-current", eventName: "부라노1 현재", calendarDates: [today], venue: "부라노1", schedule: [{ date: today, time: "18:00", venue: "부라노1", content: "행사 종료" }] },
+  { id: "burano3-near", eventName: "부라노3 다음", calendarDates: ["2026-09-09"], venue: "부라노3", schedule: [{ date: "2026-09-09", time: "09:00", venue: "부라노3", content: "세미나" }] },
+  { id: "burano-all", eventName: "부라노ALL 다음", calendarDates: ["2026-09-10"], venue: "부라노ALL", schedule: [{ date: "2026-09-10", time: "09:00", venue: "부라노ALL", content: "세미나" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(buranoStrictFixture, today).find((item) => item.type === "next_setup")?.next?.name, "부라노ALL 다음", "다른 개별홀은 제외하고 겹치는 ALL을 선택해야 한다");
+
+const capriStrictFixture = [
+  { id: "capri1-current", eventName: "카프리1 현재", calendarDates: [today], venue: "카프리1", schedule: [{ date: today, time: "18:00", venue: "카프리1", content: "행사 종료" }] },
+  { id: "capri3-next", eventName: "카프리3 다음", calendarDates: ["2026-09-09"], venue: "카프리3", schedule: [{ date: "2026-09-09", time: "09:00", venue: "카프리3", content: "세미나" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(capriStrictFixture, today).find((item) => item.type === "next_setup")?.next, null, "카프리1과 카프리3은 다음 세팅 관계가 아니어야 한다");
+
+const nearestSameSpaceFixture = [
+  { id: "festa-current-2", eventName: "페스타 현재", calendarDates: [today], venue: "페스타", schedule: [{ date: today, time: "18:00", venue: "페스타", content: "행사 종료" }] },
+  { id: "festa-later", eventName: "페스타 늦은 행사", calendarDates: ["2026-09-11"], venue: "페스타", schedule: [{ date: "2026-09-11", time: "09:00", venue: "페스타", content: "세미나" }] },
+  { id: "festa-nearest", eventName: "페스타 가까운 행사", calendarDates: ["2026-09-09"], venue: "페스타", schedule: [{ date: "2026-09-09", time: "09:00", venue: "페스타", content: "세미나" }] },
+];
+assert.strictEqual(board.buildAutoBlocks(nearestSameSpaceFixture, today).find((item) => item.type === "next_setup")?.next?.name, "페스타 가까운 행사", "같은 공간 후보 중 가장 가까운 날짜 한 건을 선택해야 한다");
 
 const boundaryFixture = [{
   id: "filtered-boundary",

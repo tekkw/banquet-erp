@@ -150,14 +150,31 @@
     });
     return [...keys];
   }
+  function isAuxiliaryNextSetupSpace(space) {
+    const role = normalize(space?.role || space?.roleLabel).toLowerCase();
+    const name = normalize(space?.spaceName || space?.spaceCode).toLowerCase();
+    return ["dining", "front", "checkin", "checkout", "accommodation"].includes(role)
+      || /피렌체|firenze|florence|프론트|front/.test(`${role} ${name}`);
+  }
+  function nextSetupPhysicalSpaceKeys(event, row = {}) {
+    return physicalSpaceKeys({
+      ...event,
+      eventSpaces: (event?.eventSpaces || []).filter((space) => !isAuxiliaryNextSetupSpace(space)),
+    }, row);
+  }
   function physicalSpaceKeysOverlap(leftKeys, rightKeys) {
-    const right = new Set(rightKeys || []);
-    if ((leftKeys || []).some((key) => right.has(key))) return true;
     const places = (keys) => (keys || []).filter((key) => key.startsWith("place:")).map((key) => {
       const [, family, member] = key.split(":"); return { family, member };
     });
-    return places(leftKeys).some((left) => places(rightKeys).some((rightPlace) => left.family === rightPlace.family
-      && (left.member === "*" || rightPlace.member === "*" || left.member === rightPlace.member)));
+    const preferSpecificChildren = (items) => items.filter((item) => item.member !== "*"
+      || !items.some((candidate) => candidate.family === item.family && candidate.member !== "*"));
+    const leftPlaces = preferSpecificChildren(places(leftKeys)); const rightPlaces = preferSpecificChildren(places(rightKeys));
+    if (leftPlaces.length && rightPlaces.length) {
+      return leftPlaces.some((left) => rightPlaces.some((rightPlace) => left.family === rightPlace.family
+        && (left.member === "*" || rightPlace.member === "*" || left.member === rightPlace.member)));
+    }
+    const right = new Set(rightKeys || []);
+    return (leftKeys || []).some((key) => key.startsWith("id:") && right.has(key));
   }
   function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
     const existingResult = physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
@@ -217,7 +234,7 @@
         if (!type) return;
         const key = blockKey(event, row, type, index, day);
         const title = type === "start" ? (event.eventName || "행사 시작") : type === "schedule" ? normalize(row.content) : TYPES[type];
-        blocks.push({ key, kind: "auto", type, date: today, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), eventOrderId: event.id, title, eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type, date: today, time: timeValue(row.time) || "시간 미정", venue: venueName(row, event), spaceId: spaceKey(row, event), physicalSpaces: physicalSpaceKeys(event, row), nextSetupSpaces: nextSetupPhysicalSpaceKeys(event, row), eventOrderId: event.id, title, eventName: event.eventName || "행사", people: row.people || event.guestCount || "", completed: !!state.completions[key] });
       });
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "start")) {
         const first = boundaryRows[0]; const key = blockKey(event, first.row, "start", first.index, first.day);
@@ -225,7 +242,7 @@
       }
       if (boundaryRows.length && !blocks.some((block) => block.key.startsWith(`auto:${event.id}:`) && block.type === "end")) {
         const last = boundaryRows.slice().sort((a, b) => a.endTime.localeCompare(b.endTime)).at(-1); const endTime = last.endTime; const key = `${blockKey(event, last.row, "end", last.index, last.day)}:${endTime}`;
-        blocks.push({ key, kind: "auto", type: "end", date: today, time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), eventOrderId: event.id, title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
+        blocks.push({ key, kind: "auto", type: "end", date: today, time: endTime, venue: venueName(last.row, event), spaceId: spaceKey(last.row, event), physicalSpaces: physicalSpaceKeys(event, last.row), nextSetupSpaces: nextSetupPhysicalSpaceKeys(event, last.row), eventOrderId: event.id, title: TYPES.end, eventName: event.eventName || "행사", people: "", completed: !!state.completions[key] });
       }
       const isSelectedEvent = eventDates(event).includes(today);
       const hasEventBlock = blocks.some((block) => block.eventOrderId === event.id && block.date === today);
@@ -248,13 +265,22 @@
     const endedBySpace = new Map(blocks.filter((b) => b.type === "end").map((b) => [b.spaceId, b]));
     endedBySpace.forEach((ended, key) => {
       const candidates = [];
-      events.forEach((event) => normalizedScheduleRows(event).forEach(({ row, day }) => {
-        if (isHiddenHotelSchedule(row, event)) return;
-        const existingOverlap = physicalSpaceKeysOverlap(ended.physicalSpaces, physicalSpaceKeys(event, row));
-        const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
-        if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
-      }));
-      candidates.sort((a, b) => a.day.localeCompare(b.day));
+      events.forEach((event) => {
+        if (event.id === ended.eventOrderId) return;
+        normalizedScheduleRows(event).forEach(({ row, day }) => {
+          if (isHiddenHotelSchedule(row, event)) return;
+          const candidateSpaces = nextSetupPhysicalSpaceKeys(event, row);
+          const existingOverlap = physicalSpaceKeysOverlap(ended.nextSetupSpaces || ended.physicalSpaces, candidateSpaces);
+          const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
+          if (window.BANQUET_ERP_DEBUG_NEXT_SETUP === true) console.debug("next_setup overlap check", {
+            endedVenue: ended.venue, endedSpaceId: ended.spaceId, endedPhysicalSpaces: ended.physicalSpaces,
+            endedNextSetupSpaces: ended.nextSetupSpaces, candidateVenue: venueName(row, event), candidatePhysicalSpaceKeys: candidateSpaces,
+            existingOverlap, knowledgeOverlap,
+          });
+          if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
+        });
+      });
+      candidates.sort((a, b) => a.day.localeCompare(b.day) || timeValue(a.row.time).localeCompare(timeValue(b.row.time)));
       const next = candidates[0];
       const itemKey = `next:${today}:${key}`;
       blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: ended.venue, spaceId: key, physicalSpaces: ended.physicalSpaces, eventOrderId: next?.event.id || ended.eventOrderId, title: "다음 세팅", eventName: ended.eventName, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, name: next.event.eventName || "행사", people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
