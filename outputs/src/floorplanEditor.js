@@ -55,6 +55,36 @@
     }));
   }
 
+  const LAYOUT_LIBRARY_GROUPS = ["컨벤션", "페스타", "부라노", "올리비아", "카프리", "기타"];
+
+  function layoutLibraryGroupName(spaceName, venueName = "") {
+    const name = `${spaceName || ""} ${venueName || ""}`.replace(/\s+/g, "").toLowerCase();
+    return LAYOUT_LIBRARY_GROUPS.find((group) => group !== "기타" && name.includes(group.toLowerCase())) || "기타";
+  }
+
+  function layoutLibraryObjectGeometry(row, width, height) {
+    const metadata = row?.metadata || {};
+    const objectWidth = Math.max(1, Number(metadata.widthMm) || Number(row?.width) * width || 1);
+    const objectHeight = Math.max(1, Number(metadata.heightMm) || Number(row?.height) * height || 1);
+    const x = Number.isFinite(Number(metadata.xMm)) ? Number(metadata.xMm) : Number(row?.x) * width + objectWidth / 2;
+    const y = Number.isFinite(Number(metadata.yMm)) ? Number(metadata.yMm) : Number(row?.y) * height + objectHeight / 2;
+    return { x, y, width: objectWidth, height: objectHeight };
+  }
+
+  function layoutLibraryViewBox(width, height, points = [], objects = []) {
+    const bounds = [{ x: 0, y: 0 }, { x: width, y: height }];
+    (points || []).forEach((point) => bounds.push({ x: Number(point.x) || 0, y: Number(point.y) || 0 }));
+    (objects || []).forEach((row) => {
+      if (row?.object_type === "hall_outline") return;
+      const box = layoutLibraryObjectGeometry(row, width, height);
+      bounds.push({ x: box.x - box.width / 2, y: box.y - box.height / 2 }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    });
+    const xs = bounds.map((point) => point.x); const ys = bounds.map((point) => point.y);
+    const minX = Math.min(...xs); const maxX = Math.max(...xs); const minY = Math.min(...ys); const maxY = Math.max(...ys);
+    const padding = Math.max(250, Math.max(maxX - minX, maxY - minY) * 0.045);
+    return { x: minX - padding, y: minY - padding, width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 };
+  }
+
   function createFloorplanEditor({ elements, deps }) {
     const {
       modal,
@@ -277,8 +307,8 @@
     const libraryMinInput = document.getElementById("layoutLibraryMinInput"); const libraryMaxInput = document.getElementById("layoutLibraryMaxInput");
     const libraryCapacityInput = document.getElementById("layoutLibraryCapacityInput"); const libraryNotesInput = document.getElementById("layoutLibraryNotesInput");
     const librarySpaceInput = document.getElementById("layoutLibrarySpaceInput");
-    let libraryFilter = "all"; let libraryObjectsByLayout = new Map(); let libraryModalMode = "save"; let libraryModalForceNew = false; let pendingLayoutInfo = null;
-    let allLibraryLayouts = []; let allLibraryFloorplans = new Map(); let allLibraryVenues = new Map(); let allLibrarySpaces = new Map(); let allLibraryPreviewFiles = new Map(); let libraryLoading = false;
+    let libraryFilter = "all"; let libraryGroupFilter = ""; let librarySpaceFilter = "all"; let libraryObjectsByLayout = new Map(); let libraryFloorplanObjects = new Map(); let libraryModalMode = "save"; let libraryModalForceNew = false; let pendingLayoutInfo = null;
+    let allLibraryLayouts = []; let allLibraryFloorplans = new Map(); let allLibraryVenues = new Map(); let allLibrarySpaces = new Map(); let allLibraryPreviewFiles = new Map(); let libraryLoading = false; let libraryPreviewLayout = null;
     function isWorkspaceBaseObject(object) {
       return Boolean(object?.metadata?.baseFloorplanObject) || fixedObjectTypes.has(object?.objectType);
     }
@@ -596,12 +626,15 @@
         const clearButton = event.target.closest("button[data-layout-filter-clear]");
         if (clearButton) {
           libraryFilter = "all";
-          if (workspaceVenueSelect) workspaceVenueSelect.value = "";
-          if (workspaceSpaceSelect) workspaceSpaceSelect.value = "";
-          workspaceVenueSelect?.dispatchEvent(new Event("change", { bubbles: true }));
+          libraryGroupFilter = "";
+          librarySpaceFilter = "all";
           renderLayoutLibrary();
           return;
         }
+        const groupButton = event.target.closest("button[data-library-group]");
+        if (groupButton) { libraryGroupFilter = groupButton.dataset.libraryGroup; librarySpaceFilter = "all"; renderLayoutLibrary(); return; }
+        const spaceButton = event.target.closest("button[data-library-space]");
+        if (spaceButton) { librarySpaceFilter = spaceButton.dataset.librarySpace; renderLayoutLibrary(); return; }
         const button = event.target.closest("button[data-layout-filter]"); if (!button) return; libraryFilter = button.dataset.layoutFilter; renderLayoutLibrary();
       });
       libraryGrid?.addEventListener("click", handleLibraryAction);
@@ -1185,12 +1218,19 @@
         allLibraryFloorplans = new Map((floorplans || []).map((row) => [String(row.id), row]));
         allLibraryVenues = new Map((venues || []).map((row) => [String(row.id), row]));
         allLibrarySpaces = new Map((spaces || []).map((row) => [String(row.id), row]));
+        if (!libraryGroupFilter && allLibraryLayouts.length) libraryGroupFilter = layoutLibraryGroup(allLibraryLayouts[0]);
         const previewIds = [...new Set(allLibraryLayouts.map((row) => row.preview_file_id).filter(Boolean))];
         const files = previewIds.length
           ? await loggedSupabaseRequest("layout library preview files", `files?select=id,public_url,storage_path,bucket,original_filename&id=in.(${previewIds.join(",")})`).catch(() => [])
           : [];
         allLibraryPreviewFiles = new Map((files || []).map((row) => [String(row.id), row]));
         await loadLibraryObjects(allLibraryLayouts);
+        const floorplanIds = [...new Set(allLibraryLayouts.map((row) => row.floorplan_id).filter(Boolean))];
+        const floorplanObjects = floorplanIds.length
+          ? await loggedSupabaseRequest("layout library floorplan objects", `venue_floorplan_objects?select=*&floorplan_id=in.(${floorplanIds.join(",")})&is_active=eq.true&order=sort_order.asc`).catch(() => [])
+          : [];
+        libraryFloorplanObjects = new Map();
+        (floorplanObjects || []).forEach((row) => { const list = libraryFloorplanObjects.get(String(row.floorplan_id)) || []; list.push(row); libraryFloorplanObjects.set(String(row.floorplan_id), list); });
       } catch (error) {
         console.error("layout library load failed:", error);
         setStatus(error.message || "저장된 레이아웃을 불러오지 못했습니다.", "error");
@@ -1202,6 +1242,7 @@
     function libraryFloorplan(layout) { return allLibraryFloorplans.get(String(layout.floorplan_id || "")) || null; }
     function libraryVenueName(layout) { return allLibraryVenues.get(String(layout.venue_id || ""))?.venue_name || "장소 미지정"; }
     function librarySpaceName(layout) { return allLibrarySpaces.get(String(layout.space_id || ""))?.space_name || "공간 미지정"; }
+    function layoutLibraryGroup(layout) { return layoutLibraryGroupName(librarySpaceName(layout), libraryVenueName(layout)); }
     function libraryPreviewUrl(layout) {
       const file = allLibraryPreviewFiles.get(String(layout.preview_file_id || ""));
       if (!file) return "";
@@ -1209,19 +1250,29 @@
       if (!file.bucket || !file.storage_path) return "";
       return `${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(file.bucket)}/${String(file.storage_path).split("/").map(encodeURIComponent).join("/")}`;
     }
-    function libraryPreview(layout) {
-      const previewUrl = libraryPreviewUrl(layout);
-      if (previewUrl) return `<img class="layout-library-preview-image" src="${escapeAttribute(previewUrl)}" alt="${escapeAttribute(layout.layout_name || "레이아웃")} 미리보기" loading="lazy">`;
+    function libraryPreview(layout, mode = "thumbnail") {
       const floorplan = libraryFloorplan(layout); const metadata = floorplan?.metadata || {};
       const width = Math.max(1, Number(metadata.widthMm) || Number(floorplan?.actual_width) * 1000 || workspaceDrawingWidthMm);
       const height = Math.max(1, Number(metadata.heightMm) || Number(floorplan?.actual_height) * 1000 || workspaceDrawingHeightMm);
-      const points = Array.isArray(metadata.points) ? metadata.points : [];
-      const objects = libraryObjectsByLayout.get(layout.id) || [];
-      const shapes = objects.map((row) => { const m = row.metadata || {}; const w = Number(m.widthMm) || Number(row.width) * width; const h = Number(m.heightMm) || Number(row.height) * height;
-        const x = Number.isFinite(Number(m.xMm)) ? Number(m.xMm) : Number(row.x) * width + w / 2; const y = Number.isFinite(Number(m.yMm)) ? Number(m.yMm) : Number(row.y) * height + h / 2;
-        const circle = row.object_type === "round_table"; return circle ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="#d4af3755" stroke="#9a7b16"/>` : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="40" fill="#2563eb33" stroke="#2563eb"/>`; }).join("");
+      const baseObjects = libraryFloorplanObjects.get(String(layout.floorplan_id || "")) || [];
+      const outlineRow = baseObjects.find((row) => row.object_type === "hall_outline");
+      const points = Array.isArray(outlineRow?.metadata?.points) ? outlineRow.metadata.points : (Array.isArray(metadata.points) ? metadata.points : []);
+      const objects = [...baseObjects.filter((row) => row.object_type !== "hall_outline"), ...(libraryObjectsByLayout.get(layout.id) || [])];
+      const importantTypes = new Set(["door", "screen", "stage", "pillar", "blocked_area", "structure_area"]);
+      const shapes = objects.map((row) => {
+        const box = layoutLibraryObjectGeometry(row, width, height); const x = box.x; const y = box.y; const w = box.width; const h = box.height;
+        const isRound = row.object_type === "round_table"; const isChair = row.object_type === "chair"; const isFixed = importantTypes.has(row.object_type);
+        const fill = isChair ? "#94a3b844" : isFixed ? "#0f2a4324" : row.object_type === "round_table" ? "#d4af3755" : "#2563eb33";
+        const stroke = isFixed ? "#0f2a43" : row.object_type === "round_table" ? "#9a7b16" : "#2563eb";
+        const shape = isRound
+          ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="${fill}" stroke="${stroke}"/>`
+          : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="${Math.min(80, Math.max(12, Math.min(w,h)*.15))}" fill="${fill}" stroke="${stroke}"/>`;
+        const label = isFixed ? `<text class="layout-library-important-label" x="${x}" y="${y}" font-size="${mode === "thumbnail" ? 620 : 480}">${escapeHtml(row.label || objectLabels[row.object_type] || row.object_type)}</text>` : "";
+        return `<g>${shape}${label}</g>`;
+      }).join("");
       const outline = points.length ? `<polygon points="${points.map((p)=>`${Number(p.x)},${Number(p.y)}`).join(" ")}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>` : `<rect x="20" y="20" width="${Math.max(1,width-40)}" height="${Math.max(1,height-40)}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>`;
-      return `<svg viewBox="0 0 ${width} ${height}" aria-label="${escapeAttribute(layout.layout_name)} 미리보기">${outline}${shapes}</svg>`;
+      const view = layoutLibraryViewBox(width, height, points, objects);
+      return `<div class="layout-library-thumbnail layout-library-thumbnail-${mode}"><svg viewBox="${view.x} ${view.y} ${view.width} ${view.height}" preserveAspectRatio="xMidYMid meet" aria-label="${escapeAttribute(layout.layout_name)} 미리보기">${outline}${shapes}</svg></div>`;
     }
     function objectSummary(layoutId) {
       const counts = new Map(); (libraryObjectsByLayout.get(layoutId) || []).forEach((row) => counts.set(row.label || objectLabels[row.object_type] || row.object_type, (counts.get(row.label || objectLabels[row.object_type] || row.object_type) || 0) + 1));
@@ -1229,12 +1280,15 @@
     }
     function renderLayoutLibrary() {
       if (!libraryFilters || !libraryGrid) return;
-      const venueId = workspaceVenueSelect?.value || ""; const spaceId = workspaceSpaceSelect?.value || "";
-      const hasContextFilter = Boolean(venueId || spaceId || libraryFilter !== "all");
-      libraryFilters.innerHTML = `<span class="layout-library-filter-label">레이아웃 유형</span>${layoutTypeOptions.map(([value,label]) => `<button type="button" data-layout-filter="${value}" class="${libraryFilter===value?"active":""}">${label}</button>`).join("")}<button type="button" data-layout-filter-clear class="layout-library-clear-filter" ${hasContextFilter ? "" : "disabled"}>필터 초기화</button>`;
+      const groupCounts = new Map(LAYOUT_LIBRARY_GROUPS.map((group) => [group, allLibraryLayouts.filter((row) => layoutLibraryGroup(row) === group).length]));
+      const groupRows = libraryGroupFilter ? allLibraryLayouts.filter((row) => layoutLibraryGroup(row) === libraryGroupFilter) : [];
+      const spaces = [...new Set(groupRows.map(librarySpaceName))].sort((a,b) => a.localeCompare(b, "ko", { numeric:true }));
+      const hasContextFilter = Boolean(libraryGroupFilter || librarySpaceFilter !== "all" || libraryFilter !== "all");
+      libraryFilters.innerHTML = `<div class="layout-library-filter-row"><span class="layout-library-filter-label">공간 그룹</span>${LAYOUT_LIBRARY_GROUPS.map((group) => `<button type="button" data-library-group="${group}" class="${libraryGroupFilter===group?"active":""}">${group}<small>${groupCounts.get(group)||0}</small></button>`).join("")}</div>${libraryGroupFilter ? `<div class="layout-library-filter-row"><span class="layout-library-filter-label">하위 공간</span><button type="button" data-library-space="all" class="${librarySpaceFilter==="all"?"active":""}">전체</button>${spaces.map((space) => `<button type="button" data-library-space="${escapeAttribute(space)}" class="${librarySpaceFilter===space?"active":""}">${escapeHtml(space)}</button>`).join("")}</div><div class="layout-library-filter-row"><span class="layout-library-filter-label">레이아웃 유형</span>${layoutTypeOptions.map(([value,label]) => `<button type="button" data-layout-filter="${value}" class="${libraryFilter===value?"active":""}">${label}</button>`).join("")}</div>` : ""}<button type="button" data-layout-filter-clear class="layout-library-clear-filter" ${hasContextFilter ? "" : "disabled"}>선택 초기화</button>`;
       if (libraryLoading && !allLibraryLayouts.length) { libraryGrid.innerHTML = '<p class="layout-library-state">저장된 레이아웃을 불러오는 중입니다.</p>'; return; }
-      const rows = allLibraryLayouts.filter((row) => (!venueId || String(row.venue_id) === String(venueId)) && (!spaceId || String(row.space_id) === String(spaceId)) && (libraryFilter === "all" || row.layout_type === libraryFilter));
       if (!allLibraryLayouts.length) { libraryGrid.innerHTML = '<p class="layout-library-state">저장된 레이아웃이 없습니다.</p>'; return; }
+      if (!libraryGroupFilter) { libraryGrid.innerHTML = '<p class="layout-library-state">공간 그룹을 선택하면 저장된 레이아웃을 볼 수 있습니다.</p>'; return; }
+      const rows = groupRows.filter((row) => (librarySpaceFilter === "all" || librarySpaceName(row) === librarySpaceFilter) && (libraryFilter === "all" || row.layout_type === libraryFilter));
       if (!rows.length) { libraryGrid.innerHTML = '<p class="layout-library-state">필터 조건에 맞는 저장 레이아웃이 없습니다.</p>'; return; }
       libraryGrid.innerHTML = rows.map((row) => {
         const objects = libraryObjectsByLayout.get(row.id) || [];
@@ -1242,7 +1296,7 @@
         const seatCount = row.setup_capacity ?? objects.reduce((sum, object) => sum + Number(object.seat_count || 0), 0);
         const savedAt = row.updated_at || row.created_at; const savedLabel = savedAt ? new Intl.DateTimeFormat("ko-KR", { year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date(savedAt)) : "-";
         const floorplanName = libraryFloorplan(row)?.floorplan_name || "기본 도면";
-        return `<article class="layout-library-card layout-library-child" data-layout-id="${row.id}" tabindex="0" role="button" aria-label="${escapeAttribute(row.layout_name || "이름 없는 레이아웃")} 열기">${libraryPreview(row)}<div class="layout-library-card-heading"><span>${escapeHtml(libraryVenueName(row))}</span><span>${escapeHtml(librarySpaceName(row))}</span></div><h3>${escapeHtml(row.layout_name || "이름 없는 레이아웃")}</h3><p>${escapeHtml(typeLabel(row.layout_type))} · ${escapeHtml(floorplanName)}</p><p class="layout-library-card-meta">좌석 ${seatCount || 0}석 · 테이블 ${tableCount || 0}개</p><p class="layout-library-card-meta">저장일 ${escapeHtml(savedLabel)}</p><div class="layout-library-card-actions"><button data-action="open">열기</button><button data-action="duplicate">복제</button><button data-action="delete" class="danger-button">삭제</button></div></article>`;
+        return `<article class="layout-library-card layout-library-child" data-layout-id="${row.id}" tabindex="0" role="button" aria-label="${escapeAttribute(row.layout_name || "이름 없는 레이아웃")} 미리보기">${libraryPreview(row)}<div class="layout-library-card-heading"><span>${escapeHtml(librarySpaceName(row))}</span><span>${escapeHtml(typeLabel(row.layout_type))}</span></div><h3>${escapeHtml(row.layout_name || "이름 없는 레이아웃")}</h3><p>${escapeHtml(floorplanName)}</p><p class="layout-library-card-meta">${seatCount ? `좌석 ${seatCount}석` : "좌석수 미입력"} · 테이블 ${tableCount || 0}개</p><p class="layout-library-card-meta">저장일 ${escapeHtml(savedLabel)}</p><div class="layout-library-card-actions"><button data-action="preview">미리보기</button><button data-action="edit">편집</button><button data-action="delete" class="danger-button">삭제</button></div></article>`;
       }).join("");
     }
     async function handleLibraryAction(event) {
@@ -1260,11 +1314,28 @@
       }
       const button = event.target.closest("button[data-action]"); const card = event.target.closest("[data-layout-id]"); if (!card) return;
       const layout = allLibraryLayouts.find((row) => String(row.id) === String(card.dataset.layoutId)); if (!layout) return;
-      const action = button?.dataset.action || "open";
+      const action = button?.dataset.action || "preview";
+      if (action === "preview") { showLibraryPreview(layout); return; }
       if (["open","edit"].includes(action)) { await openLibraryLayout(layout); return; }
       if (action === "info") { workspaceActiveLayout = layout; openLayoutInfoModal("info", false); return; }
       if (action === "duplicate") { await duplicateLibraryLayout(layout); return; }
       if (action === "delete") await deleteLibraryLayout(layout);
+    }
+    function showLibraryPreview(layout) {
+      if (!workspacePreviewModal || !workspacePreviewBody) return;
+      libraryPreviewLayout = layout;
+      const previewTitle = workspacePreviewModal.querySelector("#layoutWorkspacePreviewTitle");
+      if (previewTitle) previewTitle.textContent = layout.layout_name || "레이아웃 미리보기";
+      if (workspacePreviewDownloadButton) workspacePreviewDownloadButton.hidden = true;
+      workspacePreviewBody.innerHTML = `<div class="layout-library-preview-toolbar"><button type="button" data-library-preview-zoom="out" aria-label="축소">−</button><button type="button" data-library-preview-zoom="reset">자동 맞춤</button><button type="button" data-library-preview-zoom="in" aria-label="확대">＋</button></div><div class="layout-library-preview-viewport" data-library-preview-viewport>${libraryPreview(layout, "modal")}</div>`;
+      const viewport = workspacePreviewBody.querySelector("[data-library-preview-viewport]"); let scale = 1;
+      workspacePreviewBody.querySelector(".layout-library-preview-toolbar")?.addEventListener("click", (event) => {
+        const action = event.target.closest("button[data-library-preview-zoom]")?.dataset.libraryPreviewZoom; if (!action) return;
+        scale = action === "reset" ? 1 : Math.min(3, Math.max(.5, scale * (action === "in" ? 1.2 : .8)));
+        viewport?.style.setProperty("--library-preview-scale", String(scale));
+      });
+      workspacePreviewModal.hidden = false;
+      workspacePreviewModal.classList.add("visible");
     }
     async function openLibraryLayout(layout) {
       await selectWorkspaceContext(layout.venue_id, layout.space_id, layout.floorplan_id);
@@ -1802,6 +1873,10 @@
 
     function showWorkspacePreview() {
       if (!workspacePreviewModal || !workspacePreviewBody || !workspaceSvg) return;
+      libraryPreviewLayout = null;
+      if (workspacePreviewDownloadButton) workspacePreviewDownloadButton.hidden = false;
+      const title = workspacePreviewModal.querySelector("#layoutWorkspacePreviewTitle");
+      if (title) title.textContent = "레이아웃 미리보기";
       const clone = buildWorkspacePreviewSvgClone(workspaceIncludeDimensionsInExport);
       if (!clone) {
         setStatus("誘몃━蹂닿린濡??쒖떆???꾨㈃???놁뒿?덈떎.", "warn");
@@ -1816,9 +1891,13 @@
 
     function closeWorkspacePreview() {
       if (!workspacePreviewModal) return;
+      libraryPreviewLayout = null;
       workspacePreviewModal.classList.remove("visible");
       workspacePreviewModal.hidden = true;
       if (workspacePreviewBody) workspacePreviewBody.innerHTML = "";
+      if (workspacePreviewDownloadButton) workspacePreviewDownloadButton.hidden = false;
+      const title = workspacePreviewModal.querySelector("#layoutWorkspacePreviewTitle");
+      if (title) title.textContent = "레이아웃 미리보기";
     }
 
     function buildWorkspacePreviewSvgClone(includeDimensions = true) {
@@ -4866,6 +4945,9 @@
     floorplanOutlineMetrics,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
+    layoutLibraryGroupName,
+    layoutLibraryObjectGeometry,
+    layoutLibraryViewBox,
   };
 })();
 

@@ -1383,3 +1383,22 @@ polyline.floorplan-v2-outline { fill: none; stroke: #b7791f; stroke-dasharray: 8
     min-width: 760px;
   }
 }
+
+/* Layout library V3: hierarchical filters, contained previews, and mobile tabs. */
+.layout-library-filters { display: grid; align-items: stretch; }
+.layout-library-filter-row { display: flex; gap: 8px; align-items: center; overflow-x: auto; padding: 1px 0 4px; scrollbar-width: thin; }
+.layout-library-filter-row button { flex: 0 0 auto; }
+.layout-library-filter-row button small { margin-left: 4px; opacity: .72; }
+.layout-library-thumbnail { display: grid; width: 100%; aspect-ratio: 16 / 10; place-items: center; overflow: hidden; border: 1px solid var(--theme-border); border-radius: 9px; background: #f8fafc; }
+.layout-library-thumbnail svg { display: block; width: 100%; height: 100%; max-width: 100%; max-height: 100%; aspect-ratio: auto; border-radius: 0; }
+.layout-library-important-label { fill: #0f2a43; font-weight: 950; text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: #fff; stroke-width: 72px; stroke-linejoin: round; pointer-events: none; }
+.layout-library-preview-toolbar { position: sticky; top: 0; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; padding-bottom: 10px; }
+.layout-library-preview-toolbar button { min-width: 40px; }
+.layout-library-preview-toolbar output { min-width: 58px; align-self: center; color: var(--theme-navy); font-size: 13px; font-weight: 900; text-align: center; }
+.layout-library-preview-viewport { display: grid; width: 100%; min-height: 0; height: calc(100% - 48px); place-items: center; overflow: auto; }
+.layout-library-preview-viewport .layout-library-thumbnail-modal { width: 100%; height: 100%; min-height: 420px; aspect-ratio: auto; overflow: auto; background: #fff; }
+.layout-library-preview-viewport .layout-library-thumbnail-modal svg { width: calc(100% * var(--library-preview-scale, 1)); height: calc(100% * var(--library-preview-scale, 1)); max-width: none; max-height: none; }
+@media (max-width: 720px) {
+  .layout-library-grid { grid-template-columns: minmax(0, 1fr); }
+  .layout-library-panel { padding-bottom: calc(var(--mobile-bottom-nav-height, 72px) + 12px); }
+}
