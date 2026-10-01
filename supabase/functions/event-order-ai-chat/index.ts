@@ -92,6 +92,11 @@ Deno.serve(async (request) => {
       return jsonResponse(result);
     }
 
+    if (mode === "board_command") {
+      const proposal = await interpretBoardCommand(String(question ?? ""), payload.boardContext ?? {}, payload.selection ?? null);
+      return jsonResponse({ proposal });
+    }
+
     const cleanQuestion = String(question ?? "").trim();
     if (!cleanQuestion) {
       return jsonResponse({ message: "질문을 입력해주세요." }, 400);
@@ -1214,6 +1219,46 @@ async function analyzeCorrectionLearning(correction: Record<string, unknown>) {
     similarKnowledge: Boolean(analysis.similarKnowledge),
     similarKnowledgeTitle: String(analysis.similarKnowledgeTitle ?? ""),
   };
+}
+
+async function interpretBoardCommand(question: string, boardContext: Record<string, unknown>, selection: Record<string, unknown> | null) {
+  const cleanQuestion = question.trim();
+  if (!cleanQuestion) throw new Error("현장 변경 내용을 입력해주세요.");
+  const events = Array.isArray(boardContext.events) ? boardContext.events as Array<Record<string, unknown>> : [];
+  const systemPrompt = [
+    "You are an intent parser for a Korean banquet operations board.",
+    "Return only one compact JSON object, without markdown or prose.",
+    "Allowed intents: update_schedule_time, update_guest_count, add_field_note, unsupported.",
+    "Never invent an eventOrderId or scheduleId. Use only IDs present in boardContext or selection.",
+    "If multiple events or schedule rows could match, set needsClarification=true and return choices; never choose one arbitrarily.",
+    "If confidence is below 0.7, always set needsClarification=true.",
+    "For update_schedule_time, target must contain eventOrderId, scheduleId, venue, content, currentTime and change.time in HH:MM.",
+    "For update_guest_count, target must contain eventOrderId, eventName, venue, currentGuestCount and change.guestCount as an integer. This changes representative guest count only.",
+    "For add_field_note, target must identify exactly one eventOrderId and venue, and change.note must preserve the user's requested note.",
+    "A choice has label, eventOrderId, and optional scheduleId. Keep question and confirmationText short in Korean.",
+    "Required shape: {intent,confidence,needsClarification,question,choices,target,change,confirmationText}.",
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ userText: cleanQuestion, boardContext, selectedChoice: selection }) }] }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message || "OpenAI board command request failed");
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
+  const proposal = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!proposal) throw new Error("AI board command JSON parsing failed.");
+  const intent = String(proposal.intent ?? "unsupported");
+  if (!["update_schedule_time", "update_guest_count", "add_field_note"].includes(intent)) return { intent: "unsupported", confidence: Number(proposal.confidence) || 0, needsClarification: false, choices: [], target: {}, change: {}, confirmationText: "" };
+  const target = proposal.target && typeof proposal.target === "object" ? proposal.target as Record<string, unknown> : {};
+  const event = events.find((item) => String(item.eventOrderId) === String(target.eventOrderId));
+  const schedules = event && Array.isArray(event.schedules) ? event.schedules as Array<Record<string, unknown>> : [];
+  const schedule = schedules.find((item) => String(item.scheduleId) === String(target.scheduleId));
+  const targetIsValid = !!event && (intent !== "update_schedule_time" || !!schedule);
+  if (!targetIsValid && !proposal.needsClarification) {
+    return { intent, confidence: 0, needsClarification: true, question: "어느 행사를 변경할까요?", choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
+  }
+  return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
 }
 
 async function askAiForInterviewKnowledge(interview: Record<string, unknown>) {
