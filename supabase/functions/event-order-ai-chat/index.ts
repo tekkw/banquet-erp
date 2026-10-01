@@ -1229,6 +1229,8 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
     "You are an intent parser for a Korean banquet operations board.",
     "Return only one compact JSON object, without markdown or prose.",
     "Allowed intents: update_schedule_time, update_guest_count, add_field_note, unsupported.",
+    "Treat Korean field reports in completed form as ERP update requests. For example, '페스타 커피브레이크가 13시로 바뀌었어' means update_schedule_time to 13:00, not unsupported.",
+    "Likewise, '인원이 55명으로 바뀌었어' means update_guest_count, while equipment or movement requests without a supported data field should become add_field_note.",
     "Never invent an eventOrderId or scheduleId. Use only IDs present in boardContext or selection.",
     "If multiple events or schedule rows could match, set needsClarification=true and return choices; never choose one arbitrarily.",
     "If confidence is below 0.7, always set needsClarification=true.",

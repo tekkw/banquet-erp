@@ -21,8 +21,12 @@
   function render() { board.render({ events }); dateLabel.textContent = formatDate(board.getSelectedDate()); }
   async function request(path, options = {}) {
     const response = await fetch(`${constants.supabaseConfig.url}/rest/v1/${path}`, { ...options, headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) } });
-    if (!response.ok) throw new Error(`Supabase ${response.status}`);
-    const text = await response.text(); return text ? JSON.parse(text) : null;
+    const text = await response.text();
+    if (!response.ok) {
+      const error = new Error(`Supabase ${response.status}`); error.status = response.status; error.body = text;
+      throw error;
+    }
+    return text ? JSON.parse(text) : null;
   }
   async function childRows(table, ids, order) {
     const result = []; const pageSize = 1000; const batchSize = 50;
@@ -37,12 +41,12 @@
     status.textContent = "최신 일정 동기화 중";
     try {
       const rows = await request("event_orders?select=*&order=created_at.desc"); const ids = rows.map((row) => row.id);
-      if (!ids.length) { events = []; render(); return; }
+      if (!ids.length) { events = []; render(); return { ok: true }; }
       const [dates, schedules] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc")]);
       const byDate = grouped(dates); const bySchedule = grouped(schedules);
       events = rows.map((row) => ({ id: row.id, eventName: row.event_name || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })) }));
-      localStorage.setItem(cacheKey, JSON.stringify({ version: 1, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료";
-    } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; }
+      localStorage.setItem(cacheKey, JSON.stringify({ version: 1, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
+    } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; return { ok: false, error }; }
   }
   function selectedEvents() { const date = board.getSelectedDate(); return events.filter((event) => [...(event.calendarDates || []), event.startDate, event.endDate].includes(date)); }
   function aiContext() {
@@ -73,23 +77,42 @@
     await request("operation_board_items", { method: "POST", body: JSON.stringify({ board_date: board.getSelectedDate(), item_key: `board-ai-log:${crypto.randomUUID()}`, item_kind: "manual", event_order_id: proposal.target?.eventOrderId || null, item_time: null, venue_name: proposal.target?.venue || "", title: proposal.intent, memo: userText, is_completed: true, metadata: { recordType: "board_ai_change_log", source: "board_ai", action: proposal.intent, scheduleId: proposal.target?.scheduleId || null, before, after, userText, approved: true, createdAt } }) });
     logLocally({ source: "board_ai", action: proposal.intent, field: proposal.intent, eventOrderId: proposal.target?.eventOrderId || null, scheduleId: proposal.target?.scheduleId || null, originalValue: String(before ?? ""), correctedValue: String(after ?? ""), userText, approved: true, createdAt });
   }
+  async function tryPersistAudit(proposal, userText, before, after) {
+    try { await persistAudit(proposal, userText, before, after); return true; }
+    catch (error) { console.error("board AI audit failed", { status: error.status, body: error.body, error }); return false; }
+  }
+  function boardAiError(code, message, cause) { const error = new Error(message); error.code = code; error.cause = cause; return error; }
   async function applyProposal(proposal) {
     const userText = proposal.userText || aiInput.value.trim();
+    let auditSaved = true;
     if (proposal.intent === "update_schedule_time") {
-      if (!proposal.target?.scheduleId || !/^\d{2}:\d{2}$/.test(proposal.change?.time || "")) throw new Error("invalid schedule proposal");
-      await request(`event_schedules?id=eq.${encodeURIComponent(proposal.target.scheduleId)}&event_order_id=eq.${encodeURIComponent(proposal.target.eventOrderId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ schedule_time: proposal.change.time }) });
-      await persistAudit(proposal, userText, proposal.target.currentTime, proposal.change.time);
+      if (!proposal.target?.eventOrderId || !proposal.target?.scheduleId || !/^\d{2}:\d{2}$/.test(proposal.change?.time || "")) throw boardAiError("schedule_target_missing", "invalid schedule proposal");
+      let updatedRows;
+      try {
+        updatedRows = await request(`event_schedules?id=eq.${encodeURIComponent(proposal.target.scheduleId)}&event_order_id=eq.${encodeURIComponent(proposal.target.eventOrderId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ schedule_time: proposal.change.time }) });
+      } catch (error) {
+        console.error("board AI schedule patch failed", { status: error.status, body: error.body, proposal, error });
+        throw boardAiError("schedule_patch_failed", "schedule patch failed", error);
+      }
+      if (!Array.isArray(updatedRows) || updatedRows.length !== 1) {
+        console.error("board AI schedule patch failed", { status: 200, body: updatedRows, updatedRowCount: Array.isArray(updatedRows) ? updatedRows.length : null, proposal });
+        throw boardAiError("schedule_not_found", "schedule patch returned no exact row");
+      }
+      auditSaved = await tryPersistAudit(proposal, userText, proposal.target.currentTime, proposal.change.time);
     } else if (proposal.intent === "update_guest_count") {
       const count = Number(proposal.change?.guestCount); if (!proposal.target?.eventOrderId || !Number.isInteger(count) || count < 0) throw new Error("invalid guest proposal");
       await request(`event_orders?id=eq.${encodeURIComponent(proposal.target.eventOrderId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ guest_count: count }) });
-      await persistAudit(proposal, userText, proposal.target.currentGuestCount, count);
+      auditSaved = await tryPersistAudit(proposal, userText, proposal.target.currentGuestCount, count);
     } else if (proposal.intent === "add_field_note") {
       const note = String(proposal.change?.note || "").trim(); if (!proposal.target?.eventOrderId || !note) throw new Error("invalid note proposal");
       const key = `field-note:${crypto.randomUUID()}`;
       const payload = { board_date: board.getSelectedDate(), item_key: key, item_kind: "manual", event_order_id: proposal.target.eventOrderId, item_time: null, venue_name: proposal.target.venue || "", title: "현장 메모", memo: note, is_completed: false, metadata: { noteType: "field_note", source: "board_ai", boardDate: board.getSelectedDate(), venue: proposal.target.venue || "", createdAt: new Date().toISOString(), userText } };
-      await request("operation_board_items", { method: "POST", body: JSON.stringify(payload) }); board.addFieldNote({ key, date: payload.board_date, eventOrderId: payload.event_order_id, venue: payload.venue_name, content: note }); await persistAudit(proposal, userText, "", note);
+      await request("operation_board_items", { method: "POST", body: JSON.stringify(payload) }); board.addFieldNote({ key, date: payload.board_date, eventOrderId: payload.event_order_id, venue: payload.venue_name, content: note }); auditSaved = await tryPersistAudit(proposal, userText, "", note);
     } else throw new Error("unsupported intent");
-    await (refresh)(); showMessage(proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다."); aiInput.value = "";
+    const refreshResult = await (refresh)();
+    if (!refreshResult?.ok) console.error("board AI refresh failed", { status: refreshResult?.error?.status, body: refreshResult?.error?.body, error: refreshResult?.error });
+    const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
+    showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success); aiInput.value = "";
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
 
@@ -100,7 +123,7 @@
     if (event.target.closest("[data-ai-edit]")) { aiInput.focus(); aiInput.select(); return; }
     const choice = event.target.closest("[data-ai-choice]");
     if (choice && pendingProposal) { const selected = pendingProposal.choices[Number(choice.dataset.aiChoice)]; const originalText = pendingProposal.userText || aiInput.value.trim(); showMessage("선택한 대상을 확인하고 있습니다…"); try { const proposal = await interpret(originalText, selected); proposal.userText = originalText; showProposal(proposal); } catch (error) { console.error(error); showMessage("대상을 확인하지 못했습니다."); } return; }
-    if (event.target.closest("[data-ai-approve]") && pendingProposal) { const proposal = pendingProposal; showMessage("승인된 변경을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error(error); showMessage("변경에 실패했습니다. 기존 일정은 유지됩니다."); } }
+    if (event.target.closest("[data-ai-approve]") && pendingProposal) { const proposal = pendingProposal; showMessage("승인된 변경을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board AI apply failed", { code: error.code, error }); showMessage(error.code === "schedule_not_found" || error.code === "schedule_target_missing" ? "변경할 일정을 찾지 못했습니다. 최신 일정을 다시 불러와주세요." : error.code === "schedule_patch_failed" ? "일정 수정에 실패했습니다. 기존 일정은 유지됩니다." : "변경 저장에 실패했습니다. 기존 데이터는 유지됩니다."); } }
   });
   document.querySelectorAll("[data-board-page-step]").forEach((button) => button.onclick = () => { const date = new Date(`${board.getSelectedDate()}T00:00:00`); date.setDate(date.getDate() + Number(button.dataset.boardPageStep)); board.setSelectedDate(date.toISOString().slice(0, 10)); render(); });
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
