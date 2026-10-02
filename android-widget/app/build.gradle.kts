@@ -12,6 +12,9 @@ val localProperties = Properties().apply {
 }
 val supabaseAnonKey = System.getenv("SUPABASE_ANON_KEY")
     ?: localProperties.getProperty("supabase.anonKey", "")
+require(supabaseAnonKey.isNotBlank()) {
+    "SUPABASE_ANON_KEY or local.properties supabase.anonKey must be configured."
+}
 
 android {
     namespace = "com.venezia.banquetboard"
@@ -40,4 +43,3 @@ dependencies {
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
-

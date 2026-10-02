@@ -3,6 +3,7 @@ package com.venezia.banquetboard.widget
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.DpSize
@@ -40,8 +41,6 @@ import com.venezia.banquetboard.MainActivity
 import com.venezia.banquetboard.data.BanquetBoardRepository
 import com.venezia.banquetboard.model.BoardRow
 import com.venezia.banquetboard.model.BoardSnapshot
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -52,14 +51,19 @@ class BanquetBoardWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = BanquetBoardRepository(context)
-        val cached = withContext(Dispatchers.IO) { repository.cached() }
-        provideContent { WidgetContent(cached) }
-        runCatching { repository.refresh(); update(context, id) }
+        val snapshot = repository.cached() ?: try {
+            repository.refresh()
+        } catch (error: Exception) {
+            Log.e("BanquetBoardWidget", "Initial refresh failed", error)
+            null
+        }
+        val error = repository.lastError()
+        provideContent { WidgetContent(snapshot, error) }
     }
 }
 
 @Composable
-private fun WidgetContent(snapshot: BoardSnapshot?) {
+private fun WidgetContent(snapshot: BoardSnapshot?, error: String) {
     val size = LocalSize.current
     val rowLimit = when { size.height < 150.dp -> 3; size.height < 250.dp -> 6; else -> 11 }
     val showNext = size.height >= 170.dp
@@ -76,7 +80,10 @@ private fun WidgetContent(snapshot: BoardSnapshot?) {
             Text("↻", modifier = GlanceModifier.padding(8.dp).clickable(actionRunCallback<RefreshAction>()), style = TextStyle(color = ColorProvider(Color(0xFF7DD3FC)), fontSize = 22.sp, fontWeight = FontWeight.Bold))
         }
         Spacer(GlanceModifier.height(8.dp))
-        if (snapshot == null) {
+        if (error.isNotBlank()) {
+            Text("동기화 실패", style = TextStyle(color = ColorProvider(Color(0xFFFCA5A5)), fontSize = 14.sp, fontWeight = FontWeight.Bold))
+            Text(error, maxLines = 3, style = TextStyle(color = ColorProvider(Color(0xFFFECACA)), fontSize = 12.sp))
+        } else if (snapshot == null) {
             Text("일정을 불러오는 중…", style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 14.sp))
         } else if (snapshot.rows.isEmpty()) {
             Text("오늘 등록된 일정이 없습니다.", style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 14.sp))
@@ -110,7 +117,13 @@ private fun BoardRowView(row: BoardRow) {
 
 class RefreshAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        runCatching { BanquetBoardRepository(context).refresh() }
+        val repository = BanquetBoardRepository(context)
+        try {
+            repository.refresh()
+        } catch (error: Exception) {
+            // refresh() persists the failure; logging keeps the stack trace visible during development.
+            Log.e("BanquetBoardWidget", "Manual refresh failed", error)
+        }
         BanquetBoardWidget().update(context, glanceId)
     }
 }

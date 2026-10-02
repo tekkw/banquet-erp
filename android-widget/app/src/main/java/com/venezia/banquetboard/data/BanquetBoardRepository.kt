@@ -29,7 +29,7 @@ class BanquetBoardRepository(context: Context) {
             snapshot
         } catch (error: Exception) {
             cache.saveError(error.message ?: "동기화 실패")
-            cache.load()?.copy(offline = true) ?: throw error
+            throw error
         }
     }
 
@@ -108,4 +108,3 @@ class BanquetBoardRepository(context: Context) {
     }
     private fun JSONObject.optIntOrNull(key: String): Int? = if (has(key) && !isNull(key)) optInt(key) else null
 }
-

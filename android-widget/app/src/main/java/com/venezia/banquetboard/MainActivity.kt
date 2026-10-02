@@ -49,14 +49,22 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             runCatching { repository.refresh() }
                 .onSuccess { BanquetBoardWidget().updateAll(this@MainActivity); updateStatus() }
-                .onFailure { status.text = "동기화 실패\n마지막 캐시를 표시합니다." }
+                .onFailure { error ->
+                    BanquetBoardWidget().updateAll(this@MainActivity)
+                    status.text = "동기화 실패\n${error.message ?: repository.lastError()}"
+                }
         }
     }
 
     private fun updateStatus() {
         val snapshot = repository.cached()
+        val error = repository.lastError()
         val formatter = DateTimeFormatter.ofPattern("M월 d일 HH:mm").withZone(ZoneId.of("Asia/Seoul"))
-        status.text = if (snapshot == null) "아직 동기화되지 않았습니다." else "Supabase 연결 상태: ${if (snapshot.offline) "오프라인" else "정상"}\n마지막 동기화: ${formatter.format(Instant.ofEpochMilli(snapshot.syncedAt))}"
+        status.text = when {
+            error.isNotBlank() -> "Supabase 연결 상태: 실패\n$error"
+            snapshot == null -> "아직 동기화되지 않았습니다."
+            else -> "Supabase 연결 상태: 정상\n마지막 동기화: ${formatter.format(Instant.ofEpochMilli(snapshot.syncedAt))}"
+        }
     }
 
     companion object { const val BOARD_URL = "https://banquet-erp.vercel.app/board/" }
