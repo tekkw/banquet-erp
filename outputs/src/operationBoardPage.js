@@ -16,6 +16,7 @@
   let pendingProposal = null;
   let pendingAssetProposal = null;
   let pendingAssetContext = null;
+  let pendingAssetQuery = null;
   let selectedAssetImageFile = null;
   let uploadedAssetImage = null;
   let selectedAssetPreviewUrl = "";
@@ -73,7 +74,8 @@
     const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "board_command", question: userText, boardContext: aiContext(), selection }) });
     const body = await response.json(); if (!response.ok) throw new Error(body.message || "AI 해석 실패"); return body.proposal;
   }
-  function isAssetIntakeRequest(text) { return /(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량.*(추가|늘|증가)|보관.*위치|위치.*변경|옮겼)/i.test(text); }
+  function isAssetQueryRequest(text) { return /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황))/i.test(text); }
+  function isAssetIntakeRequest(text) { return /(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|이동|변경|보관했|발견)/i.test(text); }
   function encodeStoragePath(path) { return String(path).split("/").map(encodeURIComponent).join("/"); }
   async function uploadSelectedAssetImage() {
     if (uploadedAssetImage) return uploadedAssetImage;
@@ -107,6 +109,40 @@
     if (!response.ok) { const error = new Error(body.message || `AI 해석 실패 (${response.status})`); error.status = response.status; throw error; }
     return body.proposal;
   }
+  async function handleAssetQuery(text, selection = null, offset = 0) {
+    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "asset_query", userText: text, selection, offset }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || `자산 조회 실패 (${response.status})`);
+    return body.result;
+  }
+  function assetUnit(asset) {
+    if (asset.unit) return asset.unit;
+    return String(asset.spec || "").match(/(?:^|\|)\s*단위:\s*([^|]+)/)?.[1]?.trim() || "개";
+  }
+  function assetLocation(asset) { return [asset.floor, asset.location].filter(Boolean).join(" ") || "위치 미입력"; }
+  function safeAssetImageUrl(value) { try { const url = new URL(String(value || ""), window.location.href); return ["https:", "http:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } }
+  function assetResultCard(asset, queryType) {
+    const imageUrl = safeAssetImageUrl(asset.image_url);
+    const photo = imageUrl ? `<a class="board-asset-photo-link" href="${escapeHtml(imageUrl)}" target="_blank" rel="noopener"><img class="board-asset-query-thumbnail" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(asset.asset_name)} 사진"><span>사진 보기</span></a>` : queryType === "find_asset_photo" ? `<p class="board-asset-no-photo">등록된 사진이 없습니다.</p>` : "";
+    const quantity = asset.quantity == null ? "수량 미입력" : `${asset.quantity}${assetUnit(asset)}`;
+    return `<article class="board-asset-query-card" data-asset-query-id="${escapeHtml(asset.id)}"><div><strong>${escapeHtml(asset.asset_name)}</strong><b>${escapeHtml(quantity)}</b><span>📍 ${escapeHtml(assetLocation(asset))}</span></div>${photo}<div class="board-asset-query-actions"><button type="button" data-asset-query-action="quantity" data-asset-id="${escapeHtml(asset.id)}">수량 변경</button><button type="button" data-asset-query-action="location" data-asset-id="${escapeHtml(asset.id)}">위치 변경</button></div></article>`;
+  }
+  function showAssetQueryResult(result, userText) {
+    pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = { result, userText };
+    if (result.needsClarification) {
+      const choices = Array.isArray(result.choices) ? result.choices : [];
+      aiResult.innerHTML = `<h3>자산 선택</h3><p>${escapeHtml(result.question || "어떤 자산을 찾으시나요?")}</p><div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-asset-query-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div><div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div>`;
+      return;
+    }
+    const assets = Array.isArray(result.assets) ? result.assets : [];
+    aiResult.innerHTML = `<div class="board-asset-query-result"><p class="board-ai-status">${escapeHtml(result.answer || "등록된 자산에서 찾지 못했습니다.")}</p>${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
+  }
+  function beginAssetUpdateFromQuery(asset, action) {
+    const intent = action === "quantity" ? "increase_asset_quantity" : "update_asset_location";
+    const question = action === "quantity" ? "몇 개 추가했나요? 수량 차감은 아직 지원하지 않습니다." : "새 보관 위치를 알려주세요.";
+    const proposal = { intent, confidence: 1, needsClarification: true, question, choices: [], targetAssetId: asset.id, asset: { assetName: asset.asset_name, category: "기타", quantity: asset.quantity, unit: assetUnit(asset), floor: asset.floor || "", location: asset.location || "", description: "" } };
+    showAssetProposal(proposal, null, `${asset.asset_name} ${action === "quantity" ? "수량 추가" : "위치 변경"}`); aiInput.value = ""; aiInput.focus();
+  }
   function assetIntentLabel(intent) { return intent === "create_asset" ? "새 자산 등록" : intent === "increase_asset_quantity" ? "기존 자산 수량 추가" : "자산 위치 변경"; }
   function startsNewAssetRequest(text) { return /(?:새|다른|별도|새로운)\s*(?:자산|물품|비품).*(?:등록|추가|시작)|(?:새로|별도로)\s*(?:등록|시작)/i.test(text); }
   function buildAssetContext(proposal, userText, previous = null) {
@@ -126,7 +162,7 @@
     return `<div class="board-asset-fields">${field("assetName", "자산명", asset.assetName)}${field("category", "분류", asset.category)}${field("quantity", "수량", asset.quantity, "number")}${field("unit", "단위", asset.unit)}${field("floor", "층", asset.floor)}${field("location", "위치", asset.location)}${field("description", "설명", asset.description)}</div>`;
   }
   function showAssetProposal(proposal, context = null, userText = "") {
-    pendingProposal = null; pendingAssetContext = buildAssetContext(proposal, userText, context); pendingAssetProposal = pendingAssetContext.latestProposal;
+    pendingProposal = null; pendingAssetQuery = null; pendingAssetContext = buildAssetContext(proposal, userText, context); pendingAssetProposal = pendingAssetContext.latestProposal;
     const thumbnail = uploadedAssetImage?.publicUrl || selectedAssetPreviewUrl;
     const image = thumbnail ? `<img class="board-asset-thumbnail" src="${escapeHtml(thumbnail)}" alt="선택한 자산 사진">` : "";
     if (proposal.intent === "unsupported") { aiResult.innerHTML = `<p class="board-ai-status">현재는 등록 / 수량 추가 / 위치 변경만 지원합니다.</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; return; }
@@ -177,7 +213,7 @@
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
     showMessage(auditSaved ? actionLabel : `${actionLabel} 변경 기록 저장은 실패했습니다.`);
   }
-  function showMessage(message) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
+  function showMessage(message) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
@@ -252,6 +288,11 @@
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
+    if (!followupContext && !explicitNewAsset && !selectedAssetImageFile && isAssetQueryRequest(text)) {
+      showTransientMessage("자산 정보를 조회하고 있습니다…");
+      try { const result = await handleAssetQuery(text); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
+      return;
+    }
     if (followupContext || explicitNewAsset || selectedAssetImageFile || isAssetIntakeRequest(text)) {
       showTransientMessage(followupContext ? "이전 자산 정보에 답변을 반영하고 있습니다…" : selectedAssetImageFile ? "사진을 업로드하고 자산 내용을 확인하고 있습니다…" : "자산 내용을 확인하고 있습니다…");
       try { const proposal = await interpretAsset(text, null, followupContext); proposal.userText = text; showAssetProposal(proposal, followupContext, text); aiInput.value = ""; }
@@ -262,6 +303,12 @@
   });
   aiInput.addEventListener("input", () => { aiInput.style.height = "auto"; aiInput.style.height = `${Math.min(aiInput.scrollHeight, 112)}px`; });
   aiResult.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-asset-query-close]")) { showMessage(""); aiResult.innerHTML = ""; return; }
+    const queryChoice = event.target.closest("[data-asset-query-choice]");
+    if (queryChoice && pendingAssetQuery) { const selected = pendingAssetQuery.result.choices[Number(queryChoice.dataset.assetQueryChoice)]; const text = pendingAssetQuery.userText; showTransientMessage("선택한 자산을 조회하고 있습니다…"); try { showAssetQueryResult(await handleAssetQuery(text, selected), text); } catch (error) { console.error(error); showMessage(error.message || "자산 조회에 실패했습니다."); } return; }
+    if (event.target.closest("[data-asset-query-more]") && pendingAssetQuery) { const previous = pendingAssetQuery; showTransientMessage("자산 목록을 더 불러오고 있습니다…"); try { const next = await handleAssetQuery(previous.userText, null, previous.result.assets.length); next.assets = [...previous.result.assets, ...(next.assets || [])]; next.answer = previous.result.answer; showAssetQueryResult(next, previous.userText); } catch (error) { console.error(error); showMessage(error.message || "자산 목록을 더 불러오지 못했습니다."); } return; }
+    const queryAction = event.target.closest("[data-asset-query-action]");
+    if (queryAction && pendingAssetQuery) { const asset = pendingAssetQuery.result.assets.find((item) => String(item.id) === String(queryAction.dataset.assetId)); if (asset) beginAssetUpdateFromQuery(asset, queryAction.dataset.assetQueryAction); return; }
     if (event.target.closest("[data-asset-cancel]")) { await deleteUnlinkedAssetImage(); resetAssetImage(); aiInput.value = ""; showMessage("자산 반영을 취소했습니다. 저장된 내용은 없습니다."); return; }
     if (event.target.closest("[data-asset-edit]") && pendingAssetProposal) { document.querySelectorAll("#boardAssetProposalForm input").forEach((input) => { input.disabled = false; }); document.querySelector("#boardAssetProposalForm input")?.focus(); return; }
     if (event.target.closest("[data-asset-create-new]") && pendingAssetProposal) { const asset = readAssetFields(); const proposal = { ...pendingAssetProposal, intent: "create_asset", targetAssetId: null, needsClarification: !asset.assetName || asset.quantity == null || !asset.location, asset, confirmationText: "기존 자산과 합치지 않고 새 자산으로 등록할까요?" }; showAssetProposal(proposal, pendingAssetContext, pendingAssetContext?.latestUserText || ""); return; }

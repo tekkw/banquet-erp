@@ -102,6 +102,11 @@ Deno.serve(async (request) => {
       return jsonResponse({ proposal });
     }
 
+    if (mode === "asset_query") {
+      const result = await queryBanquetAssets(String(payload.userText ?? question ?? ""), payload.selection ?? null, Math.max(0, Math.floor(Number(payload.offset) || 0)));
+      return jsonResponse({ result });
+    }
+
     if (mode === "board_command") {
       const proposal = await interpretBoardCommand(String(question ?? ""), payload.boardContext ?? {}, payload.selection ?? null);
       return jsonResponse({ proposal });
@@ -1271,6 +1276,96 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
     return { intent, confidence: 0, needsClarification: true, question: "어느 행사를 변경할까요?", choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
   }
   return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
+}
+
+type AssetRow = { id: string; asset_name: string; floor: string | null; quantity: number | null; spec: string | null; location: string | null; image_url: string | null };
+
+function normalizeAssetSearchText(value: unknown) {
+  return String(value ?? "").toLowerCase().normalize("NFKC")
+    .replace(/에이치\s*디\s*엠\s*아이/g, "hdmi").replace(/디\s*피/g, "dp")
+    .replace(/(\d+)\s*층/g, "$1f").replace(/hdmi\s*선/g, "hdmi케이블")
+    .replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function safeAssetSearchTerm(value: unknown) { return String(value ?? "").trim().replace(/[^0-9A-Za-z가-힣\s_-]/g, " ").replace(/\s+/g, " ").slice(0, 60); }
+function assetUnitFromSpec(spec: unknown) { return String(spec ?? "").match(/(?:^|\|)\s*단위:\s*([^|]+)/)?.[1]?.trim() || "개"; }
+function assetPlace(row: AssetRow) { return [row.floor, row.location].filter(Boolean).join(" ") || "위치 미입력"; }
+
+async function parseAssetQuery(question: string) {
+  const systemPrompt = [
+    "Parse a Korean banquet asset lookup question. Return only JSON.",
+    "queryType must be one of find_asset_location, get_asset_quantity, list_assets_by_location, find_asset_photo, search_asset.",
+    "Return assetTerms as 1-4 concise canonical search terms. Include useful English/canonical synonyms for Korean phonetic or descriptive wording, e.g. 에이치디엠아이 or 모니터 연결선 may include HDMI and HDMI 케이블.",
+    "For location list questions, return locationTerms containing separately stated floor and location words, e.g. 3층 창고 => ['3층','창고'].",
+    "Do not answer the question and do not invent database values.",
+    "Shape: {queryType,assetTerms,locationTerms}.",
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: question }] }) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message || "OpenAI asset query parsing failed");
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
+  const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!parsed) throw new Error("AI asset query JSON parsing failed.");
+  const allowed = ["find_asset_location", "get_asset_quantity", "list_assets_by_location", "find_asset_photo", "search_asset"];
+  return { queryType: allowed.includes(String(parsed.queryType)) ? String(parsed.queryType) : "search_asset", assetTerms: (Array.isArray(parsed.assetTerms) ? parsed.assetTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4), locationTerms: (Array.isArray(parsed.locationTerms) ? parsed.locationTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4) };
+}
+
+async function searchAssetRows(terms: string[]) {
+  const rows = new Map<string, AssetRow>();
+  for (const term of terms.slice(0, 4)) {
+    const filter = encodeURIComponent(`(asset_name.ilike.*${term}*,spec.ilike.*${term}*,floor.ilike.*${term}*,location.ilike.*${term}*)`);
+    const found = await supabaseSelect("banquet_assets", `select=id,asset_name,floor,quantity,spec,location,image_url&or=${filter}&limit=50`) as AssetRow[];
+    found.forEach((row) => rows.set(row.id, row));
+  }
+  return [...rows.values()];
+}
+
+async function semanticAssetFallback(question: string) {
+  const rows = await supabaseSelect("banquet_assets", "select=id,asset_name,floor,quantity,spec,location,image_url&order=asset_name.asc&limit=100") as AssetRow[];
+  if (!rows.length) return [];
+  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: "Select only strongly matching asset IDs for the user's wording. Similar purpose alone is insufficient. Never invent IDs. Return JSON {matchingIds:[],confidence:0.0}." }, { role: "user", content: JSON.stringify({ question, assets: rows.map((row) => ({ id: row.id, asset_name: row.asset_name, spec: row.spec })) }) }] }) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) return [];
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text;
+  const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!parsed || Number(parsed.confidence) < 0.8) return [];
+  const ids = new Set((Array.isArray(parsed.matchingIds) ? parsed.matchingIds : []).map(String));
+  return rows.filter((row) => ids.has(row.id));
+}
+
+async function queryBanquetAssets(question: string, selection: Record<string, unknown> | null, offset = 0) {
+  const cleanQuestion = question.trim();
+  if (!cleanQuestion) throw new Error("자산 질문을 입력해주세요.");
+  const parsed = await parseAssetQuery(cleanQuestion);
+  const isLocationList = parsed.queryType === "list_assets_by_location";
+  const terms = isLocationList ? parsed.locationTerms : parsed.assetTerms;
+  let rows = await searchAssetRows(terms);
+  if (isLocationList) {
+    const normalizedTerms = parsed.locationTerms.map(normalizeAssetSearchText).filter(Boolean);
+    rows = rows.filter((row) => { const place = normalizeAssetSearchText(`${row.floor || ""} ${row.location || ""}`); return normalizedTerms.every((term) => place.includes(term)); });
+    const visible = rows.slice(offset, offset + 10);
+    const label = parsed.locationTerms.join(" ") || "해당 위치";
+    return { queryType: parsed.queryType, needsClarification: false, question: "", choices: [], assets: visible, offset, hasMore: rows.length > offset + 10, answer: rows.length ? `${label}에는 현재 ${rows.length}종이 있습니다.` : "등록된 자산에서 찾지 못했습니다." };
+  }
+  if (!rows.length) rows = await semanticAssetFallback(cleanQuestion);
+  const selectedId = String(selection?.assetId ?? "");
+  const selectedRows = selectedId ? await supabaseSelect("banquet_assets", `select=id,asset_name,floor,quantity,spec,location,image_url&id=eq.${encodeURIComponent(selectedId)}&limit=1`) as AssetRow[] : [];
+  const selected = selectedRows[0] ?? null;
+  let matches: AssetRow[] = selected ? [selected] : [];
+  if (!selected) {
+    const normalizedTerms = parsed.assetTerms.map(normalizeAssetSearchText).filter(Boolean);
+    const normalizedQuestion = normalizeAssetSearchText(cleanQuestion);
+    const scored = rows.map((row) => { const name = normalizeAssetSearchText(row.asset_name); const spec = normalizeAssetSearchText(row.spec); const directScore = name && normalizedQuestion.includes(name) ? 200 + name.length : 0; const score = Math.max(directScore, 0, ...normalizedTerms.map((term) => name === term ? 100 + term.length : name.includes(term) || term.includes(name) ? 70 + term.length : spec.includes(term) ? 40 + term.length : 0)); return { row, score }; }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score);
+    if (scored.length) matches = scored.filter((item) => item.score === scored[0].score).map((item) => item.row);
+    else matches = rows;
+  }
+  if (!matches.length) return { queryType: parsed.queryType, needsClarification: false, question: "", choices: [], assets: [], hasMore: false, answer: "등록된 자산에서 찾지 못했습니다." };
+  if (matches.length > 1 && !selected) return { queryType: parsed.queryType, needsClarification: true, question: "어떤 자산을 찾으시나요?", choices: matches.slice(0, 10).map((row) => ({ assetId: row.id, label: row.asset_name })), assets: [], hasMore: matches.length > 10, answer: "" };
+  const row = matches[0];
+  const unit = assetUnitFromSpec(row.spec);
+  const quantity = row.quantity == null ? "수량 미입력" : `${row.quantity}${unit}`;
+  const answer = parsed.queryType === "find_asset_photo" ? row.image_url ? `${row.asset_name} 사진입니다.` : `${row.asset_name}에는 등록된 사진이 없습니다.` : parsed.queryType === "get_asset_quantity" ? `${row.asset_name}은(는) 현재 ${quantity}입니다. 위치: ${assetPlace(row)}` : `${row.asset_name}은(는) ${assetPlace(row)}에 ${quantity} 있습니다.`;
+  return { queryType: parsed.queryType, needsClarification: false, question: "", choices: [], assets: [row], hasMore: false, answer };
 }
 
 async function interpretAssetIntake(userText: string, imageAttachment: Record<string, unknown> | null, selection: Record<string, unknown> | null, previousContext: Record<string, unknown> | null) {
