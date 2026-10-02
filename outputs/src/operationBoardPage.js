@@ -15,6 +15,7 @@
   let events = [];
   let pendingProposal = null;
   let pendingAssetProposal = null;
+  let pendingAssetContext = null;
   let selectedAssetImageFile = null;
   let uploadedAssetImage = null;
   let selectedAssetPreviewUrl = "";
@@ -98,26 +99,40 @@
     selectedAssetPreviewUrl = "";
     if (keepStoredImage) uploadedAssetImage = null;
   }
-  async function interpretAsset(userText, selection = null) {
+  async function interpretAsset(userText, selection = null, context = null) {
     const imageAttachment = await uploadSelectedAssetImage();
-    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "asset_intake", userText, imageAttachment, selection }) });
+    const previousContext = context ? { previousUserText: context.latestUserText || context.originalUserText || "", previousProposal: context.latestProposal || null, accumulatedAsset: context.asset || {} } : null;
+    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "asset_intake", userText, imageAttachment, selection, previousContext }) });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) { const error = new Error(body.message || `AI 해석 실패 (${response.status})`); error.status = response.status; throw error; }
     return body.proposal;
   }
   function assetIntentLabel(intent) { return intent === "create_asset" ? "새 자산 등록" : intent === "increase_asset_quantity" ? "기존 자산 수량 추가" : "자산 위치 변경"; }
+  function startsNewAssetRequest(text) { return /(?:새|다른|별도|새로운)\s*(?:자산|물품|비품).*(?:등록|추가|시작)|(?:새로|별도로)\s*(?:등록|시작)/i.test(text); }
+  function buildAssetContext(proposal, userText, previous = null) {
+    const previousAsset = previous?.asset || {};
+    const nextAsset = proposal.asset || {};
+    const asset = { ...previousAsset };
+    Object.entries(nextAsset).forEach(([key, value]) => { if (value !== "" && value !== null && value !== undefined) asset[key] = value; else if (!(key in asset)) asset[key] = value; });
+    proposal.asset = asset;
+    return { originalUserText: previous?.originalUserText || userText, latestUserText: userText, latestProposal: proposal, asset, intent: proposal.intent, targetAssetId: proposal.targetAssetId || previous?.targetAssetId || null, imageAttachment: uploadedAssetImage || previous?.imageAttachment || null };
+  }
+  function currentAssetSummary(asset = {}) {
+    const location = [asset.floor, asset.location].filter(Boolean).join(" · ") || "위치 미입력";
+    return `<div class="board-asset-current"><strong>현재 확인된 정보</strong><br>${escapeHtml(asset.assetName || "품명 미입력")}<br>${escapeHtml(location)}<br>${asset.quantity == null ? "수량 미입력" : `수량 ${escapeHtml(asset.quantity)}`}<br>${escapeHtml(asset.unit ? `단위 ${asset.unit}` : "단위 미입력")}</div>`;
+  }
   function renderAssetFields(asset = {}, disabled = true) {
     const field = (name, label, value, type = "text") => `<label>${escapeHtml(label)}<input name="${name}" type="${type}" value="${escapeHtml(value ?? "")}" ${disabled ? "disabled" : ""}></label>`;
     return `<div class="board-asset-fields">${field("assetName", "자산명", asset.assetName)}${field("category", "분류", asset.category)}${field("quantity", "수량", asset.quantity, "number")}${field("unit", "단위", asset.unit)}${field("floor", "층", asset.floor)}${field("location", "위치", asset.location)}${field("description", "설명", asset.description)}</div>`;
   }
-  function showAssetProposal(proposal) {
-    pendingProposal = null; pendingAssetProposal = proposal;
+  function showAssetProposal(proposal, context = null, userText = "") {
+    pendingProposal = null; pendingAssetContext = buildAssetContext(proposal, userText, context); pendingAssetProposal = pendingAssetContext.latestProposal;
     const thumbnail = uploadedAssetImage?.publicUrl || selectedAssetPreviewUrl;
     const image = thumbnail ? `<img class="board-asset-thumbnail" src="${escapeHtml(thumbnail)}" alt="선택한 자산 사진">` : "";
     if (proposal.intent === "unsupported") { aiResult.innerHTML = `<p class="board-ai-status">현재는 등록 / 수량 추가 / 위치 변경만 지원합니다.</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; return; }
     if (proposal.needsClarification || Number(proposal.confidence) < 0.7) {
       const choices = Array.isArray(proposal.choices) ? proposal.choices : [];
-      aiResult.innerHTML = `<div class="board-asset-proposal"><div class="board-asset-heading">${image}<div><h3>자산 정보 확인</h3><p>${escapeHtml(proposal.question || "수량과 보관 위치를 알려주세요.")}</p></div></div>${choices.length ? `<div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-asset-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div>` : ""}<div class="board-ai-actions"><button type="button" data-asset-cancel>취소</button></div></div>`;
+      aiResult.innerHTML = `<div class="board-asset-proposal"><div class="board-asset-heading">${image}<div><h3>자산 정보 확인</h3>${currentAssetSummary(pendingAssetContext.asset)}<p>${escapeHtml(proposal.question || "수량과 보관 위치를 알려주세요.")}</p></div></div>${choices.length ? `<div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-asset-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div>` : ""}<div class="board-ai-actions"><button type="button" data-asset-cancel>취소</button></div></div>`;
       return;
     }
     const asset = proposal.asset || {};
@@ -162,7 +177,8 @@
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
     showMessage(auditSaved ? actionLabel : `${actionLabel} 변경 기록 저장은 실패했습니다.`);
   }
-  function showMessage(message) { pendingProposal = null; pendingAssetProposal = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
+  function showMessage(message) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
+  function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
     if (proposal.intent === "update_guest_count") return `${proposal.target?.venue || proposal.target?.eventName || "행사"}\n${proposal.target?.currentGuestCount ?? "-"}명 → ${proposal.change?.guestCount ?? "-"}명`;
@@ -233,9 +249,12 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
-    if (selectedAssetImageFile || isAssetIntakeRequest(text)) {
-      showMessage(selectedAssetImageFile ? "사진을 업로드하고 자산 내용을 확인하고 있습니다…" : "자산 내용을 확인하고 있습니다…");
-      try { const proposal = await interpretAsset(text); proposal.userText = text; showAssetProposal(proposal); }
+    let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
+    let explicitNewAsset = false;
+    if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
+    if (followupContext || explicitNewAsset || selectedAssetImageFile || isAssetIntakeRequest(text)) {
+      showTransientMessage(followupContext ? "이전 자산 정보에 답변을 반영하고 있습니다…" : selectedAssetImageFile ? "사진을 업로드하고 자산 내용을 확인하고 있습니다…" : "자산 내용을 확인하고 있습니다…");
+      try { const proposal = await interpretAsset(text, null, followupContext); proposal.userText = text; showAssetProposal(proposal, followupContext, text); aiInput.value = ""; }
       catch (error) { console.error("asset intake failed", { status: error.status, body: error.body, error }); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "자산 확인에 실패했습니다. 저장된 내용은 없습니다."); }
       return;
     }
@@ -243,11 +262,11 @@
   });
   aiInput.addEventListener("input", () => { aiInput.style.height = "auto"; aiInput.style.height = `${Math.min(aiInput.scrollHeight, 112)}px`; });
   aiResult.addEventListener("click", async (event) => {
-    if (event.target.closest("[data-asset-cancel]")) { await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage("자산 반영을 취소했습니다. 저장된 내용은 없습니다."); return; }
+    if (event.target.closest("[data-asset-cancel]")) { await deleteUnlinkedAssetImage(); resetAssetImage(); aiInput.value = ""; showMessage("자산 반영을 취소했습니다. 저장된 내용은 없습니다."); return; }
     if (event.target.closest("[data-asset-edit]") && pendingAssetProposal) { document.querySelectorAll("#boardAssetProposalForm input").forEach((input) => { input.disabled = false; }); document.querySelector("#boardAssetProposalForm input")?.focus(); return; }
-    if (event.target.closest("[data-asset-create-new]") && pendingAssetProposal) { const asset = readAssetFields(); const proposal = { ...pendingAssetProposal, intent: "create_asset", targetAssetId: null, needsClarification: !asset.assetName || asset.quantity == null || !asset.location, asset, confirmationText: "기존 자산과 합치지 않고 새 자산으로 등록할까요?" }; showAssetProposal(proposal); return; }
+    if (event.target.closest("[data-asset-create-new]") && pendingAssetProposal) { const asset = readAssetFields(); const proposal = { ...pendingAssetProposal, intent: "create_asset", targetAssetId: null, needsClarification: !asset.assetName || asset.quantity == null || !asset.location, asset, confirmationText: "기존 자산과 합치지 않고 새 자산으로 등록할까요?" }; showAssetProposal(proposal, pendingAssetContext, pendingAssetContext?.latestUserText || ""); return; }
     const assetChoice = event.target.closest("[data-asset-choice]");
-    if (assetChoice && pendingAssetProposal) { const selected = pendingAssetProposal.choices[Number(assetChoice.dataset.assetChoice)]; const originalText = pendingAssetProposal.userText || aiInput.value.trim(); showMessage("선택한 자산을 확인하고 있습니다…"); try { const proposal = await interpretAsset(originalText, selected); proposal.userText = originalText; showAssetProposal(proposal); } catch (error) { console.error(error); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "대상을 확인하지 못했습니다. 저장된 내용은 없습니다."); } return; }
+    if (assetChoice && pendingAssetProposal) { const selected = pendingAssetProposal.choices[Number(assetChoice.dataset.assetChoice)]; const originalText = pendingAssetContext?.latestUserText || pendingAssetProposal.userText || aiInput.value.trim(); showTransientMessage("선택한 자산을 확인하고 있습니다…"); try { const proposal = await interpretAsset(originalText, selected, pendingAssetContext); proposal.userText = originalText; showAssetProposal(proposal, pendingAssetContext, originalText); } catch (error) { console.error(error); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "대상을 확인하지 못했습니다. 저장된 내용은 없습니다."); } return; }
     if (event.target.closest("[data-asset-approve]") && pendingAssetProposal) { const proposal = pendingAssetProposal; aiResult.innerHTML = `<p class="board-ai-status">승인된 자산 변경을 저장하고 있습니다…</p>`; try { await applyAssetProposal(proposal); } catch (error) { console.error("board asset AI apply failed", { status: error.status, body: error.body, error }); aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(error.message || "자산 저장에 실패했습니다. 기존 데이터는 유지됩니다.")}</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; } return; }
     if (event.target.closest("[data-ai-cancel]")) { showMessage("변경을 취소했습니다."); return; }
     if (event.target.closest("[data-ai-edit]")) { aiInput.focus(); aiInput.select(); return; }

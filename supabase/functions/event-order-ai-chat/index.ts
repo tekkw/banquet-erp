@@ -97,6 +97,7 @@ Deno.serve(async (request) => {
         String(payload.userText ?? question ?? ""),
         payload.imageAttachment ?? null,
         payload.selection ?? null,
+        payload.previousContext ?? null,
       );
       return jsonResponse({ proposal });
     }
@@ -1272,7 +1273,7 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
   return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
 }
 
-async function interpretAssetIntake(userText: string, imageAttachment: Record<string, unknown> | null, selection: Record<string, unknown> | null) {
+async function interpretAssetIntake(userText: string, imageAttachment: Record<string, unknown> | null, selection: Record<string, unknown> | null, previousContext: Record<string, unknown> | null) {
   const cleanText = userText.trim();
   const imageUrl = String(imageAttachment?.publicUrl ?? "").trim();
   if (!cleanText && !imageUrl) throw new Error("자산 사진이나 설명을 입력해주세요.");
@@ -1282,6 +1283,11 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     "You parse Korean banquet asset intake requests. Return only one JSON object without markdown.",
     "Allowed intents are create_asset, increase_asset_quantity, update_asset_location, unsupported.",
     "This is a proposal only. Never write data and never claim that data was saved.",
+    "If previousContext exists, treat current userText as a follow-up answer to the existing asset intake unless the user explicitly starts a new asset request.",
+    "Merge newly supplied values into previousContext.accumulatedAsset and preserve previously known values.",
+    "Do not discard assetName, category, floor, location, description, targetAssetId, or image when the follow-up only supplies quantity or unit.",
+    "Only overwrite a previous value when the current user explicitly supplies a replacement.",
+    "Return providedFields as the asset field names explicitly supplied or changed in the current userText only. Allowed field names: assetName, category, quantity, unit, floor, location, description.",
     "Use an existing targetAssetId only when it exactly matches an ID in existingAssets. Never invent IDs.",
     "Do not merge similar items automatically. When a duplicate is plausible, include it in possibleMatches and ask the user to choose between adding quantity and creating a new asset.",
     "For a photo-only request, never infer quantity, floor, or location. Ask the user for quantity and storage location.",
@@ -1292,11 +1298,11 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     "update_asset_location requires targetAssetId and an explicitly stated floor or location. Put the extracted destination in asset.floor and asset.location, not only in confirmationText. Never infer a location from an image.",
     "Example: '멀티탭을 2층 창고 왼쪽 선반으로 옮겼어' must return asset.floor='2층' and asset.location='창고 왼쪽 선반'.",
     "Categories are limited to the supplied categories. Keep confirmationText short in Korean.",
-    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,newQuantity,asset,possibleMatches,confirmationText}.",
+    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,newQuantity,asset,providedFields,possibleMatches,confirmationText}.",
   ].join("\n");
   const inputContent: Array<Record<string, unknown>> = [{
     type: "input_text",
-    text: JSON.stringify({ userText: cleanText, selectedChoice: selection, categories, existingAssets: assets }),
+    text: JSON.stringify({ userText: cleanText, selectedChoice: selection, previousContext, categories, existingAssets: assets }),
   }];
   if (imageUrl) inputContent.push({ type: "input_image", image_url: imageUrl });
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -1310,7 +1316,11 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
   const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
   if (!parsed) throw new Error("AI asset intake JSON parsing failed.");
   const allowed = ["create_asset", "increase_asset_quantity", "update_asset_location"];
-  const intent = String(parsed.intent ?? "unsupported");
+  const previousProposal = previousContext?.previousProposal && typeof previousContext.previousProposal === "object" ? previousContext.previousProposal as Record<string, unknown> : {};
+  const previousAsset = previousContext?.accumulatedAsset && typeof previousContext.accumulatedAsset === "object" ? previousContext.accumulatedAsset as Record<string, unknown> : {};
+  const previousIntent = String(previousProposal.intent ?? "");
+  let intent = String(parsed.intent ?? "unsupported");
+  if (!allowed.includes(intent) && previousContext && allowed.includes(previousIntent)) intent = previousIntent;
   if (!allowed.includes(intent) && !cleanText && imageUrl) {
     const photoAsset = parsed.asset && typeof parsed.asset === "object" ? parsed.asset as Record<string, unknown> : {};
     return {
@@ -1327,16 +1337,27 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
   }
   if (!allowed.includes(intent)) return { intent: "unsupported", confidence: 0, needsClarification: false, question: "현재는 자산 등록, 수량 추가, 위치 변경만 지원합니다.", choices: [], asset: {}, possibleMatches: [], confirmationText: "" };
   const asset = parsed.asset && typeof parsed.asset === "object" ? parsed.asset as Record<string, unknown> : {};
+  const providedFields = new Set((Array.isArray(parsed.providedFields) ? parsed.providedFields : []).map(String));
+  if (/수량|\d+\s*(?:개|ea|box|박스|세트|대|병|롤|팩)/i.test(cleanText)) providedFields.add("quantity");
+  if (/단위|\d+\s*(?:개|ea|box|박스|세트|대|병|롤|팩)|(?:^|\s)(?:ea|box|개|박스|세트|대|병|롤|팩)(?:\s|$)/i.test(cleanText)) providedFields.add("unit");
+  if (/\d+\s*(?:층|f)(?:\s|$)/i.test(cleanText)) providedFields.add("floor");
+  if (/위치|창고|선반|보관/i.test(cleanText)) providedFields.add("location");
+  if (/품명|자산명|이름(?:은|을|를|:|=)/i.test(cleanText)) providedFields.add("assetName");
+  if (/소모품|서무도구|장비|기타\s*(?:분류|카테고리)/i.test(cleanText)) providedFields.add("category");
+  if (/설명|메모/i.test(cleanText)) providedFields.add("description");
+  const useCurrent = (field: string) => !previousContext || providedFields.has(field);
+  const currentText = (field: string) => useCurrent(field) ? String(asset[field] ?? "").trim() : "";
+  const currentNumber = (field: string) => useCurrent(field) ? toOptionalNumber(asset[field]) : null;
   const cleanAsset = {
-    assetName: String(asset.assetName ?? "").trim(),
-    category: categories.includes(String(asset.category ?? "")) ? String(asset.category) : "기타",
-    quantity: toOptionalNumber(asset.quantity),
-    unit: String(asset.unit ?? "").trim(),
-    floor: String(asset.floor ?? "").trim(),
-    location: String(asset.location ?? "").trim(),
-    description: String(asset.description ?? "").trim(),
+    assetName: currentText("assetName") || String(previousAsset.assetName ?? "").trim(),
+    category: useCurrent("category") && categories.includes(String(asset.category ?? "")) ? String(asset.category) : categories.includes(String(previousAsset.category ?? "")) ? String(previousAsset.category) : "기타",
+    quantity: currentNumber("quantity") ?? toOptionalNumber(previousAsset.quantity),
+    unit: currentText("unit") || String(previousAsset.unit ?? "").trim(),
+    floor: currentText("floor") || String(previousAsset.floor ?? "").trim(),
+    location: currentText("location") || String(previousAsset.location ?? "").trim(),
+    description: currentText("description") || String(previousAsset.description ?? "").trim(),
   };
-  const targetId = String(parsed.targetAssetId ?? "");
+  const targetId = String(parsed.targetAssetId ?? previousProposal.targetAssetId ?? "");
   const target = assets.find((row) => String(row.id) === targetId);
   if (target) {
     cleanAsset.assetName ||= String(target.asset_name ?? "");
@@ -1376,6 +1397,7 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     addQuantity: toOptionalNumber(parsed.addQuantity),
     newQuantity: target && intent === "increase_asset_quantity" ? Number(target.quantity ?? 0) + Number(parsed.addQuantity ?? 0) : toOptionalNumber(parsed.newQuantity),
     asset: cleanAsset,
+    providedFields: [...providedFields],
     possibleMatches,
     confirmationText: String(parsed.confirmationText ?? "이 내용으로 반영할까요?"),
   };

@@ -17,6 +17,17 @@ assert(edge.includes('["create_asset", "increase_asset_quantity", "update_asset_
 assert(edge.includes("assets.find((row) => String(row.id) === targetId)"));
 assert(edge.includes("Never infer a location from an image"));
 
+// Clarification replies keep accumulated asset data and the uploaded image.
+assert(page.includes("pendingAssetContext"));
+assert(page.includes("previousContext"));
+assert(page.includes("followupContext || explicitNewAsset || selectedAssetImageFile"));
+assert(page.includes("현재 확인된 정보"));
+assert(page.includes("startsNewAssetRequest"));
+assert(edge.includes("If previousContext exists"));
+assert(edge.includes("previousContext.accumulatedAsset"));
+assert(edge.includes("providedFields"));
+assert(edge.includes('previousAsset.assetName'));
+
 // C: no DB write happens until explicit approval.
 assert(page.includes('closest("[data-asset-approve]")'));
 assert(page.indexOf("await applyAssetProposal(proposal)") > page.indexOf('closest("[data-asset-approve]")'));
