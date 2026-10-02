@@ -92,6 +92,15 @@ Deno.serve(async (request) => {
       return jsonResponse(result);
     }
 
+    if (mode === "asset_intake") {
+      const proposal = await interpretAssetIntake(
+        String(payload.userText ?? question ?? ""),
+        payload.imageAttachment ?? null,
+        payload.selection ?? null,
+      );
+      return jsonResponse({ proposal });
+    }
+
     if (mode === "board_command") {
       const proposal = await interpretBoardCommand(String(question ?? ""), payload.boardContext ?? {}, payload.selection ?? null);
       return jsonResponse({ proposal });
@@ -1261,6 +1270,115 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
     return { intent, confidence: 0, needsClarification: true, question: "어느 행사를 변경할까요?", choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
   }
   return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
+}
+
+async function interpretAssetIntake(userText: string, imageAttachment: Record<string, unknown> | null, selection: Record<string, unknown> | null) {
+  const cleanText = userText.trim();
+  const imageUrl = String(imageAttachment?.publicUrl ?? "").trim();
+  if (!cleanText && !imageUrl) throw new Error("자산 사진이나 설명을 입력해주세요.");
+  const assets = await supabaseSelect("banquet_assets", "select=id,asset_name,floor,location,quantity,spec,image_url&order=asset_name.asc&limit=300") as Array<Record<string, unknown>>;
+  const categories = ["소모품", "서무도구", "장비", "기타"];
+  const systemPrompt = [
+    "You parse Korean banquet asset intake requests. Return only one JSON object without markdown.",
+    "Allowed intents are create_asset, increase_asset_quantity, update_asset_location, unsupported.",
+    "This is a proposal only. Never write data and never claim that data was saved.",
+    "Use an existing targetAssetId only when it exactly matches an ID in existingAssets. Never invent IDs.",
+    "Do not merge similar items automatically. When a duplicate is plausible, include it in possibleMatches and ask the user to choose between adding quantity and creating a new asset.",
+    "For a photo-only request, never infer quantity, floor, or location. Ask the user for quantity and storage location.",
+    "If the request is ambiguous, confidence is below 0.7, or a required value is missing, set needsClarification=true with a short Korean question and choices when useful.",
+    "create_asset asset fields: assetName, category, quantity, unit, floor, location, description.",
+    "increase_asset_quantity requires targetAssetId and positive addQuantity. Return currentQuantity and newQuantity.",
+    "For increase_asset_quantity and update_asset_location, copy the matched existing asset name and known fields into asset, then replace only explicitly changed fields.",
+    "update_asset_location requires targetAssetId and an explicitly stated floor or location. Put the extracted destination in asset.floor and asset.location, not only in confirmationText. Never infer a location from an image.",
+    "Example: '멀티탭을 2층 창고 왼쪽 선반으로 옮겼어' must return asset.floor='2층' and asset.location='창고 왼쪽 선반'.",
+    "Categories are limited to the supplied categories. Keep confirmationText short in Korean.",
+    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,newQuantity,asset,possibleMatches,confirmationText}.",
+  ].join("\n");
+  const inputContent: Array<Record<string, unknown>> = [{
+    type: "input_text",
+    text: JSON.stringify({ userText: cleanText, selectedChoice: selection, categories, existingAssets: assets }),
+  }];
+  if (imageUrl) inputContent.push({ type: "input_image", image_url: imageUrl });
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: inputContent }] }),
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message || "OpenAI asset intake request failed");
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
+  const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!parsed) throw new Error("AI asset intake JSON parsing failed.");
+  const allowed = ["create_asset", "increase_asset_quantity", "update_asset_location"];
+  const intent = String(parsed.intent ?? "unsupported");
+  if (!allowed.includes(intent) && !cleanText && imageUrl) {
+    const photoAsset = parsed.asset && typeof parsed.asset === "object" ? parsed.asset as Record<string, unknown> : {};
+    return {
+      intent: "create_asset",
+      confidence: Math.min(0.69, Math.max(0, Number(parsed.confidence) || 0)),
+      needsClarification: true,
+      question: "사진 속 자산의 이름, 수량, 단위와 보관 위치를 알려주세요.",
+      choices: [],
+      targetAssetId: null,
+      asset: { assetName: String(photoAsset.assetName ?? "").trim(), category: categories.includes(String(photoAsset.category ?? "")) ? String(photoAsset.category) : "기타", quantity: null, unit: "", floor: "", location: "", description: String(photoAsset.description ?? "").trim() },
+      possibleMatches: [],
+      confirmationText: "",
+    };
+  }
+  if (!allowed.includes(intent)) return { intent: "unsupported", confidence: 0, needsClarification: false, question: "현재는 자산 등록, 수량 추가, 위치 변경만 지원합니다.", choices: [], asset: {}, possibleMatches: [], confirmationText: "" };
+  const asset = parsed.asset && typeof parsed.asset === "object" ? parsed.asset as Record<string, unknown> : {};
+  const cleanAsset = {
+    assetName: String(asset.assetName ?? "").trim(),
+    category: categories.includes(String(asset.category ?? "")) ? String(asset.category) : "기타",
+    quantity: toOptionalNumber(asset.quantity),
+    unit: String(asset.unit ?? "").trim(),
+    floor: String(asset.floor ?? "").trim(),
+    location: String(asset.location ?? "").trim(),
+    description: String(asset.description ?? "").trim(),
+  };
+  const targetId = String(parsed.targetAssetId ?? "");
+  const target = assets.find((row) => String(row.id) === targetId);
+  if (target) {
+    cleanAsset.assetName ||= String(target.asset_name ?? "");
+    cleanAsset.quantity ??= toOptionalNumber(target.quantity);
+    if (intent === "increase_asset_quantity") {
+      cleanAsset.floor ||= String(target.floor ?? "");
+      cleanAsset.location ||= String(target.location ?? "");
+    }
+  }
+  const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
+  let needsClarification = Boolean(parsed.needsClarification) || confidence < 0.7;
+  if (intent === "create_asset" && (!cleanAsset.assetName || cleanAsset.quantity == null || !cleanAsset.location)) needsClarification = true;
+  if (intent === "increase_asset_quantity" && (!target || !Number.isFinite(Number(parsed.addQuantity)) || Number(parsed.addQuantity) <= 0)) needsClarification = true;
+  if (intent === "update_asset_location" && (!target || (!cleanAsset.floor && !cleanAsset.location))) needsClarification = true;
+  if (!cleanText && imageUrl && (cleanAsset.quantity == null || !cleanAsset.location)) needsClarification = true;
+  const possibleMatches = (Array.isArray(parsed.possibleMatches) ? parsed.possibleMatches : []).map((item) => {
+    const value = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    const row = assets.find((candidate) => String(candidate.id) === String(value.id ?? value.assetId));
+    return row ? { id: row.id, assetName: row.asset_name, quantity: row.quantity, floor: row.floor, location: row.location, label: `${row.asset_name} · ${row.quantity ?? 0} · ${row.floor || "층 미입력"} ${row.location || "위치 미입력"}` } : null;
+  }).filter(Boolean).slice(0, 8);
+  let choices = (Array.isArray(parsed.choices) ? parsed.choices : []).map((choice) => {
+    const value = choice && typeof choice === "object" ? choice as Record<string, unknown> : {};
+    const choiceTarget = assets.find((row) => String(row.id) === String(value.targetAssetId ?? value.id));
+    return { label: String(value.label ?? choiceTarget?.asset_name ?? "선택"), targetAssetId: choiceTarget?.id ?? null, action: String(value.action ?? "") };
+  }).filter((choice) => choice.targetAssetId || choice.action === "create_asset").slice(0, 8);
+  if (!choices.length && possibleMatches.length) choices = [...(possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에 수량 추가`, targetAssetId: match.id, action: "increase_asset_quantity" })), { label: "기존 자산과 별도로 새로 등록", targetAssetId: null, action: "create_asset" }];
+  if ((intent === "increase_asset_quantity" || intent === "update_asset_location") && !target && !needsClarification) needsClarification = true;
+  return {
+    ...parsed,
+    intent,
+    confidence,
+    needsClarification,
+    question: String(parsed.question ?? (needsClarification ? "수량과 보관 위치를 알려주세요." : "")),
+    choices,
+    targetAssetId: target?.id ?? null,
+    currentQuantity: target ? Number(target.quantity ?? 0) : toOptionalNumber(parsed.currentQuantity),
+    addQuantity: toOptionalNumber(parsed.addQuantity),
+    newQuantity: target && intent === "increase_asset_quantity" ? Number(target.quantity ?? 0) + Number(parsed.addQuantity ?? 0) : toOptionalNumber(parsed.newQuantity),
+    asset: cleanAsset,
+    possibleMatches,
+    confirmationText: String(parsed.confirmationText ?? "이 내용으로 반영할까요?"),
+  };
 }
 
 async function askAiForInterviewKnowledge(interview: Record<string, unknown>) {

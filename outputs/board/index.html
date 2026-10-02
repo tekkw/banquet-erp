@@ -32,6 +32,8 @@
     <section id="boardAiPanel" class="board-ai-panel" aria-label="현장 AI 협업">
       <div id="boardAiResult" class="board-ai-result" aria-live="polite"></div>
       <form id="boardAiForm" class="board-ai-form">
+        <button id="boardAssetPhotoButton" class="board-ai-photo-button" type="button" aria-label="자산 사진 촬영 또는 선택">📷</button>
+        <input id="boardAssetPhotoInput" type="file" accept="image/*" capture="environment" hidden>
         <textarea id="boardAiInput" rows="1" maxlength="300" placeholder="오늘 변경사항을 입력하세요..." aria-label="현장 변경사항"></textarea>
         <button type="submit">보내기</button>
       </form>
@@ -41,6 +43,6 @@
   <script src="../src/aiKnowledgeRules.js"></script>
   <script src="../src/operationBoard.js?v=5-reminder-storage"></script>
   <script src="../src/pushNotifications.js?v=web-push-v2"></script>
-  <script src="../src/operationBoardPage.js?v=2"></script>
+  <script src="../src/operationBoardPage.js?v=3-asset-intake"></script>
 </body>
 </html>
