@@ -211,6 +211,9 @@
     const asset = { ...previousAsset };
     Object.entries(nextAsset).forEach(([key, value]) => { if (value !== "" && value !== null && value !== undefined) asset[key] = value; else if (!(key in asset)) asset[key] = value; });
     proposal.asset = asset;
+    const createIsComplete = proposal.intent === "create_asset" && String(asset.assetName || "").trim() && Number.isInteger(Number(asset.quantity)) && Number(asset.quantity) >= 0 && String(asset.location || "").trim();
+    const hasConflict = (Array.isArray(proposal.choices) && proposal.choices.length > 0) || (Array.isArray(proposal.possibleMatches) && proposal.possibleMatches.length > 0);
+    if (createIsComplete && Number(proposal.confidence) >= 0.7 && !hasConflict) proposal.needsClarification = false;
     return { originalUserText: previous?.originalUserText || userText, latestUserText: userText, latestProposal: proposal, asset, intent: proposal.intent, targetAssetId: proposal.targetAssetId || previous?.targetAssetId || null, imageAttachment: uploadedAssetImage || previous?.imageAttachment || null };
   }
   function currentAssetSummary(asset = {}) {
@@ -244,17 +247,33 @@
     return { assetName: read("assetName"), category: read("category"), quantity: quantityText === "" ? null : Number(quantityText), unit: read("unit"), floor: read("floor"), location: read("location"), description: read("description") };
   }
   function assetSpec(asset) { return [`분류: ${asset.category || "기타"}`, asset.unit ? `단위: ${asset.unit}` : "", asset.description || ""].filter(Boolean).join(" | "); }
+  async function insertBanquetAsset(payload) {
+    console.info("asset insert request", { assetName: payload.asset_name, quantity: payload.quantity, floor: payload.floor, location: payload.location, hasImage: Boolean(payload.image_url) });
+    let response;
+    try {
+      response = await fetch(`${constants.supabaseConfig.url}/rest/v1/banquet_assets`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(payload) });
+    } catch (cause) {
+      console.error("asset insert fail", { status: null, body: "network error", cause });
+      throw new Error("자산 저장 실패 (네트워크 오류)");
+    }
+    const text = await response.text();
+    if (!response.ok) { const error = new Error(`자산 저장 실패 (Supabase ${response.status})`); error.status = response.status; error.body = text; console.error("asset insert fail", { status: response.status, body: text }); throw error; }
+    const rows = text ? JSON.parse(text) : [];
+    console.info("asset insert success", { status: response.status, assetId: rows?.[0]?.id || null });
+    return rows;
+  }
   async function getAsset(id) { const rows = await request(`banquet_assets?id=eq.${encodeURIComponent(id)}&select=id,asset_name,floor,quantity,spec,location,image_url&limit=1`); return rows?.[0] || null; }
   async function tryPersistAssetAudit(proposal, userText, before, after, assetId) {
     try { await request("operation_board_items", { method: "POST", body: JSON.stringify({ board_date: board.getSelectedDate(), item_key: `board-asset-ai:${crypto.randomUUID()}`, item_kind: "manual", event_order_id: null, space_id: null, item_time: null, venue_name: after?.location || before?.location || "", title: proposal.intent, people: null, memo: userText, is_completed: true, metadata: { source: "board_asset_ai", action: proposal.intent, userText, before, after, assetId, imagePath: uploadedAssetImage?.storagePath || null, createdAt: new Date().toISOString() } }) }); return true; } catch (error) { console.error("board asset AI audit failed", { status: error.status, body: error.body, error }); return false; }
   }
-  async function applyAssetProposal(proposal) {
-    const asset = readAssetFields();
+  async function applyAssetProposal(proposal, approvedAsset = null) {
+    console.info("asset apply entered", { intent: proposal?.intent, hasProposal: Boolean(proposal) });
+    const asset = approvedAsset || readAssetFields();
     const userText = proposal.userText || aiInput.value.trim();
     let before = null; let after = null;
     if (proposal.intent === "create_asset") {
       if (!asset.assetName || !Number.isInteger(asset.quantity) || asset.quantity < 0 || !asset.location) throw new Error("자산명, 수량, 위치를 확인해주세요.");
-      const rows = await request("banquet_assets", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ asset_name: asset.assetName, floor: asset.floor || null, quantity: asset.quantity, spec: assetSpec(asset), location: asset.location, image_url: uploadedAssetImage?.publicUrl || null }) });
+      const rows = await insertBanquetAsset({ asset_name: asset.assetName, floor: asset.floor || null, quantity: asset.quantity, spec: assetSpec(asset), location: asset.location, image_url: uploadedAssetImage?.publicUrl || null });
       after = rows?.[0];
     } else if (proposal.intent === "increase_asset_quantity") {
       before = await getAsset(proposal.targetAssetId); if (!before) throw new Error("기존 자산을 찾지 못했습니다.");
@@ -267,7 +286,7 @@
       const payload = { floor: asset.floor || null, location: asset.location || null, ...(uploadedAssetImage?.publicUrl ? { image_url: uploadedAssetImage.publicUrl } : {}) };
       const rows = await request(`banquet_assets?id=eq.${encodeURIComponent(proposal.targetAssetId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(payload) }); after = rows?.[0];
     } else throw new Error("지원하지 않는 자산 작업입니다.");
-    if (!after?.id) throw new Error("자산 저장 결과를 확인하지 못했습니다.");
+    if (!after?.id) throw new Error(proposal.intent === "create_asset" ? "자산 저장 결과가 없습니다." : "자산 저장 결과를 확인하지 못했습니다.");
     const auditSaved = await tryPersistAssetAudit(proposal, userText, before, after, after.id);
     const actionLabel = proposal.intent === "create_asset" ? "자산을 등록했습니다." : proposal.intent === "increase_asset_quantity" ? `수량을 ${after.quantity}으로 반영했습니다.` : "보관 위치를 변경했습니다.";
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
@@ -385,7 +404,16 @@
     if (event.target.closest("[data-asset-create-new]") && pendingAssetProposal) { const asset = readAssetFields(); const proposal = { ...pendingAssetProposal, intent: "create_asset", targetAssetId: null, needsClarification: !asset.assetName || asset.quantity == null || !asset.location, asset, confirmationText: "기존 자산과 합치지 않고 새 자산으로 등록할까요?" }; showAssetProposal(proposal, pendingAssetContext, pendingAssetContext?.latestUserText || ""); return; }
     const assetChoice = event.target.closest("[data-asset-choice]");
     if (assetChoice && pendingAssetProposal) { const selected = pendingAssetProposal.choices[Number(assetChoice.dataset.assetChoice)]; const originalText = pendingAssetContext?.latestUserText || pendingAssetProposal.userText || aiInput.value.trim(); showTransientMessage("선택한 자산을 확인하고 있습니다…"); try { const proposal = await interpretAsset(originalText, selected, pendingAssetContext); proposal.userText = originalText; showAssetProposal(proposal, pendingAssetContext, originalText); } catch (error) { console.error(error); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "대상을 확인하지 못했습니다. 저장된 내용은 없습니다."); } return; }
-    if (event.target.closest("[data-asset-approve]") && pendingAssetProposal) { const proposal = pendingAssetProposal; aiResult.innerHTML = `<p class="board-ai-status">승인된 자산 변경을 저장하고 있습니다…</p>`; try { await applyAssetProposal(proposal); } catch (error) { console.error("board asset AI apply failed", { status: error.status, body: error.body, error }); aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(error.message || "자산 저장에 실패했습니다. 기존 데이터는 유지됩니다.")}</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; } return; }
+    if (event.target.closest("[data-asset-approve]") && pendingAssetProposal) {
+      const proposal = pendingAssetProposal; const context = pendingAssetContext; const approvedAsset = readAssetFields();
+      console.info("asset approve clicked", { intent: proposal.intent, pendingAssetProposal: proposal });
+      console.info("asset fields read", approvedAsset);
+      proposal.asset = { ...(proposal.asset || {}), ...approvedAsset };
+      showTransientMessage("승인된 자산 변경을 저장하고 있습니다…");
+      try { await applyAssetProposal(proposal, approvedAsset); }
+      catch (error) { console.error("board asset AI apply failed", { status: error.status, body: error.body, error }); showAssetProposal(proposal, context, context?.latestUserText || proposal.userText || ""); aiResult.insertAdjacentHTML("afterbegin", `<p class="board-ai-status">${escapeHtml(error.message || "자산 저장에 실패했습니다. 기존 데이터는 유지됩니다.")}</p>`); }
+      return;
+    }
     if (event.target.closest("[data-ai-cancel]")) { showMessage("변경을 취소했습니다."); return; }
     if (event.target.closest("[data-ai-edit]")) { aiInput.focus(); aiInput.select(); return; }
     const choice = event.target.closest("[data-ai-choice]");

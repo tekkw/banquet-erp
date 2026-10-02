@@ -30,9 +30,21 @@ assert(edge.includes('previousAsset.assetName'));
 
 // C: no DB write happens until explicit approval.
 assert(page.includes('closest("[data-asset-approve]")'));
-assert(page.indexOf("await applyAssetProposal(proposal)") > page.indexOf('closest("[data-asset-approve]")'));
+const approveStart = page.indexOf('closest("[data-asset-approve]")');
+const approveEnd = page.indexOf('closest("[data-ai-cancel]")', approveStart);
+const approveBlock = page.slice(approveStart, approveEnd);
+assert(approveBlock.indexOf("readAssetFields()") < approveBlock.indexOf("showTransientMessage"), "fields must be read before the proposal form is replaced");
+assert(approveBlock.includes("await applyAssetProposal(proposal, approvedAsset)"));
+assert(!approveBlock.includes("interpretAsset("), "approval must not call AI again");
 assert(page.includes('closest("[data-asset-cancel]")'));
 assert(page.includes("deleteUnlinkedAssetImage"));
+assert(page.includes('console.info("asset approve clicked"'));
+assert(page.includes('console.info("asset fields read"'));
+assert(page.includes('console.info("asset insert request"'));
+assert(page.includes('console.info("asset insert success"'));
+assert(page.includes('console.error("asset insert fail"'));
+assert(page.includes("proposal.needsClarification = false"));
+assert(page.includes('"자산 저장 결과가 없습니다."'));
 
 // D: actual banquet_assets columns are reused and audit failure is non-fatal.
 assert(page.includes("asset_name: asset.assetName"));
