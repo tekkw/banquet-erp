@@ -26,7 +26,7 @@
   async function registration() {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) throw new Error("이 브라우저는 Web Push를 지원하지 않습니다.");
     try {
-      return await navigator.serviceWorker.register("./push-sw.js", { scope: "./" });
+      return await navigator.serviceWorker.register("/push-sw.js", { scope: "/" });
     } catch (error) {
       throw stageError("서비스워커 등록 실패", error);
     }
