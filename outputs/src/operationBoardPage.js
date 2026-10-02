@@ -12,6 +12,12 @@
   const aiResult = document.getElementById("boardAiResult");
   const assetPhotoButton = document.getElementById("boardAssetPhotoButton");
   const assetPhotoInput = document.getElementById("boardAssetPhotoInput");
+  const visualCamera = document.getElementById("boardVisualCamera");
+  const visualVideo = document.getElementById("boardVisualVideo");
+  const visualCanvas = document.getElementById("boardVisualCanvas");
+  const visualCameraButton = document.getElementById("boardVisualCameraButton");
+  const visualCaptureButton = document.getElementById("boardVisualCaptureButton");
+  const visualCloseButton = document.getElementById("boardVisualCloseButton");
   let events = [];
   let pendingProposal = null;
   let pendingAssetProposal = null;
@@ -20,6 +26,8 @@
   let selectedAssetImageFile = null;
   let uploadedAssetImage = null;
   let selectedAssetPreviewUrl = "";
+  let visualStream = null;
+  let visualSession = null;
   let recentConversation = [];
 
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
@@ -76,6 +84,8 @@
   }
   function isAssetQueryRequest(text) { return /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황))/i.test(text); }
   function isAssetIntakeRequest(text) { return /(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|이동|변경|보관했|발견)/i.test(text); }
+  function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
+  function requestsDetailedReview(text) { return /(사진|이미지|장면).*(다시|자세히)|다시.*(봐|보|분석)/i.test(text); }
   function encodeStoragePath(path) { return String(path).split("/").map(encodeURIComponent).join("/"); }
   async function uploadSelectedAssetImage() {
     if (uploadedAssetImage) return uploadedAssetImage;
@@ -100,6 +110,56 @@
     if (selectedAssetPreviewUrl) URL.revokeObjectURL(selectedAssetPreviewUrl);
     selectedAssetPreviewUrl = "";
     if (keepStoredImage) uploadedAssetImage = null;
+  }
+  async function openVisualCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("이 브라우저에서는 카메라를 사용할 수 없습니다.");
+    if (visualStream) return;
+    visualStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    visualVideo.srcObject = visualStream; visualCamera.hidden = false; await visualVideo.play();
+  }
+  function closeVisualCamera() {
+    if (visualStream) visualStream.getTracks().forEach((track) => track.stop());
+    visualStream = null; visualVideo.srcObject = null; visualCamera.hidden = true;
+  }
+  function captureVisualFrame() {
+    const width = visualVideo.videoWidth; const height = visualVideo.videoHeight;
+    if (!width || !height) throw new Error("카메라 화면이 준비되지 않았습니다.");
+    const scale = Math.min(1, 1280 / Math.max(width, height));
+    visualCanvas.width = Math.max(1, Math.round(width * scale)); visualCanvas.height = Math.max(1, Math.round(height * scale));
+    visualCanvas.getContext("2d").drawImage(visualVideo, 0, 0, visualCanvas.width, visualCanvas.height);
+    return visualCanvas.toDataURL("image/jpeg", 0.78);
+  }
+  async function requestVisualQuery(userText, includeImage = false) {
+    if (!visualSession) throw new Error("먼저 카메라 화면을 캡처해주세요.");
+    const visualContext = { visualSummary: visualSession.visualSummary || null, recentConversation: visualSession.recentConversation.slice(-3) };
+    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "visual_query", userText, capturedImage: includeImage ? visualSession.imageDataUrl : null, visualContext, reanalyze: includeImage && !!visualSession.visualSummary }) });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.message || `시각 분석 실패 (${response.status})`);
+    visualSession.visualSummary = body.visualSummary || visualSession.visualSummary;
+    visualSession.recentConversation.push({ question: userText, answer: body.answer || "" });
+    visualSession.recentConversation = visualSession.recentConversation.slice(-3);
+    return body;
+  }
+  function showVisualResult(result) {
+    pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null;
+    const detected = Array.isArray(result.visualSummary?.detectedObjects) ? result.visualSummary.detectedObjects.slice(0, 5) : [];
+    const objects = detected.length ? `<p class="board-visual-objects">감지: ${detected.map((item) => `${escapeHtml(item.name)}${item.approximateCount == null ? "" : ` 약 ${escapeHtml(item.approximateCount)}개`}`).join(" · ")}</p>` : "";
+    const assetResult = result.assetResult; const assetCards = Array.isArray(assetResult?.assets) ? assetResult.assets.map((asset) => assetResultCard(asset, assetResult.queryType)).join("") : "";
+    aiResult.innerHTML = `<div class="board-visual-result"><span class="board-visual-current">현재 캡처 기준</span><div class="board-visual-answer">${escapeHtml(result.answer || "확인할 내용을 찾지 못했습니다.")}</div>${objects}${assetCards}<div class="board-ai-actions"><button type="button" data-visual-register-asset>이 사진 자산에 등록</button><button type="button" data-visual-clear>캡처 종료</button></div></div>`;
+  }
+  async function captureAndAnalyzeVisual() {
+    const imageDataUrl = captureVisualFrame();
+    visualSession = { id: crypto.randomUUID(), imageDataUrl, visualSummary: null, recentConversation: [] };
+    const text = aiInput.value.trim() || "이 장면에서 보이는 물품과 특이사항을 알려줘.";
+    showTransientMessage("현재 프레임 한 장을 AI가 확인하고 있습니다…");
+    const result = await requestVisualQuery(text, true); aiInput.value = ""; showVisualResult(result);
+  }
+  async function useVisualCaptureForAssetIntake() {
+    if (!visualSession?.imageDataUrl) return;
+    const blob = await (await fetch(visualSession.imageDataUrl)).blob();
+    selectedAssetImageFile = new File([blob], `visual-capture-${Date.now()}.jpg`, { type: "image/jpeg" });
+    selectedAssetPreviewUrl = visualSession.imageDataUrl; uploadedAssetImage = null; assetPhotoButton.dataset.selected = "true"; visualSession = null;
+    aiResult.innerHTML = `<p class="board-ai-status">캡처 사진을 자산 등록에 연결했습니다. 품명·수량·보관 위치를 입력해주세요.</p>`; aiInput.focus();
   }
   async function interpretAsset(userText, selection = null, context = null) {
     const imageAttachment = await uploadSelectedAssetImage();
@@ -274,6 +334,9 @@
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
 
+  visualCameraButton.addEventListener("click", async () => { try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
+  visualCloseButton.addEventListener("click", closeVisualCamera);
+  visualCaptureButton.addEventListener("click", async () => { visualCaptureButton.disabled = true; try { await captureAndAnalyzeVisual(); } catch (error) { console.error("visual capture failed", error); showMessage(error.message || "현재 화면을 분석하지 못했습니다."); } finally { visualCaptureButton.disabled = false; } });
   assetPhotoButton.addEventListener("click", () => assetPhotoInput.click());
   assetPhotoInput.addEventListener("change", () => {
     const file = assetPhotoInput.files?.[0] || null;
@@ -288,6 +351,12 @@
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
+    if (!followupContext && !selectedAssetImageFile && visualSession?.visualSummary && isVisualQueryRequest(text)) {
+      const includeImage = requestsDetailedReview(text);
+      showTransientMessage(includeImage ? "같은 캡처를 다시 자세히 확인하고 있습니다…" : "현재 캡처 요약을 기준으로 답변하고 있습니다…");
+      try { const result = await requestVisualQuery(text, includeImage); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("visual follow-up failed", error); showMessage(error.message || "시각 질문에 답하지 못했습니다."); }
+      return;
+    }
     if (!followupContext && !explicitNewAsset && !selectedAssetImageFile && isAssetQueryRequest(text)) {
       showTransientMessage("자산 정보를 조회하고 있습니다…");
       try { const result = await handleAssetQuery(text); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
@@ -303,6 +372,8 @@
   });
   aiInput.addEventListener("input", () => { aiInput.style.height = "auto"; aiInput.style.height = `${Math.min(aiInput.scrollHeight, 112)}px`; });
   aiResult.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-visual-register-asset]")) { try { await useVisualCaptureForAssetIntake(); } catch (error) { console.error(error); showMessage("캡처 사진을 자산 등록에 연결하지 못했습니다."); } return; }
+    if (event.target.closest("[data-visual-clear]")) { visualSession = null; closeVisualCamera(); aiInput.value = ""; showMessage("시각 AI 캡처를 종료했습니다."); return; }
     if (event.target.closest("[data-asset-query-close]")) { showMessage(""); aiResult.innerHTML = ""; return; }
     const queryChoice = event.target.closest("[data-asset-query-choice]");
     if (queryChoice && pendingAssetQuery) { const selected = pendingAssetQuery.result.choices[Number(queryChoice.dataset.assetQueryChoice)]; const text = pendingAssetQuery.userText; showTransientMessage("선택한 자산을 조회하고 있습니다…"); try { showAssetQueryResult(await handleAssetQuery(text, selected), text); } catch (error) { console.error(error); showMessage(error.message || "자산 조회에 실패했습니다."); } return; }
@@ -325,6 +396,7 @@
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
   document.getElementById("boardLoginForm").onsubmit = (event) => { event.preventDefault(); const id = document.getElementById("boardLoginId").value.trim(); const password = document.getElementById("boardLoginPassword").value; const account = constants.loginAccounts.find((item) => item.id === id && item.password === password); if (!account) { document.getElementById("boardLoginError").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; return; } localStorage.setItem(constants.authStorageKey, JSON.stringify({ id: account.id, role: account.role, label: account.label })); start(); };
   window.openStoredExcel = (path) => window.open(`${constants.supabaseConfig.url}/storage/v1/object/public/${constants.supabaseConfig.bucket}/${String(path).split("/").map(encodeURIComponent).join("/")}`, "_blank", "noopener");
+  window.addEventListener("beforeunload", closeVisualCamera);
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
 })();

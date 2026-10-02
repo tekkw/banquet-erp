@@ -107,6 +107,11 @@ Deno.serve(async (request) => {
       return jsonResponse({ result });
     }
 
+    if (mode === "visual_query") {
+      const result = await answerVisualQuery({ userText: String(payload.userText ?? question ?? ""), capturedImage: String(payload.capturedImage ?? ""), visualContext: payload.visualContext ?? {}, reanalyze: Boolean(payload.reanalyze) });
+      return jsonResponse(result);
+    }
+
     if (mode === "board_command") {
       const proposal = await interpretBoardCommand(String(question ?? ""), payload.boardContext ?? {}, payload.selection ?? null);
       return jsonResponse({ proposal });
@@ -1276,6 +1281,72 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
     return { intent, confidence: 0, needsClarification: true, question: "어느 행사를 변경할까요?", choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
   }
   return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
+}
+
+function normalizeVisualSummary(value: unknown) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const detectedObjects = (Array.isArray(source.detectedObjects) ? source.detectedObjects : []).slice(0, 12).map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return { name: String(row.name ?? "").trim(), approximateCount: toOptionalNumber(row.approximateCount), confidence: Math.max(0, Math.min(1, Number(row.confidence) || 0)) };
+  }).filter((item) => item.name);
+  return { summary: String(source.summary ?? "").trim(), detectedObjects, observations: (Array.isArray(source.observations) ? source.observations : []).map(String).slice(0, 10), uncertainty: (Array.isArray(source.uncertainty) ? source.uncertainty : []).map(String).slice(0, 10) };
+}
+
+async function answerVisualQuery(input: { userText: string; capturedImage: string; visualContext: Record<string, unknown>; reanalyze: boolean }) {
+  const userText = input.userText.trim() || "이 장면에서 보이는 물품과 특이사항을 알려줘.";
+  const image = input.capturedImage.trim();
+  const hasImage = /^data:image\/(?:jpeg|jpg|webp|png);base64,/i.test(image);
+  if (image && (!hasImage || image.length > 6_000_000)) throw new Error("캡처 이미지 형식 또는 크기가 올바르지 않습니다.");
+  const previousSummary = normalizeVisualSummary(input.visualContext?.visualSummary);
+  const hasPreviousSummary = Boolean(previousSummary.summary || previousSummary.detectedObjects.length || previousSummary.observations.length);
+  if (!hasImage && !hasPreviousSummary) throw new Error("분석할 캡처 이미지가 없습니다.");
+  const recentConversation = (Array.isArray(input.visualContext?.recentConversation) ? input.visualContext.recentConversation : []).slice(-3).map((item) => {
+    const row = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return { question: String(row.question ?? "").slice(0, 300), answer: String(row.answer ?? "").slice(0, 800) };
+  });
+  let visualSummary = previousSummary;
+  let answer = "";
+  if (hasImage) {
+    const systemPrompt = [
+      "Analyze one manually captured frame from a Korean banquet operations site. Return only JSON.",
+      "Never claim an exact count, product model, storage location, or asset registration status from appearance alone.",
+      "Counts from the image must be approximate and uncertainty must be stated when visibility is limited.",
+      "Do not infer facts outside the frame. Keep the Korean answer short and practical.",
+      "Shape: {answer,visualSummary:{summary,detectedObjects:[{name,approximateCount,confidence}],observations:[],uncertainty:[]}}.",
+    ].join("\n");
+    const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: [{ type: "input_text", text: JSON.stringify({ userText, previousVisualSummary: input.reanalyze ? previousSummary : null }) }, { type: "input_image", image_url: image }] }] }) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error?.message || "OpenAI visual analysis failed");
+    const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text;
+    const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+    if (!parsed) throw new Error("AI visual analysis JSON parsing failed.");
+    visualSummary = normalizeVisualSummary(parsed.visualSummary);
+    answer = String(parsed.answer ?? visualSummary.summary ?? "").trim();
+  }
+  const asksAssetRegistration = /(자산|비품).*(등록|있|찾)|등록.*(?:돼|되|여부)/i.test(userText);
+  let assetResult: Record<string, unknown> | null = null;
+  if (asksAssetRegistration) {
+    const names = visualSummary.detectedObjects.filter((item) => item.confidence >= 0.55).map((item) => item.name).slice(0, 4);
+    if (names.length) {
+      assetResult = await queryBanquetAssets(`${names.join(" ")} 자산 검색`, null, 0);
+      answer = Boolean((assetResult.assets as unknown[])?.length) || assetResult.needsClarification ? `사진 속 후보를 실제 자산 목록에서 확인했습니다. ${assetResult.answer || "대상을 선택해주세요."}` : "사진 속 물품 후보와 일치하는 자산을 등록된 자산에서 찾지 못했습니다.";
+    } else answer = "사진에서 자산 후보를 확실히 식별하지 못했습니다. 사진만으로 등록 여부를 단정할 수 없습니다.";
+  } else if (!hasImage) {
+    const systemPrompt = [
+      "Answer a follow-up question using only the supplied cached visualSummary and recent conversation.",
+      "There is no image in this request. Never claim you re-examined pixels.",
+      "Do not invent exact counts, model names, locations, or facts absent from visualSummary. Keep the Korean answer short.",
+      "Return only JSON {answer}.",
+    ].join("\n");
+    const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ userText, visualSummary, recentConversation }) }] }) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error?.message || "OpenAI visual follow-up failed");
+    const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text;
+    const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+    if (!parsed) throw new Error("AI visual follow-up JSON parsing failed.");
+    answer = String(parsed.answer ?? "").trim();
+  }
+  return { answer: answer || visualSummary.summary || "사진에서 확실히 확인되는 내용을 찾지 못했습니다.", visualSummary, assetResult, usedImage: hasImage };
 }
 
 type AssetRow = { id: string; asset_name: string; floor: string | null; quantity: number | null; spec: string | null; location: string | null; image_url: string | null };

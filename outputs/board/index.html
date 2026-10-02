@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=3">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=2">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=3-visual-ai">
 </head>
 <body class="operation-board-page">
   <section id="boardLogin" class="board-login" hidden>
@@ -30,10 +30,19 @@
     <p id="boardSyncStatus" class="board-sync-status">저장된 일정 확인 중</p>
     <section id="todayOperationBoard" class="operation-board" aria-label="운영보드"></section>
     <section id="boardAiPanel" class="board-ai-panel" aria-label="현장 AI 협업">
+      <div id="boardVisualCamera" class="board-visual-camera" hidden>
+        <video id="boardVisualVideo" autoplay playsinline muted></video>
+        <canvas id="boardVisualCanvas" hidden></canvas>
+        <div class="board-visual-camera-actions">
+          <button id="boardVisualCaptureButton" type="button">AI에게 보여주기</button>
+          <button id="boardVisualCloseButton" type="button">카메라 닫기</button>
+        </div>
+      </div>
       <div id="boardAiResult" class="board-ai-result" aria-live="polite"></div>
       <form id="boardAiForm" class="board-ai-form">
-        <button id="boardAssetPhotoButton" class="board-ai-photo-button" type="button" aria-label="자산 사진 촬영 또는 선택">📷</button>
+        <button id="boardAssetPhotoButton" class="board-ai-photo-button" type="button" aria-label="자산 사진 선택">🖼️</button>
         <input id="boardAssetPhotoInput" type="file" accept="image/*" capture="environment" hidden>
+        <button id="boardVisualCameraButton" class="board-visual-camera-button" type="button">📷 카메라</button>
         <textarea id="boardAiInput" rows="1" maxlength="300" placeholder="오늘 변경사항을 입력하세요..." aria-label="현장 변경사항"></textarea>
         <button type="submit">보내기</button>
       </form>
@@ -43,6 +52,6 @@
   <script src="../src/aiKnowledgeRules.js"></script>
   <script src="../src/operationBoard.js?v=5-reminder-storage"></script>
   <script src="../src/pushNotifications.js?v=web-push-v2"></script>
-  <script src="../src/operationBoardPage.js?v=3-asset-intake"></script>
+  <script src="../src/operationBoardPage.js?v=4-visual-ai"></script>
 </body>
 </html>
