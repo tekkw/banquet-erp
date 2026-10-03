@@ -20,7 +20,12 @@
   const visualCloseButton = document.getElementById("boardVisualCloseButton");
   const speechButton = document.getElementById("boardSpeechButton");
   const speechStatus = document.getElementById("boardSpeechStatus");
+  const voiceReplyButton = document.getElementById("boardVoiceReplyButton");
+  const voiceReplyStatus = document.getElementById("boardVoiceReplyStatus");
   const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const voiceReplyStorageKey = "banquetBoard.voiceReplyEnabled";
+  const speechSynthesisApi = window.speechSynthesis;
+  const SpeechSynthesisUtteranceApi = window.SpeechSynthesisUtterance;
   let events = [];
   let pendingProposal = null;
   let pendingAssetProposal = null;
@@ -37,6 +42,8 @@
   let speechBaseText = "";
   let speechFinalText = "";
   let speechErrorMessage = "";
+  let voiceReplyEnabled = false;
+  let lastSpokenText = "";
 
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
   function storedUser() { try { const value = JSON.parse(localStorage.getItem(constants.authStorageKey) || "null"); return constants.loginAccounts.find((account) => account.id === value?.id && account.role === value?.role) || null; } catch { return null; } }
@@ -131,6 +138,33 @@
     if (visualStream) visualStream.getTracks().forEach((track) => track.stop());
     visualStream = null; visualVideo.srcObject = null; visualCamera.hidden = true;
   }
+  function storedVoiceReplyEnabled() { try { return localStorage.getItem(voiceReplyStorageKey) === "true"; } catch { return false; } }
+  function updateVoiceReplyButton() { voiceReplyButton.textContent = voiceReplyEnabled ? "🔊 음성 답변 ON" : "🔊 음성 답변 OFF"; voiceReplyButton.setAttribute("aria-pressed", String(voiceReplyEnabled)); }
+  function cancelBoardSpeech() { if (speechSynthesisApi) speechSynthesisApi.cancel(); }
+  function conciseBoardReply(text) {
+    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    if (clean.length <= 220) return clean;
+    const firstSentence = clean.match(/^.{1,180}?(?:[.!?]|다\.|요\.|니다\.)/)?.[0] || `${clean.slice(0, 180).trim()}…`;
+    return `${firstSentence} 자세한 내용은 화면을 확인해주세요.`;
+  }
+  function speakBoardReply(text) {
+    const spokenText = conciseBoardReply(text);
+    if (!voiceReplyEnabled || !speechSynthesisApi || !SpeechSynthesisUtteranceApi || !spokenText || spokenText === lastSpokenText) return;
+    try {
+      speechSynthesisApi.cancel();
+      const utterance = new SpeechSynthesisUtteranceApi(spokenText); utterance.lang = "ko-KR"; utterance.rate = 1;
+      const koreanVoice = speechSynthesisApi.getVoices().find((voice) => String(voice.lang || "").toLowerCase().startsWith("ko"));
+      if (koreanVoice) utterance.voice = koreanVoice;
+      utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board voice reply failed", event.error); };
+      lastSpokenText = spokenText; speechSynthesisApi.speak(utterance);
+    } catch (error) { console.warn("board voice reply failed", error); }
+  }
+  function setVoiceReplyEnabled(enabled) {
+    voiceReplyEnabled = Boolean(enabled); lastSpokenText = ""; updateVoiceReplyButton();
+    try { localStorage.setItem(voiceReplyStorageKey, String(voiceReplyEnabled)); } catch { /* storage unavailable */ }
+    if (!voiceReplyEnabled) cancelBoardSpeech();
+  }
+  function toggleVoiceReply() { setVoiceReplyEnabled(!voiceReplyEnabled); }
   function setSpeechStatus(message = "", isError = false) {
     speechStatus.textContent = message; speechStatus.hidden = !message; speechStatus.dataset.error = String(isError);
   }
@@ -167,6 +201,7 @@
   }
   function toggleSpeechRecognition() {
     if (speechListening) { setSpeechButtonState("processing"); setSpeechStatus("텍스트 변환 중..."); speechRecognition.stop(); return; }
+    cancelBoardSpeech();
     const recognition = ensureSpeechRecognition();
     if (!recognition) { setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); return; }
     speechBaseText = aiInput.value.trim(); speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
@@ -196,7 +231,9 @@
     const detected = Array.isArray(result.visualSummary?.detectedObjects) ? result.visualSummary.detectedObjects.slice(0, 5) : [];
     const objects = detected.length ? `<p class="board-visual-objects">감지: ${detected.map((item) => `${escapeHtml(item.name)}${item.approximateCount == null ? "" : ` 약 ${escapeHtml(item.approximateCount)}개`}`).join(" · ")}</p>` : "";
     const assetResult = result.assetResult; const assetCards = Array.isArray(assetResult?.assets) ? assetResult.assets.map((asset) => assetResultCard(asset, assetResult.queryType)).join("") : "";
-    aiResult.innerHTML = `<div class="board-visual-result"><span class="board-visual-current">현재 캡처 기준</span><div class="board-visual-answer">${escapeHtml(result.answer || "확인할 내용을 찾지 못했습니다.")}</div>${objects}${assetCards}<div class="board-ai-actions"><button type="button" data-visual-register-asset>이 사진 자산에 등록</button><button type="button" data-visual-clear>캡처 종료</button></div></div>`;
+    const finalAnswer = result.answer || "확인할 내용을 찾지 못했습니다.";
+    aiResult.innerHTML = `<div class="board-visual-result"><span class="board-visual-current">현재 캡처 기준</span><div class="board-visual-answer">${escapeHtml(finalAnswer)}</div>${objects}${assetCards}<div class="board-ai-actions"><button type="button" data-visual-register-asset>이 사진 자산에 등록</button><button type="button" data-visual-clear>캡처 종료</button></div></div>`;
+    speakBoardReply(finalAnswer);
   }
   async function captureAndAnalyzeVisual() {
     const imageDataUrl = captureVisualFrame();
@@ -252,7 +289,10 @@
     }
     const assets = Array.isArray(result.assets) ? result.assets : [];
     const movements = Array.isArray(result.movements) ? result.movements.slice(0, 10) : [];
-    aiResult.innerHTML = `<div class="board-asset-query-result"><p class="board-ai-status">${escapeHtml(result.answer || "등록된 자산에서 찾지 못했습니다.")}</p>${movements.map(movementResultCard).join("")}${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
+    const finalAnswer = result.answer || "등록된 자산에서 찾지 못했습니다.";
+    aiResult.innerHTML = `<div class="board-asset-query-result"><p class="board-ai-status">${escapeHtml(finalAnswer)}</p>${movements.map(movementResultCard).join("")}${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
+    const needsScreenDetail = movements.length > 0 || result.queryType === "list_assets_by_location";
+    speakBoardReply(needsScreenDetail ? `${finalAnswer} 자세한 내용은 화면을 확인해주세요.` : finalAnswer);
   }
   function beginAssetUpdateFromQuery(asset, action) {
     const intent = action === "increase" ? "increase_asset_quantity" : action === "decrease" ? "decrease_asset_quantity" : "update_asset_location";
@@ -393,9 +433,9 @@
     const auditSaved = await tryPersistAssetAudit(proposal, userText, before, after, after.id);
     const actionLabel = proposal.intent === "create_asset" ? "자산을 등록했습니다." : proposal.intent === "increase_asset_quantity" ? `수량을 ${after.quantity}으로 반영했습니다.` : proposal.intent === "decrease_asset_quantity" ? `${asset.assetName} ${proposal.decreaseQuantity}${asset.unit || "개"} 사용 처리했습니다.\n현재 재고: ${after.quantity}${asset.unit || "개"}` : "보관 위치를 변경했습니다.";
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
-    showMessage(auditSaved ? actionLabel : proposal.intent === "update_asset_location" ? "위치는 변경했지만 이동 기록 저장은 실패했습니다." : `${actionLabel} 변경 기록 저장은 실패했습니다.`);
+    showMessage(auditSaved ? actionLabel : proposal.intent === "update_asset_location" ? "위치는 변경했지만 이동 기록 저장은 실패했습니다." : `${actionLabel} 변경 기록 저장은 실패했습니다.`, true);
   }
-  function showMessage(message) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
+  function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak) speakBoardReply(message); }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
@@ -452,10 +492,12 @@
     const refreshResult = await (refresh)();
     if (!refreshResult?.ok) console.error("board AI refresh failed", { status: refreshResult?.error?.status, body: refreshResult?.error?.body, error: refreshResult?.error });
     const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
-    showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success); aiInput.value = "";
+    showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success, true); aiInput.value = "";
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
 
+  if (!speechSynthesisApi || !SpeechSynthesisUtteranceApi) { voiceReplyButton.disabled = true; voiceReplyButton.textContent = "🔇 음성 답변 미지원"; voiceReplyButton.title = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.textContent = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.hidden = false; }
+  else { voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply); }
   visualCameraButton.addEventListener("click", async () => { try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
   if (!SpeechRecognitionApi) { speechButton.disabled = true; speechButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다."; setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); }
   else speechButton.addEventListener("click", toggleSpeechRecognition);
@@ -533,7 +575,7 @@
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
   document.getElementById("boardLoginForm").onsubmit = (event) => { event.preventDefault(); const id = document.getElementById("boardLoginId").value.trim(); const password = document.getElementById("boardLoginPassword").value; const account = constants.loginAccounts.find((item) => item.id === id && item.password === password); if (!account) { document.getElementById("boardLoginError").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; return; } localStorage.setItem(constants.authStorageKey, JSON.stringify({ id: account.id, role: account.role, label: account.label })); start(); };
   window.openStoredExcel = (path) => window.open(`${constants.supabaseConfig.url}/storage/v1/object/public/${constants.supabaseConfig.bucket}/${String(path).split("/").map(encodeURIComponent).join("/")}`, "_blank", "noopener");
-  window.addEventListener("beforeunload", () => { closeVisualCamera(); if (speechRecognition && speechListening) speechRecognition.abort(); });
+  window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
 })();

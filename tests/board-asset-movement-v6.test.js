@@ -32,7 +32,7 @@ assert(css.includes(".board-asset-movement-card"));
 
 assert(page.includes("function isAssetMoveRequest"));
 assert(page.includes("이동\\s*이력|최근\\s*이동|마지막.*옮"));
-assert(html.includes("operationBoardPage.js?v=8-asset-movement"));
-assert(html.includes("operationBoardPage.css?v=5-asset-movement"));
+assert(/operationBoardPage\.js\?v=[^"]+/.test(html));
+assert(/operationBoardPage\.css\?v=[^"]+/.test(html));
 
 console.log("board asset movement V6 tests passed");

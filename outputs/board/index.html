@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=3">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=5-asset-movement">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=6-voice-reply">
 </head>
 <body class="operation-board-page">
   <section id="boardLogin" class="board-login" hidden>
@@ -30,6 +30,10 @@
     <p id="boardSyncStatus" class="board-sync-status">저장된 일정 확인 중</p>
     <section id="todayOperationBoard" class="operation-board" aria-label="운영보드"></section>
     <section id="boardAiPanel" class="board-ai-panel" aria-label="현장 AI 협업">
+      <div class="board-ai-voice-settings">
+        <button id="boardVoiceReplyButton" type="button" aria-pressed="false">🔊 음성 답변 OFF</button>
+        <span id="boardVoiceReplyStatus" aria-live="polite" hidden></span>
+      </div>
       <div id="boardVisualCamera" class="board-visual-camera" hidden>
         <video id="boardVisualVideo" autoplay playsinline muted></video>
         <canvas id="boardVisualCanvas" hidden></canvas>
@@ -54,6 +58,6 @@
   <script src="../src/aiKnowledgeRules.js"></script>
   <script src="../src/operationBoard.js?v=5-reminder-storage"></script>
   <script src="../src/pushNotifications.js?v=web-push-v2"></script>
-  <script src="../src/operationBoardPage.js?v=8-asset-movement"></script>
+  <script src="../src/operationBoardPage.js?v=9-voice-reply"></script>
 </body>
 </html>
