@@ -1447,7 +1447,7 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
   const categories = ["소모품", "서무도구", "장비", "기타"];
   const systemPrompt = [
     "You parse Korean banquet asset intake requests. Return only one JSON object without markdown.",
-    "Allowed intents are create_asset, increase_asset_quantity, update_asset_location, unsupported.",
+    "Allowed intents are create_asset, increase_asset_quantity, decrease_asset_quantity, update_asset_location, unsupported.",
     "This is a proposal only. Never write data and never claim that data was saved.",
     "If previousContext exists, treat current userText as a follow-up answer to the existing asset intake unless the user explicitly starts a new asset request.",
     "Merge newly supplied values into previousContext.accumulatedAsset and preserve previously known values.",
@@ -1460,11 +1460,15 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     "If the request is ambiguous, confidence is below 0.7, or a required value is missing, set needsClarification=true with a short Korean question and choices when useful.",
     "create_asset asset fields: assetName, category, quantity, unit, floor, location, description.",
     "increase_asset_quantity requires targetAssetId and positive addQuantity. Return currentQuantity and newQuantity.",
-    "For increase_asset_quantity and update_asset_location, copy the matched existing asset name and known fields into asset, then replace only explicitly changed fields.",
+    "decrease_asset_quantity is for used, consumed, taken out, or outgoing stock. It requires targetAssetId and positive decreaseQuantity. Return currentQuantity, decreaseQuantity, requestedUnit, and newQuantity.",
+    "For decrease_asset_quantity, never allow a negative newQuantity and never silently clamp it to zero. If requested quantity exceeds stock, ask for clarification.",
+    "If the requested unit differs from the matched asset unit in spec, ask how many of the stored unit should be used. Never convert units.",
+    "When selectedChoice.action is use_all, set decreaseQuantity to the selected target's full current quantity. When it is reenter, ask for a new quantity.",
+    "For increase_asset_quantity, decrease_asset_quantity, and update_asset_location, copy the matched existing asset name and known fields into asset, then replace only explicitly changed fields.",
     "update_asset_location requires targetAssetId and an explicitly stated floor or location. Put the extracted destination in asset.floor and asset.location, not only in confirmationText. Never infer a location from an image.",
     "Example: '멀티탭을 2층 창고 왼쪽 선반으로 옮겼어' must return asset.floor='2층' and asset.location='창고 왼쪽 선반'.",
     "Categories are limited to the supplied categories. Keep confirmationText short in Korean.",
-    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,newQuantity,asset,providedFields,possibleMatches,confirmationText}.",
+    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,decreaseQuantity,requestedUnit,newQuantity,asset,providedFields,possibleMatches,confirmationText}.",
   ].join("\n");
   const inputContent: Array<Record<string, unknown>> = [{
     type: "input_text",
@@ -1481,7 +1485,7 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
   const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
   const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
   if (!parsed) throw new Error("AI asset intake JSON parsing failed.");
-  const allowed = ["create_asset", "increase_asset_quantity", "update_asset_location"];
+  const allowed = ["create_asset", "increase_asset_quantity", "decrease_asset_quantity", "update_asset_location"];
   const previousProposal = previousContext?.previousProposal && typeof previousContext.previousProposal === "object" ? previousContext.previousProposal as Record<string, unknown> : {};
   const previousAsset = previousContext?.accumulatedAsset && typeof previousContext.accumulatedAsset === "object" ? previousContext.accumulatedAsset as Record<string, unknown> : {};
   const previousIntent = String(previousProposal.intent ?? "");
@@ -1523,20 +1527,31 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     location: currentText("location") || String(previousAsset.location ?? "").trim(),
     description: currentText("description") || String(previousAsset.description ?? "").trim(),
   };
-  const targetId = String(parsed.targetAssetId ?? previousProposal.targetAssetId ?? "");
+  const targetId = String(selection?.targetAssetId ?? parsed.targetAssetId ?? previousProposal.targetAssetId ?? "");
   const target = assets.find((row) => String(row.id) === targetId);
   if (target) {
     cleanAsset.assetName ||= String(target.asset_name ?? "");
     cleanAsset.quantity ??= toOptionalNumber(target.quantity);
-    if (intent === "increase_asset_quantity") {
+    if (intent === "increase_asset_quantity" || intent === "decrease_asset_quantity") {
       cleanAsset.floor ||= String(target.floor ?? "");
       cleanAsset.location ||= String(target.location ?? "");
     }
   }
+  const targetUnit = target ? assetUnitFromSpec(target.spec) : "";
+  if (target && intent === "decrease_asset_quantity") { cleanAsset.unit = targetUnit; cleanAsset.quantity = Number(target.quantity ?? 0); }
+  const requestedUnitMatch = cleanText.match(/\d+\s*(ea|box|개|박스|세트|대|병|롤|팩)/i);
+  const requestedUnit = String(parsed.requestedUnit ?? requestedUnitMatch?.[1] ?? "").trim();
+  const normalizeUnit = (value: string) => { const unit = value.toLowerCase(); return unit === "개" || unit === "ea" ? "ea" : unit === "박스" || unit === "box" ? "box" : unit; };
+  let decreaseQuantity = toOptionalNumber(parsed.decreaseQuantity);
+  if (selection?.action === "use_all" && target) decreaseQuantity = Number(target.quantity ?? 0);
+  if (selection?.action === "reenter") decreaseQuantity = null;
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
   let needsClarification = Boolean(parsed.needsClarification) || confidence < 0.7;
   if (intent === "create_asset" && (!cleanAsset.assetName || cleanAsset.quantity == null || !cleanAsset.location)) needsClarification = true;
   if (intent === "increase_asset_quantity" && (!target || !Number.isFinite(Number(parsed.addQuantity)) || Number(parsed.addQuantity) <= 0)) needsClarification = true;
+  if (intent === "decrease_asset_quantity" && (!target || decreaseQuantity == null || decreaseQuantity <= 0)) needsClarification = true;
+  const unitMismatch = intent === "decrease_asset_quantity" && Boolean(requestedUnit && targetUnit && normalizeUnit(requestedUnit) !== normalizeUnit(targetUnit));
+  if (unitMismatch) needsClarification = true;
   if (intent === "update_asset_location" && (!target || (!cleanAsset.floor && !cleanAsset.location))) needsClarification = true;
   if (!cleanText && imageUrl && (cleanAsset.quantity == null || !cleanAsset.location)) needsClarification = true;
   const possibleMatches = (Array.isArray(parsed.possibleMatches) ? parsed.possibleMatches : []).map((item) => {
@@ -1549,19 +1564,26 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     const choiceTarget = assets.find((row) => String(row.id) === String(value.targetAssetId ?? value.id));
     return { label: String(value.label ?? choiceTarget?.asset_name ?? "선택"), targetAssetId: choiceTarget?.id ?? null, action: String(value.action ?? "") };
   }).filter((choice) => choice.targetAssetId || choice.action === "create_asset").slice(0, 8);
-  if (!choices.length && possibleMatches.length) choices = [...(possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에 수량 추가`, targetAssetId: match.id, action: "increase_asset_quantity" })), { label: "기존 자산과 별도로 새로 등록", targetAssetId: null, action: "create_asset" }];
-  if ((intent === "increase_asset_quantity" || intent === "update_asset_location") && !target && !needsClarification) needsClarification = true;
+  if (!choices.length && possibleMatches.length) choices = intent === "decrease_asset_quantity" ? (possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에서 사용`, targetAssetId: match.id, action: "decrease_asset_quantity" })) : [...(possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에 수량 추가`, targetAssetId: match.id, action: "increase_asset_quantity" })), { label: "기존 자산과 별도로 새로 등록", targetAssetId: null, action: "create_asset" }];
+  if (!selection && choices.length > 1) needsClarification = true;
+  const currentQuantity = target ? Number(target.quantity ?? 0) : toOptionalNumber(parsed.currentQuantity);
+  if (intent === "decrease_asset_quantity" && target && decreaseQuantity != null && decreaseQuantity > Number(currentQuantity)) { needsClarification = true; choices = [{ label: `${currentQuantity}${targetUnit} 전부 사용`, targetAssetId: target.id, action: "use_all" }, { label: "수량 다시 입력", targetAssetId: target.id, action: "reenter" }]; }
+  if (intent === "decrease_asset_quantity" && selection?.targetAssetId && selection.action !== "reenter" && target && decreaseQuantity != null && decreaseQuantity > 0 && decreaseQuantity <= Number(currentQuantity) && !unitMismatch && confidence >= 0.7) { needsClarification = false; choices = []; }
+  if ((intent === "increase_asset_quantity" || intent === "decrease_asset_quantity" || intent === "update_asset_location") && !target && !needsClarification) needsClarification = true;
+  const question = unitMismatch ? `현재 단위는 ${targetUnit}입니다. ${requestedUnit}를 몇 ${targetUnit}로 처리할까요?` : intent === "decrease_asset_quantity" && target && decreaseQuantity != null && decreaseQuantity > Number(currentQuantity) ? `현재 수량은 ${currentQuantity}${targetUnit}인데 ${decreaseQuantity}${requestedUnit || targetUnit} 사용으로 입력되었습니다.` : !selection && choices.length > 1 ? "어느 자산에서 사용했나요?" : String(parsed.question || (needsClarification ? "사용한 수량을 알려주세요." : ""));
   return {
     ...parsed,
     intent,
     confidence,
     needsClarification,
-    question: String(parsed.question ?? (needsClarification ? "수량과 보관 위치를 알려주세요." : "")),
+    question,
     choices,
     targetAssetId: target?.id ?? null,
-    currentQuantity: target ? Number(target.quantity ?? 0) : toOptionalNumber(parsed.currentQuantity),
+    currentQuantity,
     addQuantity: toOptionalNumber(parsed.addQuantity),
-    newQuantity: target && intent === "increase_asset_quantity" ? Number(target.quantity ?? 0) + Number(parsed.addQuantity ?? 0) : toOptionalNumber(parsed.newQuantity),
+    decreaseQuantity,
+    requestedUnit,
+    newQuantity: target && intent === "increase_asset_quantity" ? Number(currentQuantity) + Number(parsed.addQuantity ?? 0) : target && intent === "decrease_asset_quantity" && decreaseQuantity != null ? Number(currentQuantity) - decreaseQuantity : toOptionalNumber(parsed.newQuantity),
     asset: cleanAsset,
     providedFields: [...providedFields],
     possibleMatches,

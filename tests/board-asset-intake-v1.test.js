@@ -13,7 +13,7 @@ assert(page.includes("사진 업로드 실패"));
 
 // B: AI only proposes one of the three V1 intents and validates real asset IDs.
 assert(edge.includes('mode === "asset_intake"'));
-assert(edge.includes('["create_asset", "increase_asset_quantity", "update_asset_location"]'));
+assert(edge.includes('["create_asset", "increase_asset_quantity", "decrease_asset_quantity", "update_asset_location"]'));
 assert(edge.includes("assets.find((row) => String(row.id) === targetId)"));
 assert(edge.includes("Never infer a location from an image"));
 

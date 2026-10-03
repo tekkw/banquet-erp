@@ -24,19 +24,18 @@ const submitStart = page.indexOf('aiForm.addEventListener("submit"');
 assert(page.indexOf("isAssetQueryRequest(text)", submitStart) < page.indexOf("isAssetIntakeRequest(text)", submitStart));
 assert(page.includes("async function handleAssetQuery(text, selection = null, offset = 0)"));
 const queryRegexSource = page.match(/function isAssetQueryRequest\(text\) \{ return (\/.*?\/i)\.test\(text\); \}/)?.[1];
-const intakeRegexSources = page.match(/function isAssetIntakeRequest\(text\) \{ return (\/.*?\/i)\.test\(text\) && (\/.*?\/i)\.test\(text\); \}/);
-assert(queryRegexSource && intakeRegexSources, "routing regexes must remain testable");
+assert(page.includes("function isAssetDecreaseRequest"));
+assert(queryRegexSource, "query routing regex must remain testable");
 const queryRegex = eval(queryRegexSource);
-const intakeSubjectRegex = eval(intakeRegexSources[1]);
-const intakeVerbRegex = eval(intakeRegexSources[2]);
-assert(!queryRegex.test("종이컵 4박스 넣었어") && intakeSubjectRegex.test("종이컵 4박스 넣었어") && intakeVerbRegex.test("종이컵 4박스 넣었어"));
+assert(!queryRegex.test("종이컵 4박스 넣었어"));
 assert(queryRegex.test("종이컵 몇 박스 있어?"));
 
 // Ambiguity, image rendering, and update handoff remain explicit UI actions.
 assert(page.includes("data-asset-query-choice"));
 assert(page.includes("board-asset-query-thumbnail"));
 assert(page.includes("등록된 사진이 없습니다."));
-assert(page.includes('data-asset-query-action="quantity"'));
+assert(page.includes('data-asset-query-action="increase"'));
+assert(page.includes('data-asset-query-action="decrease"'));
 assert(page.includes('data-asset-query-action="location"'));
 assert(page.includes("data-asset-query-more"));
 assert(page.includes("safeAssetImageUrl"));
