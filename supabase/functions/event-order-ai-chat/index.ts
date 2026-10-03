@@ -1365,7 +1365,7 @@ function assetPlace(row: AssetRow) { return [row.floor, row.location].filter(Boo
 async function parseAssetQuery(question: string) {
   const systemPrompt = [
     "Parse a Korean banquet asset lookup question. Return only JSON.",
-    "queryType must be one of find_asset_location, get_asset_quantity, list_assets_by_location, find_asset_photo, search_asset, get_asset_last_movement, get_asset_movement_history, list_recent_asset_movements.",
+    "queryType must be one of find_asset_location, get_asset_quantity, list_assets_by_location, find_asset_photo, search_asset, get_asset_last_movement, get_asset_movement_history, list_recent_asset_movements, get_asset_usage, rank_asset_usage, list_low_stock, list_asset_inbound, rank_asset_movements, asset_activity_summary.",
     "Use get_asset_last_movement for the latest origin/destination question, get_asset_movement_history for one asset's movement log, and list_recent_asset_movements for today/recent moved assets.",
     "Return assetTerms as 1-4 concise canonical search terms. Include useful English/canonical synonyms for Korean phonetic or descriptive wording, e.g. 에이치디엠아이 or 모니터 연결선 may include HDMI and HDMI 케이블.",
     "For location list questions, return locationTerms containing separately stated floor and location words, e.g. 3층 창고 => ['3층','창고'].",
@@ -1378,7 +1378,7 @@ async function parseAssetQuery(question: string) {
   const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
   const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
   if (!parsed) throw new Error("AI asset query JSON parsing failed.");
-  const allowed = ["find_asset_location", "get_asset_quantity", "list_assets_by_location", "find_asset_photo", "search_asset", "get_asset_last_movement", "get_asset_movement_history", "list_recent_asset_movements"];
+  const allowed = ["find_asset_location", "get_asset_quantity", "list_assets_by_location", "find_asset_photo", "search_asset", "get_asset_last_movement", "get_asset_movement_history", "list_recent_asset_movements", "get_asset_usage", "rank_asset_usage", "list_low_stock", "list_asset_inbound", "rank_asset_movements", "asset_activity_summary"];
   return { queryType: allowed.includes(String(parsed.queryType)) ? String(parsed.queryType) : "search_asset", assetTerms: (Array.isArray(parsed.assetTerms) ? parsed.assetTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4), locationTerms: (Array.isArray(parsed.locationTerms) ? parsed.locationTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4) };
 }
 
@@ -1405,10 +1405,117 @@ async function semanticAssetFallback(question: string) {
   return rows.filter((row) => ids.has(row.id));
 }
 
-function seoulDateKey() {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+function seoulDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${value.year}-${value.month}-${value.day}`;
+}
+
+type AssetPeriod = { start: Date; end: Date; label: string };
+
+function seoulDayStart(dateKey: string) { return new Date(`${dateKey}T00:00:00+09:00`); }
+function resolveAssetPeriod(question: string): AssetPeriod {
+  const today = seoulDayStart(seoulDateKey()); const tomorrow = new Date(today.getTime() + 86400000);
+  const shifted = new Date(today.getTime() + 9 * 3600000); const weekday = shifted.getUTCDay(); const mondayOffset = (weekday + 6) % 7;
+  const thisMonday = new Date(today.getTime() - mondayOffset * 86400000);
+  const [year, month] = seoulDateKey().split("-").map(Number); const thisMonth = seoulDayStart(`${year}-${String(month).padStart(2, "0")}-01`);
+  const nextMonth = month === 12 ? seoulDayStart(`${year + 1}-01-01`) : seoulDayStart(`${year}-${String(month + 1).padStart(2, "0")}-01`);
+  const previousMonth = month === 1 ? seoulDayStart(`${year - 1}-12-01`) : seoulDayStart(`${year}-${String(month - 1).padStart(2, "0")}-01`);
+  if (/오늘/.test(question)) return { start: today, end: tomorrow, label: "오늘" };
+  if (/어제/.test(question)) return { start: new Date(today.getTime() - 86400000), end: today, label: "어제" };
+  if (/지난\s*주/.test(question)) return { start: new Date(thisMonday.getTime() - 7 * 86400000), end: thisMonday, label: "지난 주" };
+  if (/이번\s*주/.test(question)) return { start: thisMonday, end: tomorrow, label: "이번 주" };
+  if (/지난\s*달/.test(question)) return { start: previousMonth, end: thisMonth, label: "지난 달" };
+  if (/이번\s*달/.test(question)) return { start: thisMonth, end: tomorrow < nextMonth ? tomorrow : nextMonth, label: "이번 달" };
+  if (/최근\s*7일/.test(question)) return { start: new Date(today.getTime() - 6 * 86400000), end: tomorrow, label: "최근 7일" };
+  return { start: new Date(today.getTime() - 29 * 86400000), end: tomorrow, label: "최근 30일" };
+}
+
+function detectAssetAnalyticsQuery(question: string) {
+  const clean = question.trim();
+  let queryType = "";
+  if (/재고/.test(clean) && /(이하|부족|낮은|적은)/.test(clean)) queryType = "list_low_stock";
+  else if (/(가장|많이|순위|top)/i.test(clean) && /(옮|이동)/.test(clean)) queryType = "rank_asset_movements";
+  else if (/(들어온|입고|추가된|등록된)/.test(clean) && /(자산|물품|비품|재고)/.test(clean)) queryType = "list_asset_inbound";
+  else if (/(가장|많이|순위|top)/i.test(clean) && /(사용|썼|소모)/.test(clean)) queryType = "rank_asset_usage";
+  else if (/자산/.test(clean) && /(현황|요약|활동)/.test(clean)) queryType = "asset_activity_summary";
+  else if (/(오늘|어제|이번\s*주|지난\s*주|이번\s*달|지난\s*달|최근\s*(?:7|30)일|사용량)/.test(clean) && /(썼|사용|소모)/.test(clean)) queryType = "get_asset_usage";
+  if (!queryType) return null;
+  const threshold = Number(clean.match(/재고\s*(\d+)|([0-9]+)\s*(?:개|ea|box|박스|세트|대|병|롤|팩)?\s*이하/i)?.slice(1).find(Boolean) ?? 5);
+  const assetTerm = safeAssetSearchTerm(clean.replace(/오늘|어제|이번\s*주|지난\s*주|이번\s*달|지난\s*달|최근\s*(?:7|30)일/gi, " ").replace(/몇\s*(?:개|ea|box|박스|세트|대|병|롤|팩)?\s*(?:썼어?|사용했어?|소모했어?)|사용량|기록|보여\s*줘|알려\s*줘|얼마나/gi, " ").replace(/[?]/g, " "));
+  return { queryType, assetTerms: assetTerm ? [assetTerm] : [], threshold };
+}
+
+function auditMetadata(row: Record<string, unknown>) { return row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {}; }
+function auditSnapshot(metadata: Record<string, unknown>, key: "before" | "after") { const value = metadata[key]; return value && typeof value === "object" ? value as Record<string, unknown> : {}; }
+function auditAssetName(metadata: Record<string, unknown>) { const after = auditSnapshot(metadata, "after"); const before = auditSnapshot(metadata, "before"); return String(metadata.assetName ?? after.asset_name ?? before.asset_name ?? "자산"); }
+function auditAssetUnit(metadata: Record<string, unknown>) { const after = auditSnapshot(metadata, "after"); const before = auditSnapshot(metadata, "before"); return assetUnitFromSpec(after.spec ?? before.spec); }
+function auditDecreaseQuantity(metadata: Record<string, unknown>) { const explicit = toOptionalNumber(metadata.decreaseQuantity); if (explicit != null && explicit > 0) return explicit; const before = toOptionalNumber(auditSnapshot(metadata, "before").quantity); const after = toOptionalNumber(auditSnapshot(metadata, "after").quantity); return before != null && after != null && before > after ? before - after : null; }
+
+async function loadAssetAuditRows(actions: string[], period: AssetPeriod, assetId = "") {
+  const rows: Array<Record<string, unknown>> = []; const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const filters = ["select=id,created_at,metadata", `metadata->>action=in.(${actions.join(",")})`, `created_at=gte.${encodeURIComponent(period.start.toISOString())}`, `created_at=lt.${encodeURIComponent(period.end.toISOString())}`];
+    if (assetId) filters.push(`metadata->>assetId=eq.${encodeURIComponent(assetId)}`);
+    filters.push("order=created_at.desc", `limit=${pageSize}`, `offset=${offset}`);
+    const page = await supabaseSelect("operation_board_items", filters.join("&")) as Array<Record<string, unknown>>; rows.push(...page); if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function loadAssetsByIds(ids: string[]) {
+  if (!ids.length) return [] as AssetRow[];
+  return await supabaseSelect("banquet_assets", `select=id,asset_name,floor,quantity,spec,location,image_url&id=in.(${ids.map(encodeURIComponent).join(",")})&limit=${Math.min(ids.length, 500)}`) as AssetRow[];
+}
+
+async function resolveAnalyticsAsset(question: string, terms: string[], selection: Record<string, unknown> | null) {
+  const selectedId = String(selection?.assetId ?? "");
+  if (selectedId) { const rows = await loadAssetsByIds([selectedId]); return { asset: rows[0] ?? null, choices: [] }; }
+  let rows = await searchAssetRows(terms);
+  if (!rows.length) rows = await semanticAssetFallback(question);
+  if (rows.length === 1) return { asset: rows[0], choices: [] };
+  return { asset: null, choices: rows.slice(0, 10).map((row) => ({ assetId: row.id, label: row.asset_name })) };
+}
+
+async function queryAssetAnalytics(question: string, parsed: { queryType: string; assetTerms: string[]; threshold?: number }, selection: Record<string, unknown> | null) {
+  const period = resolveAssetPeriod(question); const empty = { needsClarification: false, question: "", choices: [], assets: [], movements: [], hasMore: false };
+  if (parsed.queryType === "list_low_stock") {
+    const threshold = Number.isFinite(Number(parsed.threshold)) ? Math.max(0, Number(parsed.threshold)) : 5;
+    const rows = await supabaseSelect("banquet_assets", `select=id,asset_name,floor,quantity,spec,location,image_url&quantity=lte.${threshold}&order=quantity.asc&limit=500`) as AssetRow[];
+    const items = rows.slice(0, 10).map((row) => ({ label: row.asset_name, value: `${row.quantity ?? 0}${assetUnitFromSpec(row.spec)}`, detail: assetPlace(row) }));
+    const answer = `재고 ${threshold} 이하 자산은 ${rows.length}종입니다.`;
+    return { ...empty, queryType: parsed.queryType, analysisTitle: `재고 ${threshold} 이하`, analysisItems: items, answer, speechText: `${answer}${rows.length ? ` 가장 적은 자산은 ${items[0].label} ${items[0].value}입니다.` : ""}` };
+  }
+  if (parsed.queryType === "get_asset_usage") {
+    const resolved = await resolveAnalyticsAsset(question, parsed.assetTerms, selection);
+    if (!resolved.asset) return resolved.choices.length ? { ...empty, queryType: parsed.queryType, needsClarification: true, question: "어떤 자산의 사용량을 확인할까요?", choices: resolved.choices, answer: "" } : { ...empty, queryType: parsed.queryType, answer: "등록된 자산에서 찾지 못했습니다." };
+    const rows = await loadAssetAuditRows(["decrease_asset_quantity"], period, resolved.asset.id); const quantities = rows.map((row) => auditDecreaseQuantity(auditMetadata(row))).filter((value): value is number => value != null);
+    if (!quantities.length) return { ...empty, queryType: parsed.queryType, assets: [resolved.asset], analysisTitle: `${period.label} 사용량`, analysisItems: [], answer: `${period.label} ${resolved.asset.asset_name}의 기록된 사용 이력이 없습니다.`, speechText: `${period.label} ${resolved.asset.asset_name}의 기록된 사용 이력이 없습니다.` };
+    const total = quantities.reduce((sum, value) => sum + value, 0); const unit = assetUnitFromSpec(resolved.asset.spec); const answer = `기록된 이력 기준으로 ${period.label} ${resolved.asset.asset_name}은(는) ${total}${unit} 사용했습니다. 현재 재고는 ${resolved.asset.quantity ?? 0}${unit}입니다.`;
+    return { ...empty, queryType: parsed.queryType, assets: [resolved.asset], analysisTitle: `${period.label} 사용량`, analysisItems: [{ label: resolved.asset.asset_name, value: `${total}${unit} 사용`, detail: `현재 ${resolved.asset.quantity ?? 0}${unit}` }], answer, speechText: answer };
+  }
+  const actions = parsed.queryType === "rank_asset_usage" ? ["decrease_asset_quantity"] : parsed.queryType === "list_asset_inbound" ? ["create_asset", "increase_asset_quantity"] : parsed.queryType === "rank_asset_movements" ? ["move_asset", "update_asset_location"] : ["decrease_asset_quantity", "create_asset", "increase_asset_quantity", "move_asset", "update_asset_location"];
+  const rows = await loadAssetAuditRows(actions, period);
+  if (parsed.queryType === "rank_asset_usage") {
+    const totals = new Map<string, { id: string; label: string; unit: string; total: number }>();
+    rows.forEach((row) => { const metadata = auditMetadata(row); const quantity = auditDecreaseQuantity(metadata); if (quantity == null) return; const id = String(metadata.assetId ?? auditSnapshot(metadata, "after").id ?? auditSnapshot(metadata, "before").id ?? ""); if (!id) return; const current = totals.get(id) || { id, label: auditAssetName(metadata), unit: auditAssetUnit(metadata), total: 0 }; current.total += quantity; totals.set(id, current); });
+    const ranked = [...totals.values()].sort((a, b) => b.total - a.total).slice(0, 10); const items = ranked.map((item, index) => ({ label: `${index + 1}. ${item.label}`, value: `${item.total}${item.unit}`, detail: "기록된 숫자 기준" }));
+    const answer = ranked.length ? `${period.label} 사용량 기록 순위입니다. 단위가 다른 자산은 기록된 숫자 기준으로 정렬했습니다.` : `${period.label} 기록된 사용 이력이 없습니다.`;
+    return { ...empty, queryType: parsed.queryType, analysisTitle: `${period.label} 사용량`, analysisItems: items, answer, speechText: ranked.length ? `${period.label} 사용량 기록이 가장 많은 자산은 ${ranked[0].label}이며 ${ranked[0].total}${ranked[0].unit}입니다. 자세한 순위는 화면을 확인해주세요.` : answer };
+  }
+  if (parsed.queryType === "list_asset_inbound") {
+    const items = rows.slice(0, 10).map((row) => { const metadata = auditMetadata(row); const action = String(metadata.action ?? ""); const before = auditSnapshot(metadata, "before"); const after = auditSnapshot(metadata, "after"); const unit = assetUnitFromSpec(after.spec ?? before.spec); const beforeQuantity = toOptionalNumber(before.quantity); const afterQuantity = toOptionalNumber(after.quantity); const amount = action === "create_asset" ? afterQuantity : beforeQuantity != null && afterQuantity != null ? afterQuantity - beforeQuantity : null; return { label: auditAssetName(metadata), value: action === "create_asset" ? `신규 등록${amount == null ? "" : ` ${amount}${unit}`}` : amount == null ? "수량 추가" : `+${amount}${unit}`, detail: String(row.created_at ?? "") }; });
+    const answer = rows.length ? `${period.label} 입고/등록 기록은 ${rows.length}건입니다.` : `${period.label} 기록된 입고/등록 이력이 없습니다.`;
+    return { ...empty, queryType: parsed.queryType, analysisTitle: `${period.label} 입고/등록`, analysisItems: items, answer, speechText: rows.length ? `${answer} 자세한 내용은 화면을 확인해주세요.` : answer };
+  }
+  if (parsed.queryType === "rank_asset_movements") {
+    const totals = new Map<string, { label: string; count: number }>(); rows.forEach((row) => { const metadata = auditMetadata(row); const id = String(metadata.assetId ?? ""); if (!id) return; const current = totals.get(id) || { label: auditAssetName(metadata), count: 0 }; current.count += 1; totals.set(id, current); });
+    const ranked = [...totals.values()].sort((a, b) => b.count - a.count).slice(0, 10); const items = ranked.map((item, index) => ({ label: `${index + 1}. ${item.label}`, value: `${item.count}회`, detail: "이동 기록 건수" })); const answer = ranked.length ? `${period.label} 이동 기록 횟수 순위입니다.` : `${period.label} 기록된 이동 이력이 없습니다.`;
+    return { ...empty, queryType: parsed.queryType, analysisTitle: `${period.label} 이동 횟수`, analysisItems: items, answer, speechText: ranked.length ? `${period.label} 가장 많이 이동한 자산은 ${ranked[0].label}이며 ${ranked[0].count}회입니다. 자세한 순위는 화면을 확인해주세요.` : answer };
+  }
+  const usageCount = rows.filter((row) => String(auditMetadata(row).action) === "decrease_asset_quantity").length; const inboundCount = rows.filter((row) => ["create_asset", "increase_asset_quantity"].includes(String(auditMetadata(row).action))).length; const movementCount = rows.filter((row) => ["move_asset", "update_asset_location"].includes(String(auditMetadata(row).action))).length;
+  const lowStock = await supabaseSelect("banquet_assets", "select=id&quantity=lte.5&limit=500") as AssetRow[]; const answer = `${period.label} 자산 현황입니다. 사용 기록 ${usageCount}건, 수량 추가/입고 ${inboundCount}건, 이동 ${movementCount}건, 현재 재고 5 이하 ${lowStock.length}종입니다.`;
+  return { ...empty, queryType: "asset_activity_summary", analysisTitle: `${period.label} 자산 현황`, analysisItems: [{ label: "사용 기록", value: `${usageCount}건` }, { label: "수량 추가/입고", value: `${inboundCount}건` }, { label: "이동", value: `${movementCount}건` }, { label: "현재 재고 5 이하", value: `${lowStock.length}종` }], answer, speechText: answer };
 }
 
 async function queryAssetMovements(question: string, parsed: { queryType: string; assetTerms: string[] }, selection: Record<string, unknown> | null) {
@@ -1446,7 +1553,8 @@ async function queryAssetMovements(question: string, parsed: { queryType: string
 async function queryBanquetAssets(question: string, selection: Record<string, unknown> | null, offset = 0) {
   const cleanQuestion = question.trim();
   if (!cleanQuestion) throw new Error("자산 질문을 입력해주세요.");
-  const parsed = await parseAssetQuery(cleanQuestion);
+  const parsed = detectAssetAnalyticsQuery(cleanQuestion) ?? await parseAssetQuery(cleanQuestion);
+  if (["get_asset_usage", "rank_asset_usage", "list_low_stock", "list_asset_inbound", "rank_asset_movements", "asset_activity_summary"].includes(parsed.queryType)) return queryAssetAnalytics(cleanQuestion, parsed, selection);
   if (["get_asset_last_movement", "get_asset_movement_history", "list_recent_asset_movements"].includes(parsed.queryType)) return queryAssetMovements(cleanQuestion, parsed, selection);
   const isLocationList = parsed.queryType === "list_assets_by_location";
   const terms = isLocationList ? parsed.locationTerms : parsed.assetTerms;

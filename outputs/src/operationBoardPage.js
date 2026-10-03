@@ -97,7 +97,8 @@
     const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "board_command", question: userText, boardContext: aiContext(), selection }) });
     const body = await response.json(); if (!response.ok) throw new Error(body.message || "AI 해석 실패"); return body.proposal;
   }
-  function isAssetQueryRequest(text) { return /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황)|이동\s*이력|최근\s*이동|마지막.*옮)/i.test(text); }
+  function isAssetAnalyticsRequest(text) { return /(재고.*(?:이하|부족|낮은|적은)|(?:오늘|어제|이번\s*주|지난\s*주|이번\s*달|지난\s*달|최근\s*(?:7|30)일).*(?:썼|사용|소모|들어온|입고|추가된|옮|이동|자산\s*현황)|(?:가장|많이|순위|top).*(?:사용|썼|소모|옮|이동)|자산.*(?:현황|요약|활동))/i.test(text); }
+  function isAssetQueryRequest(text) { return isAssetAnalyticsRequest(text) || /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황)|이동\s*이력|최근\s*이동|마지막.*옮)/i.test(text); }
   function isAssetDecreaseRequest(text) { return /(?:\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:개|ea|box|박스|세트|대|병|롤|팩)/i.test(text) && /(썼|사용(?:했|해|함|\s*$)|소모|가져갔|가져감|출고|나갔|꺼냈|소비)/i.test(text); }
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
   function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
@@ -280,6 +281,7 @@
     const createdAt = movement.createdAt ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(movement.createdAt)) : "시간 미확인";
     return `<article class="board-asset-movement-card"><strong>${escapeHtml(movement.assetName || "자산")}</strong><span>${escapeHtml(movementPlace(movement.fromFloor, movement.fromLocation))} → ${escapeHtml(movementPlace(movement.toFloor, movement.toLocation))}</span><time>${escapeHtml(createdAt)}</time></article>`;
   }
+  function analysisResultCard(item) { return `<article class="board-asset-analysis-card"><strong>${escapeHtml(item.label || "자산")}</strong><b>${escapeHtml(item.value || "")}</b>${item.detail ? `<span>${escapeHtml(item.detail)}</span>` : ""}</article>`; }
   function showAssetQueryResult(result, userText) {
     pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = { result, userText };
     if (result.needsClarification) {
@@ -289,10 +291,11 @@
     }
     const assets = Array.isArray(result.assets) ? result.assets : [];
     const movements = Array.isArray(result.movements) ? result.movements.slice(0, 10) : [];
+    const analysisItems = Array.isArray(result.analysisItems) ? result.analysisItems.slice(0, 10) : [];
     const finalAnswer = result.answer || "등록된 자산에서 찾지 못했습니다.";
-    aiResult.innerHTML = `<div class="board-asset-query-result"><p class="board-ai-status">${escapeHtml(finalAnswer)}</p>${movements.map(movementResultCard).join("")}${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
+    aiResult.innerHTML = `<div class="board-asset-query-result">${result.analysisTitle ? `<h3>${escapeHtml(result.analysisTitle)}</h3>` : ""}<p class="board-ai-status">${escapeHtml(finalAnswer)}</p>${analysisItems.map(analysisResultCard).join("")}${movements.map(movementResultCard).join("")}${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
     const needsScreenDetail = movements.length > 0 || result.queryType === "list_assets_by_location";
-    speakBoardReply(needsScreenDetail ? `${finalAnswer} 자세한 내용은 화면을 확인해주세요.` : finalAnswer);
+    speakBoardReply(result.speechText || (needsScreenDetail ? `${finalAnswer} 자세한 내용은 화면을 확인해주세요.` : finalAnswer));
   }
   function beginAssetUpdateFromQuery(asset, action) {
     const intent = action === "increase" ? "increase_asset_quantity" : action === "decrease" ? "decrease_asset_quantity" : "update_asset_location";

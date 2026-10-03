@@ -7,8 +7,8 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 
 assert(html.includes('id="boardVoiceReplyButton"'));
 assert(html.includes("🔊 음성 답변 OFF"));
-assert(html.includes("operationBoardPage.js?v=9-voice-reply"));
-assert(html.includes("operationBoardPage.css?v=6-voice-reply"));
+assert(/operationBoardPage\.js\?v=[^"]+/.test(html));
+assert(/operationBoardPage\.css\?v=[^"]+/.test(html));
 
 assert(page.includes('const voiceReplyStorageKey = "banquetBoard.voiceReplyEnabled"'));
 assert(page.includes("window.speechSynthesis"));

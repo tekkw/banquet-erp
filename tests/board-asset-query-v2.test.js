@@ -23,7 +23,7 @@ assert(page.includes("function isAssetIntakeRequest"));
 const submitStart = page.indexOf('aiForm.addEventListener("submit"');
 assert(page.indexOf("isAssetQueryRequest(text)", submitStart) < page.indexOf("isAssetIntakeRequest(text)", submitStart));
 assert(page.includes("async function handleAssetQuery(text, selection = null, offset = 0)"));
-const queryRegexSource = page.match(/function isAssetQueryRequest\(text\) \{ return (\/.*?\/i)\.test\(text\); \}/)?.[1];
+const queryRegexSource = page.match(/function isAssetQueryRequest\(text\) \{ return (?:isAssetAnalyticsRequest\(text\) \|\| )?(\/.*?\/i)\.test\(text\); \}/)?.[1];
 assert(page.includes("function isAssetDecreaseRequest"));
 assert(queryRegexSource, "query routing regex must remain testable");
 const queryRegex = eval(queryRegexSource);
