@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=3">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=3-visual-ai">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=4-speech-input">
 </head>
 <body class="operation-board-page">
   <section id="boardLogin" class="board-login" hidden>
@@ -43,8 +43,10 @@
         <button id="boardAssetPhotoButton" class="board-ai-photo-button" type="button" aria-label="자산 사진 선택">🖼️</button>
         <input id="boardAssetPhotoInput" type="file" accept="image/*" capture="environment" hidden>
         <button id="boardVisualCameraButton" class="board-visual-camera-button" type="button">📷 카메라</button>
+        <button id="boardSpeechButton" class="board-speech-button" type="button" aria-label="음성 입력">🎤</button>
         <textarea id="boardAiInput" rows="1" maxlength="300" placeholder="오늘 변경사항을 입력하세요..." aria-label="현장 변경사항"></textarea>
         <button type="submit">보내기</button>
+        <span id="boardSpeechStatus" class="board-speech-status" aria-live="polite" hidden></span>
       </form>
     </section>
   </main>
@@ -52,6 +54,6 @@
   <script src="../src/aiKnowledgeRules.js"></script>
   <script src="../src/operationBoard.js?v=5-reminder-storage"></script>
   <script src="../src/pushNotifications.js?v=web-push-v2"></script>
-  <script src="../src/operationBoardPage.js?v=6-asset-decrease"></script>
+  <script src="../src/operationBoardPage.js?v=7-speech-input"></script>
 </body>
 </html>
