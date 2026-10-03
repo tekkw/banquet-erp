@@ -72,6 +72,9 @@ body.operation-board-page { min-width: 0; margin: 0; background: #081a2b; color:
 .board-asset-no-photo { grid-column: 1 / -1; color: #96a9ba; font-size: 12px; }
 .board-asset-query-actions { grid-column: 1 / -1; display: flex; gap: 6px; }
 .board-asset-query-actions button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(96,165,250,.35); border-radius: 8px; background: transparent; color: #bfdbfe; font: inherit; font-size: 12px; }
+.board-asset-movement-card { display: grid; gap: 4px; padding: 10px; border: 1px solid rgba(52,211,153,.24); border-radius: 10px; background: #0b2236; }
+.board-asset-movement-card span { color: #dbeafe; font-size: 13px; }
+.board-asset-movement-card time { color: #96a9ba; font-size: 11px; }
 .board-asset-more { min-height: 38px; border: 1px solid rgba(150,180,205,.25); border-radius: 8px; background: #173955; color: #bfdbfe; font: inherit; font-size: 12px; }
 .field-note-badge { display: inline-flex; margin-left: 6px; padding: 2px 7px; border-radius: 999px; background: rgba(245,158,11,.2); color: #fcd34d; font-size: 10px; font-weight: 700; }
 @media (max-width: 390px) { .board-ai-panel { padding-inline: 8px; } .board-ai-form { grid-template-columns: 42px 68px 42px minmax(0,1fr) auto; gap: 5px; } .board-visual-camera-button { padding-inline: 5px !important; font-size: 12px !important; } .board-speech-button { min-width: 42px; max-width: 42px; padding-inline: 4px !important; overflow: hidden; font-size: 12px !important; } .board-ai-form > button[type="submit"] { padding-inline: 9px; } .board-asset-fields { grid-template-columns: 1fr; } .board-asset-fields label:first-child, .board-asset-fields label:last-child { grid-column: auto; } }

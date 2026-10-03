@@ -1365,7 +1365,8 @@ function assetPlace(row: AssetRow) { return [row.floor, row.location].filter(Boo
 async function parseAssetQuery(question: string) {
   const systemPrompt = [
     "Parse a Korean banquet asset lookup question. Return only JSON.",
-    "queryType must be one of find_asset_location, get_asset_quantity, list_assets_by_location, find_asset_photo, search_asset.",
+    "queryType must be one of find_asset_location, get_asset_quantity, list_assets_by_location, find_asset_photo, search_asset, get_asset_last_movement, get_asset_movement_history, list_recent_asset_movements.",
+    "Use get_asset_last_movement for the latest origin/destination question, get_asset_movement_history for one asset's movement log, and list_recent_asset_movements for today/recent moved assets.",
     "Return assetTerms as 1-4 concise canonical search terms. Include useful English/canonical synonyms for Korean phonetic or descriptive wording, e.g. 에이치디엠아이 or 모니터 연결선 may include HDMI and HDMI 케이블.",
     "For location list questions, return locationTerms containing separately stated floor and location words, e.g. 3층 창고 => ['3층','창고'].",
     "Do not answer the question and do not invent database values.",
@@ -1377,7 +1378,7 @@ async function parseAssetQuery(question: string) {
   const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
   const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
   if (!parsed) throw new Error("AI asset query JSON parsing failed.");
-  const allowed = ["find_asset_location", "get_asset_quantity", "list_assets_by_location", "find_asset_photo", "search_asset"];
+  const allowed = ["find_asset_location", "get_asset_quantity", "list_assets_by_location", "find_asset_photo", "search_asset", "get_asset_last_movement", "get_asset_movement_history", "list_recent_asset_movements"];
   return { queryType: allowed.includes(String(parsed.queryType)) ? String(parsed.queryType) : "search_asset", assetTerms: (Array.isArray(parsed.assetTerms) ? parsed.assetTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4), locationTerms: (Array.isArray(parsed.locationTerms) ? parsed.locationTerms : []).map(safeAssetSearchTerm).filter(Boolean).slice(0, 4) };
 }
 
@@ -1404,10 +1405,49 @@ async function semanticAssetFallback(question: string) {
   return rows.filter((row) => ids.has(row.id));
 }
 
+function seoulDateKey() {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+async function queryAssetMovements(question: string, parsed: { queryType: string; assetTerms: string[] }, selection: Record<string, unknown> | null) {
+  const selectedId = String(selection?.assetId ?? "");
+  let asset: AssetRow | null = null;
+  if (parsed.queryType !== "list_recent_asset_movements") {
+    if (selectedId) {
+      const selectedRows = await supabaseSelect("banquet_assets", `select=id,asset_name,floor,quantity,spec,location,image_url&id=eq.${encodeURIComponent(selectedId)}&limit=1`) as AssetRow[];
+      asset = selectedRows[0] ?? null;
+    } else {
+      let rows = await searchAssetRows(parsed.assetTerms);
+      if (!rows.length) rows = await semanticAssetFallback(question);
+      if (rows.length > 1) return { queryType: parsed.queryType, needsClarification: true, question: "어떤 자산의 이동 이력을 찾으시나요?", choices: rows.slice(0, 10).map((row) => ({ assetId: row.id, label: row.asset_name })), assets: [], movements: [], hasMore: false, answer: "" };
+      asset = rows[0] ?? null;
+      if (!asset) return { queryType: parsed.queryType, needsClarification: false, question: "", choices: [], assets: [], movements: [], hasMore: false, answer: "등록된 자산에서 찾지 못했습니다." };
+    }
+  }
+  const filters = ["select=id,board_date,created_at,metadata", "metadata->>source=eq.board_asset_ai", "metadata->>action=eq.move_asset"];
+  if (asset?.id) filters.push(`metadata->>assetId=eq.${encodeURIComponent(asset.id)}`);
+  if (parsed.queryType === "list_recent_asset_movements" && /오늘/.test(question)) {
+    const start = new Date(`${seoulDateKey()}T00:00:00+09:00`); const end = new Date(start.getTime() + 86400000);
+    filters.push(`created_at=gte.${encodeURIComponent(start.toISOString())}`, `created_at=lt.${encodeURIComponent(end.toISOString())}`);
+  }
+  filters.push("order=created_at.desc", `limit=${parsed.queryType === "get_asset_last_movement" ? 1 : 10}`);
+  const rows = await supabaseSelect("operation_board_items", filters.join("&")) as Array<Record<string, unknown>>;
+  const movements = rows.map((row) => {
+    const metadata = row.metadata && typeof row.metadata === "object" ? row.metadata as Record<string, unknown> : {};
+    return { id: row.id, assetId: metadata.assetId, assetName: metadata.assetName, fromFloor: metadata.fromFloor, fromLocation: metadata.fromLocation, toFloor: metadata.toFloor, toLocation: metadata.toLocation, quantity: metadata.quantity, userText: metadata.userText, createdAt: metadata.createdAt || row.created_at };
+  });
+  const label = asset?.asset_name || "자산";
+  const answer = movements.length ? parsed.queryType === "get_asset_last_movement" ? `${label}의 마지막 이동 이력입니다.` : parsed.queryType === "get_asset_movement_history" ? `${label}의 이동 이력 ${movements.length}건입니다.` : `최근 이동한 자산 ${movements.length}건입니다.` : parsed.queryType === "list_recent_asset_movements" ? "해당 기간의 자산 이동 이력이 없습니다." : `${label}의 이동 이력이 없습니다.`;
+  return { queryType: parsed.queryType, needsClarification: false, question: "", choices: [], assets: asset ? [asset] : [], movements, hasMore: false, answer };
+}
+
 async function queryBanquetAssets(question: string, selection: Record<string, unknown> | null, offset = 0) {
   const cleanQuestion = question.trim();
   if (!cleanQuestion) throw new Error("자산 질문을 입력해주세요.");
   const parsed = await parseAssetQuery(cleanQuestion);
+  if (["get_asset_last_movement", "get_asset_movement_history", "list_recent_asset_movements"].includes(parsed.queryType)) return queryAssetMovements(cleanQuestion, parsed, selection);
   const isLocationList = parsed.queryType === "list_assets_by_location";
   const terms = isLocationList ? parsed.locationTerms : parsed.assetTerms;
   let rows = await searchAssetRows(terms);
@@ -1465,10 +1505,11 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     "If the requested unit differs from the matched asset unit in spec, ask how many of the stored unit should be used. Never convert units.",
     "When selectedChoice.action is use_all, set decreaseQuantity to the selected target's full current quantity. When it is reenter, ask for a new quantity.",
     "For increase_asset_quantity, decrease_asset_quantity, and update_asset_location, copy the matched existing asset name and known fields into asset, then replace only explicitly changed fields.",
-    "update_asset_location requires targetAssetId and an explicitly stated floor or location. Put the extracted destination in asset.floor and asset.location, not only in confirmationText. Never infer a location from an image.",
+    "update_asset_location requires targetAssetId and an explicitly stated destination floor or location. Put only the requested destination in asset.floor and asset.location, not only in confirmationText. Do not return the current location as if it were a destination. Never infer a location from an image.",
+    "update_asset_location moves the whole asset row only. Return moveQuantity when the user explicitly states a moved quantity. If moveQuantity differs from the matched asset's total quantity, say that partial movement is unsupported and do not propose a write.",
     "Example: '멀티탭을 2층 창고 왼쪽 선반으로 옮겼어' must return asset.floor='2층' and asset.location='창고 왼쪽 선반'.",
     "Categories are limited to the supplied categories. Keep confirmationText short in Korean.",
-    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,decreaseQuantity,requestedUnit,newQuantity,asset,providedFields,possibleMatches,confirmationText}.",
+    "Required shape: {intent,confidence,needsClarification,question,choices,targetAssetId,currentQuantity,addQuantity,decreaseQuantity,moveQuantity,requestedUnit,newQuantity,asset,providedFields,possibleMatches,confirmationText}.",
   ].join("\n");
   const inputContent: Array<Record<string, unknown>> = [{
     type: "input_text",
@@ -1527,6 +1568,7 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     location: currentText("location") || String(previousAsset.location ?? "").trim(),
     description: currentText("description") || String(previousAsset.description ?? "").trim(),
   };
+  const hasMoveDestination = intent !== "update_asset_location" || Boolean(String(asset.floor ?? "").trim() || String(asset.location ?? "").trim() || (previousContext && (String(previousAsset.floor ?? "").trim() || String(previousAsset.location ?? "").trim())));
   const targetId = String(selection?.targetAssetId ?? parsed.targetAssetId ?? previousProposal.targetAssetId ?? "");
   const target = assets.find((row) => String(row.id) === targetId);
   if (target) {
@@ -1536,13 +1578,21 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
       cleanAsset.floor ||= String(target.floor ?? "");
       cleanAsset.location ||= String(target.location ?? "");
     }
+    if (intent === "update_asset_location") {
+      cleanAsset.floor ||= String(target.floor ?? "");
+      cleanAsset.location ||= String(target.location ?? "");
+      cleanAsset.quantity = toOptionalNumber(target.quantity);
+    }
   }
   const targetUnit = target ? assetUnitFromSpec(target.spec) : "";
   if (target && intent === "decrease_asset_quantity") { cleanAsset.unit = targetUnit; cleanAsset.quantity = Number(target.quantity ?? 0); }
+  if (target && intent === "update_asset_location") cleanAsset.unit = targetUnit;
   const requestedUnitMatch = cleanText.match(/\d+\s*(ea|box|개|박스|세트|대|병|롤|팩)/i);
   const requestedUnit = String(parsed.requestedUnit ?? requestedUnitMatch?.[1] ?? "").trim();
   const normalizeUnit = (value: string) => { const unit = value.toLowerCase(); return unit === "개" || unit === "ea" ? "ea" : unit === "박스" || unit === "box" ? "box" : unit; };
   let decreaseQuantity = toOptionalNumber(parsed.decreaseQuantity);
+  const explicitMoveQuantity = cleanText.match(/((?:\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열))\s*(?:ea|box|개|박스|세트|대|병|롤|팩)/i);
+  const moveQuantity = explicitMoveQuantity ? toOptionalNumber(parsed.moveQuantity) ?? toOptionalNumber(explicitMoveQuantity[1]) : null;
   if (selection?.action === "use_all" && target) decreaseQuantity = Number(target.quantity ?? 0);
   if (selection?.action === "reenter") decreaseQuantity = null;
   const confidence = Math.max(0, Math.min(1, Number(parsed.confidence) || 0));
@@ -1552,7 +1602,9 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
   if (intent === "decrease_asset_quantity" && (!target || decreaseQuantity == null || decreaseQuantity <= 0)) needsClarification = true;
   const unitMismatch = intent === "decrease_asset_quantity" && Boolean(requestedUnit && targetUnit && normalizeUnit(requestedUnit) !== normalizeUnit(targetUnit));
   if (unitMismatch) needsClarification = true;
-  if (intent === "update_asset_location" && (!target || (!cleanAsset.floor && !cleanAsset.location))) needsClarification = true;
+  if (intent === "update_asset_location" && (!target || !hasMoveDestination || (!cleanAsset.floor && !cleanAsset.location))) needsClarification = true;
+  const partialMoveUnsupported = intent === "update_asset_location" && Boolean(target && moveQuantity != null && moveQuantity !== Number(target.quantity ?? 0));
+  if (partialMoveUnsupported) needsClarification = true;
   if (!cleanText && imageUrl && (cleanAsset.quantity == null || !cleanAsset.location)) needsClarification = true;
   const possibleMatches = (Array.isArray(parsed.possibleMatches) ? parsed.possibleMatches : []).map((item) => {
     const value = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -1564,13 +1616,15 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     const choiceTarget = assets.find((row) => String(row.id) === String(value.targetAssetId ?? value.id));
     return { label: String(value.label ?? choiceTarget?.asset_name ?? "선택"), targetAssetId: choiceTarget?.id ?? null, action: String(value.action ?? "") };
   }).filter((choice) => choice.targetAssetId || choice.action === "create_asset").slice(0, 8);
-  if (!choices.length && possibleMatches.length) choices = intent === "decrease_asset_quantity" ? (possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에서 사용`, targetAssetId: match.id, action: "decrease_asset_quantity" })) : [...(possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에 수량 추가`, targetAssetId: match.id, action: "increase_asset_quantity" })), { label: "기존 자산과 별도로 새로 등록", targetAssetId: null, action: "create_asset" }];
+  if (!choices.length && possibleMatches.length) choices = intent === "decrease_asset_quantity" ? (possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에서 사용`, targetAssetId: match.id, action: "decrease_asset_quantity" })) : intent === "update_asset_location" ? (possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label} 위치 변경`, targetAssetId: match.id, action: "update_asset_location" })) : [...(possibleMatches as Array<Record<string, unknown>>).map((match) => ({ label: `${match.label}에 수량 추가`, targetAssetId: match.id, action: "increase_asset_quantity" })), { label: "기존 자산과 별도로 새로 등록", targetAssetId: null, action: "create_asset" }];
   if (!selection && choices.length > 1) needsClarification = true;
   const currentQuantity = target ? Number(target.quantity ?? 0) : toOptionalNumber(parsed.currentQuantity);
   if (intent === "decrease_asset_quantity" && target && decreaseQuantity != null && decreaseQuantity > Number(currentQuantity)) { needsClarification = true; choices = [{ label: `${currentQuantity}${targetUnit} 전부 사용`, targetAssetId: target.id, action: "use_all" }, { label: "수량 다시 입력", targetAssetId: target.id, action: "reenter" }]; }
   if (intent === "decrease_asset_quantity" && selection?.targetAssetId && selection.action !== "reenter" && target && decreaseQuantity != null && decreaseQuantity > 0 && decreaseQuantity <= Number(currentQuantity) && !unitMismatch && confidence >= 0.7) { needsClarification = false; choices = []; }
+  if (intent === "update_asset_location" && selection?.targetAssetId && target && cleanAsset.location && !partialMoveUnsupported && confidence >= 0.7) { needsClarification = false; choices = []; }
   if ((intent === "increase_asset_quantity" || intent === "decrease_asset_quantity" || intent === "update_asset_location") && !target && !needsClarification) needsClarification = true;
-  const question = unitMismatch ? `현재 단위는 ${targetUnit}입니다. ${requestedUnit}를 몇 ${targetUnit}로 처리할까요?` : intent === "decrease_asset_quantity" && target && decreaseQuantity != null && decreaseQuantity > Number(currentQuantity) ? `현재 수량은 ${currentQuantity}${targetUnit}인데 ${decreaseQuantity}${requestedUnit || targetUnit} 사용으로 입력되었습니다.` : !selection && choices.length > 1 ? "어느 자산에서 사용했나요?" : String(parsed.question || (needsClarification ? "사용한 수량을 알려주세요." : ""));
+  const ambiguousQuestion = intent === "decrease_asset_quantity" ? "어느 자산에서 사용했나요?" : intent === "update_asset_location" ? "어느 자산을 이동할까요?" : "어느 자산에 수량을 추가할까요?";
+  const question = partialMoveUnsupported ? `현재 자산은 ${currentQuantity}${targetUnit}입니다. 일부 ${moveQuantity}${targetUnit}만 이동하려면 자산 분할 기능이 필요합니다. 일부 수량 이동은 아직 지원하지 않습니다.` : unitMismatch ? `현재 단위는 ${targetUnit}입니다. ${requestedUnit}를 몇 ${targetUnit}로 처리할까요?` : intent === "decrease_asset_quantity" && target && decreaseQuantity != null && decreaseQuantity > Number(currentQuantity) ? `현재 수량은 ${currentQuantity}${targetUnit}인데 ${decreaseQuantity}${requestedUnit || targetUnit} 사용으로 입력되었습니다.` : !selection && choices.length > 1 ? ambiguousQuestion : String(parsed.question || (needsClarification ? "필요한 정보를 알려주세요." : ""));
   return {
     ...parsed,
     intent,
@@ -1582,6 +1636,10 @@ async function interpretAssetIntake(userText: string, imageAttachment: Record<st
     currentQuantity,
     addQuantity: toOptionalNumber(parsed.addQuantity),
     decreaseQuantity,
+    moveQuantity,
+    partialMoveUnsupported,
+    currentFloor: target?.floor ?? null,
+    currentLocation: target?.location ?? null,
     requestedUnit,
     newQuantity: target && intent === "increase_asset_quantity" ? Number(currentQuantity) + Number(parsed.addQuantity ?? 0) : target && intent === "decrease_asset_quantity" && decreaseQuantity != null ? Number(currentQuantity) - decreaseQuantity : toOptionalNumber(parsed.newQuantity),
     asset: cleanAsset,

@@ -7,8 +7,8 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 
 assert(html.includes('id="boardSpeechButton"'));
 assert(html.includes('id="boardSpeechStatus"'));
-assert(html.includes("operationBoardPage.js?v=7-speech-input"));
-assert(html.includes("operationBoardPage.css?v=4-speech-input"));
+assert(/operationBoardPage\.js\?v=[^"]+/.test(html));
+assert(/operationBoardPage\.css\?v=[^"]+/.test(html));
 
 assert(page.includes("window.SpeechRecognition || window.webkitSpeechRecognition"));
 assert(page.includes('speechRecognition.lang = "ko-KR"'));
