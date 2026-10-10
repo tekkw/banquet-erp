@@ -108,19 +108,34 @@
   function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t)|비어\s*있|철수)/i.test(text) && /(그대로|현재|지금|확인|세팅|상태|변경|바꿨|바꿨어|비어\s*있|철수)/i.test(text); }
   function hallStateLayout(text) { return /비어\s*있|철수|empty/i.test(text) ? "empty" : /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
   function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
+  function currentStateConventionUnit(value) { const text = normalizeHallName(value).replace(/센터/g, ""); if (/컨벤션(?:AB|전체|ALL)/i.test(text)) return "AB"; if (/컨벤션(?:A|1|2)(?:$|[^0-9])/i.test(text)) return "A"; if (/컨벤션(?:B|3)(?:$|[^0-9])/i.test(text)) return "B"; return ""; }
+  function operationalHallMatches(spaces, text) {
+    const unit = currentStateConventionUnit(text); if (unit) {
+      const convention = spaces.filter((space) => /^컨벤션(?:센터)?\s*[123]$/i.test(String(space.space_name || "").replace(/\s+/g, ""))); const member = (number) => convention.find((space) => new RegExp(`${number}$`).test(String(space.space_name || ""))); const one = member(1); const two = member(2); const three = member(3);
+      if (!one || !two || !three) return [];
+      return [{ ...(unit === "B" ? three : one), space_name: `컨벤션 ${unit}`, space_code: `CONV_${unit}`, memberSpaceIds: unit === "A" ? [one.id, two.id] : unit === "B" ? [three.id] : [one.id, two.id, three.id], conventionUnit: unit }];
+    }
+    const normalized = normalizeHallName(text); return spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
+  }
+  async function currentHallState(space) {
+    const ids = space.memberSpaceIds || [space.id]; const rows = await request(`hall_current_states?select=*&space_id=in.(${ids.join(",")})&order=updated_at.desc`);
+    if (!space.conventionUnit) return rows?.[0] || null;
+    if (space.conventionUnit === "AB") return rows.find((row) => row.space_key === "CONV_AB" || currentStateConventionUnit(row.venue_name) === "AB") || null;
+    return rows.find((row) => row.space_key !== "CONV_AB" && currentStateConventionUnit(row.venue_name) !== "AB") || null;
+  }
   async function interpretHallState(text) {
     const spaces = await request("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc");
-    const normalized = normalizeHallName(text); const matches = spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
+    const matches = operationalHallMatches(spaces, text);
     if (matches.length !== 1) throw new Error(matches.length ? "확인할 연회장을 하나만 입력해주세요." : "연회장 이름을 함께 입력해주세요. 예: 부라노1 30석 스쿨식 그대로야");
     const seats = text.match(/(\d+)\s*석/i); const tables = text.match(/(\d+)\s*(?:t|테이블)/i); const layoutType = hallStateLayout(text); const empty = layoutType === "empty";
     if (!layoutType && !seats && !tables) throw new Error("레이아웃 타입이나 좌석·테이블 수를 입력해주세요.");
-    const existing = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`);
-    return { space: matches[0], previous: existing?.[0] || null, layoutType: layoutType || existing?.[0]?.layout_type || null, seats: empty ? 0 : seats ? Number(seats[1]) : existing?.[0]?.seats ?? null, tables: empty ? 0 : tables ? Number(tables[1]) : existing?.[0]?.tables ?? null, userText: text };
+    const existing = await currentHallState(matches[0]);
+    return { space: matches[0], previous: existing, layoutType: layoutType || existing?.layout_type || null, seats: empty ? 0 : seats ? Number(seats[1]) : existing?.seats ?? null, tables: empty ? 0 : tables ? Number(tables[1]) : existing?.tables ?? null, userText: text };
   }
   async function showHallStateQuery(text) {
-    const spaces = await request("venue_spaces?select=id,space_name&is_active=eq.true&order=space_name.asc"); const normalized = normalizeHallName(text); const matches = spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
+    const spaces = await request("venue_spaces?select=id,space_name,space_code&is_active=eq.true&order=space_name.asc"); const matches = operationalHallMatches(spaces, text);
     if (matches.length !== 1) throw new Error("확인할 연회장 이름을 하나만 입력해주세요.");
-    const rows = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`); const state = rows?.[0];
+    const state = await currentHallState(matches[0]);
     if (!state) { showMessage(`${matches[0].space_name} 현재 세팅은 아직 확인되지 않았습니다.`); return; }
     const layouts = state.source_layout_id ? await request(`venue_layouts?select=id,layout_name&id=eq.${encodeURIComponent(state.source_layout_id)}&is_active=eq.true&limit=1`) : []; const layout = layouts?.[0];
     const answer = `${matches[0].space_name}은 현재 ${[state.layout_type, state.tables != null ? `${state.tables}T` : "", state.seats != null ? `${state.seats}석` : ""].filter(Boolean).join(" · ")}으로 확인되어 있습니다.`;

@@ -110,6 +110,35 @@
   const normalizeLayout = (value) => String(value || "").toLowerCase().replace(/\s+/g, "").replace(/school|스쿨형/g, "스쿨식").replace(/round|원형/g, "라운드").replace(/u_shape|u자/g, "u자").replace(/t_shape/g, "t-shape").replace(/hollow_square|ㅁ-shape/g, "ㅁ-shape");
   const layoutDisplayType = (value) => ({ school: "스쿨식", round: "라운드", buffet: "뷔페식", u_shape: "U자", t_shape: "T-Shape", hollow_square: "ㅁ-Shape", custom: "기타" }[String(value || "").toLowerCase()] || value || "");
   const normalizeVenue = (value) => String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타");
+  function conventionUnit(value) {
+    const venue = normalizeVenue(value).replace(/센터/g, "");
+    if (/컨벤션(?:AB|전체|ALL)/i.test(venue)) return "AB";
+    if (/컨벤션(?:A|1|2)(?:$|[^0-9])/i.test(venue)) return "A";
+    if (/컨벤션(?:B|3)(?:$|[^0-9])/i.test(venue)) return "B";
+    return "";
+  }
+
+  function normalizeOperationalHallSpaces(spaces, states = [], orders = [], now = new Date()) {
+    const convention = spaces.filter((space) => /^컨벤션(?:센터)?\s*[123]$/i.test(String(space.space_name || "").replace(/\s+/g, "")));
+    if (convention.length < 3) return { spaces, states };
+    const member = (number) => convention.find((space) => new RegExp(`${number}$`).test(String(space.space_name || "")));
+    const one = member(1); const two = member(2); const three = member(3); if (!one || !two || !three) return { spaces, states };
+    const today = dateKey(now); const conventionOrders = orders.filter((event) => conventionUnit(event.venue));
+    const latestEnded = conventionOrders.filter((event) => event.end_date && event.end_date <= today).sort((a, b) => String(b.end_date).localeCompare(String(a.end_date)))[0];
+    const todayUpcoming = conventionOrders.find((event) => event.start_date === today && conventionUnit(event.venue) === "AB");
+    const explicitAbState = states.filter((row) => row.space_key === "CONV_AB" || conventionUnit(row.venue_name) === "AB").sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))[0];
+    const explicitAbIsCurrent = explicitAbState && (!latestEnded || dateKey(explicitAbState.confirmed_at || explicitAbState.updated_at) >= latestEnded.end_date);
+    const useAb = conventionUnit(latestEnded?.venue) === "AB" || Boolean(todayUpcoming) || Boolean(explicitAbIsCurrent);
+    const others = spaces.filter((space) => !convention.includes(space)); const otherStates = states.filter((row) => !convention.some((space) => space.id === row.space_id));
+    if (useAb) {
+      const virtual = { ...one, space_name: "컨벤션 AB", space_code: "CONV_AB", memberSpaceIds: [one.id, two.id, three.id], conventionUnit: "AB" };
+      return { spaces: [virtual, ...others], states: [...(explicitAbState ? [{ ...explicitAbState, space_id: virtual.id }] : []), ...otherStates] };
+    }
+    const a = { ...one, space_name: "컨벤션 A", space_code: "CONV_A", memberSpaceIds: [one.id, two.id], conventionUnit: "A" }; const b = { ...three, space_name: "컨벤션 B", space_code: "CONV_B", memberSpaceIds: [three.id], conventionUnit: "B" };
+    const latest = (ids) => states.filter((row) => ids.includes(row.space_id) && row.space_key !== "CONV_AB" && conventionUnit(row.venue_name) !== "AB").sort((left, right) => String(right.updated_at || "").localeCompare(String(left.updated_at || "")))[0];
+    const aState = latest(a.memberSpaceIds); const bState = latest(b.memberSpaceIds);
+    return { spaces: [a, b, ...others], states: [...(aState ? [{ ...aState, space_id: a.id }] : []), ...(bState ? [{ ...bState, space_id: b.id }] : []), ...otherStates] };
+  }
 
   function setupChangeRequired(current, next) {
     if (!current || !next) return null;
@@ -200,6 +229,7 @@
   }
 
   function eventsForSpace(space, orders) {
+    if (space.conventionUnit) return orders.filter((row) => conventionUnit(row.venue) === space.conventionUnit);
     const board = window.BANQUET_ERP_OPERATION_BOARD;
     if (board?.spacesOverlap) return orders.filter((row) => board.spacesOverlap({ venue: space.space_name }, { venue: row.venue }));
     const key = normalizeVenue(space.space_name);
@@ -281,7 +311,7 @@
         hallRequest("venue_layouts?select=id,space_id,layout_name,layout_type,setup_capacity,table_count,preview_file_id,created_at,updated_at,is_active&is_active=eq.true&order=updated_at.desc"),
       ]);
       const previewIds = [...new Set((layouts || []).map((layout) => layout.preview_file_id).filter(Boolean))]; const files = previewIds.length ? await hallRequest(`files?select=id,public_url,storage_path,bucket,original_filename&id=in.(${previewIds.join(",")})`) : [];
-      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.orders = orders || []; hallState.notes = notes || []; hallState.layouts = layouts || []; hallState.previewFiles = new Map((files || []).map((file) => [String(file.id), file])); hallState.suggestions = buildEventSuggestions(hallState.spaces, hallState.orders, hallState.notes); hallState.questions = buildConfirmationQuestions(hallState.spaces, hallState.rows, hallState.orders); renderHallStates();
+      const operational = normalizeOperationalHallSpaces(spaces || [], rows || [], orders || []); hallState.spaces = operational.spaces; hallState.rows = operational.states; hallState.orders = orders || []; hallState.notes = notes || []; hallState.layouts = layouts || []; hallState.previewFiles = new Map((files || []).map((file) => [String(file.id), file])); hallState.suggestions = buildEventSuggestions(hallState.spaces, hallState.orders, hallState.notes); hallState.questions = buildConfirmationQuestions(hallState.spaces, hallState.rows, hallState.orders); renderHallStates();
     } catch (error) {
       console.error("hall current states load failed", { status: error.status, body: error.body, error });
       if (list) list.innerHTML = `<p class="hall-state-error">현재 세팅 상태를 불러오지 못했습니다. ${hallEscape(error.message)}</p>`;
@@ -312,7 +342,7 @@
 
   function stateSignature(value) { return `${normalizeLayout(value?.layout_type || value?.layoutType)}|${nullableInteger(value?.seats)}|${nullableInteger(value?.tables)}`; }
   function renderHallLayoutOptions(spaceId, state) {
-    const form = hallState.dialog.querySelector("form"); const options = form.querySelector("[data-hall-layout-options]"); const layouts = hallState.layouts.filter((layout) => layout.space_id === spaceId); const recommended = recommendLayouts(state, layouts); const recommendedIds = new Set(recommended.map((layout) => layout.id));
+    const form = hallState.dialog.querySelector("form"); const options = form.querySelector("[data-hall-layout-options]"); const space = hallState.spaces.find((item) => item.id === spaceId); const memberIds = space?.memberSpaceIds || [spaceId]; const layouts = hallState.layouts.filter((layout) => memberIds.includes(layout.space_id)); const recommended = recommendLayouts(state, layouts); const recommendedIds = new Set(recommended.map((layout) => layout.id));
     const others = layouts.filter((layout) => !recommendedIds.has(layout.id)); const card = (layout, recommendedCard) => { const summary = layoutSummary(layout); const preview = layoutPreviewUrl(layout); return `<button type="button" class="hall-layout-option${recommendedCard ? " is-recommended" : ""}" data-hall-layout-choice="${layout.id}">${preview ? `<img src="${hallEscape(preview)}" alt="">` : ""}<span><strong>${hallEscape(summary.name)}</strong><small>${hallEscape(layoutDisplayType(layout.layout_type))} · ${summary.seats ?? 0}석 · ${summary.tables ?? 0}T</small></span></button>`; };
     options.innerHTML = layouts.length ? `<p>현재 상태와 비슷한 저장 도면 (최대 3개)</p>${recommended.map((layout) => card(layout, true)).join("")}${others.length ? `<p>이 공간의 다른 저장 도면</p>${others.map((layout) => card(layout, false)).join("")}` : ""}` : `<p>이 공간에 저장된 레이아웃이 없습니다.</p>`;
     const linked = hallState.layouts.find((layout) => layout.id === form.dataset.sourceLayoutId); form.querySelector("[data-hall-selected-layout]").textContent = linked ? linked.layout_name : form.dataset.sourceLayoutId ? "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"; options.hidden = true;
@@ -371,7 +401,7 @@
     const requestedLayoutId = new URLSearchParams(window.location.search).get("layoutPreview"); if (requestedLayoutId) setTimeout(() => window.BANQUET_ERP_FLOORPLAN_EDITOR_INSTANCE?.openLayoutPreviewById(requestedLayoutId), 0);
   }
 
-  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, needsHallStateConfirmation, buildConfirmationQuestions, normalizeLayout, buildEventSuggestions, layoutSummary, recommendLayouts, compareLayouts };
+  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, needsHallStateConfirmation, buildConfirmationQuestions, normalizeLayout, buildEventSuggestions, layoutSummary, recommendLayouts, compareLayouts, conventionUnit, normalizeOperationalHallSpaces };
 
   function setupDashboardAiOverlay(home) {
     const widget = home.querySelector(".dashboard-ai-widget");

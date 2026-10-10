@@ -5,7 +5,7 @@ const html = fs.readFileSync("outputs/index.html", "utf8");
 const script = fs.readFileSync("outputs/src/dashboardWidgets.js", "utf8");
 const styles = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
 
-assert(html.includes("dashboardWidgets.js?v=hall-layout-link-v3"));
+assert(html.includes("dashboardWidgets.js?v=hall-convention-units-v4"));
 assert(styles.includes("background: #102a40"));
 assert(styles.includes("background: #0d2235"));
 assert(styles.includes("color: #f4f7fa"));

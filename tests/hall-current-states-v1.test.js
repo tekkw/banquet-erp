@@ -45,6 +45,23 @@ assert.strictEqual(suggestions.get("burano-1").source, "event_inherited", "마�
 assert.strictEqual(suggestions.get("burano-1").seats, 30);
 assert.strictEqual(suggestions.has("capri-1"), false, "근거가 없는 공간은 미확인으로 남겨야 한다");
 
+const conventionSpaces = [
+  { id: "conv-1", space_name: "컨벤션1", space_code: "CONV_1" },
+  { id: "conv-2", space_name: "컨벤션2", space_code: "CONV_2" },
+  { id: "conv-3", space_name: "컨벤션3", space_code: "CONV_3" },
+  { id: "festa", space_name: "페스타", space_code: "FESTA" },
+];
+const splitConvention = api.normalizeOperationalHallSpaces(conventionSpaces, [{ space_id: "conv-2", venue_name: "컨벤션2", updated_at: "2026-10-09" }], [{ id: "a-event", venue: "컨벤션 A", end_date: "2026-10-09" }], now);
+assert.deepStrictEqual(Array.from(splitConvention.spaces.slice(0, 2), (space) => space.space_name), ["컨벤션 A", "컨벤션 B"]);
+assert(!splitConvention.spaces.some((space) => /컨벤션[123]$/.test(space.space_name)), "컨벤션1/2/3을 독립 current-state 공간으로 노출하지 않는다");
+assert.strictEqual(splitConvention.states[0].space_id, "conv-1", "컨벤션2 상태도 A 대표 키로 정규화한다");
+const wholeConvention = api.normalizeOperationalHallSpaces(conventionSpaces, [], [{ id: "ab-event", venue: "컨벤션 AB", end_date: "2026-10-10" }], now);
+assert.strictEqual(wholeConvention.spaces[0].space_name, "컨벤션 AB");
+assert(!wholeConvention.spaces.some((space) => space.space_name === "컨벤션 A" || space.space_name === "컨벤션 B"), "AB 사용 시 A/B 중복 카드를 만들지 않는다");
+assert.strictEqual(api.conventionUnit("컨벤션1"), "A");
+assert.strictEqual(api.conventionUnit("컨벤션2"), "A");
+assert.strictEqual(api.conventionUnit("컨벤션3"), "B");
+
 const migration = fs.readFileSync("supabase/migrations/20261010120000_add_hall_current_states.sql", "utf8");
 assert(migration.includes("unique (space_id)"));
 assert(migration.includes("manual_confirmed"));
@@ -59,6 +76,8 @@ assert(boardPage.includes('layoutType === "empty"'));
 assert(boardPage.includes("바꿨어"));
 assert(boardPage.includes("isHallStateQueryRequest"));
 assert(boardPage.includes("현재 도면 보기"));
+assert(boardPage.includes("operationalHallMatches"));
+assert(boardPage.includes('space_code: `CONV_${unit}`'));
 
 const widget = fs.readFileSync("outputs/src/dashboardWidgets.js", "utf8");
 assert(widget.includes("data-hall-unchanged"));
