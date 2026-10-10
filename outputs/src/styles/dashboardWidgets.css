@@ -463,6 +463,7 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .dashboard-widget-shell > .dashboard-month-card,
   .dashboard-widget-shell > .operations-status-grid,
   .dashboard-widget-shell > .operation-board { overflow: visible; }
+  .dashboard-widget-shell > .hall-current-states-widget { overflow: visible; }
   .dashboard-widget-shell > .operations-status-grid { grid-template-columns: 1fr; }
   .widget-edit-bar { flex-wrap: wrap; }
   .widget-edit-bar strong { min-width: 90px; }
@@ -540,3 +541,41 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   font: inherit; font-size: 12px; cursor: pointer;
 }
 .setup-original-action button:focus-visible { outline: 2px solid var(--dash-gold, #c6a667); outline-offset: 2px; }
+
+.hall-current-states-widget { display: flex; min-height: 100%; flex-direction: column; padding: 16px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-panel); color: var(--dash-text); }
+.hall-current-states-widget > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hall-current-states-widget h3 { margin: 2px 0 0; font-size: 17px; }
+.hall-state-eyebrow { color: var(--dash-gold, #c6a667); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
+.hall-state-help { margin: 6px 0 12px; color: var(--dash-muted); font-size: 11px; }
+.hall-state-list { display: grid; gap: 6px; overflow: auto; }
+.hall-state-row { display: grid; grid-template-columns: minmax(90px, .8fr) minmax(130px, 1.4fr) auto auto; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px; border: 1px solid rgba(150, 180, 205, .12); border-radius: 9px; background: rgba(6, 17, 31, .34); color: inherit; text-align: left; cursor: pointer; }
+.hall-state-row:hover { border-color: var(--dash-border-strong); background: rgba(19, 47, 70, .72); }
+.hall-state-row > span:first-child { display: grid; gap: 1px; }
+.hall-state-row strong { font-size: 13px; }
+.hall-state-row small { color: var(--dash-muted); font-size: 10px; }
+.hall-state-setup { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.hall-state-source { display: grid; justify-items: end; gap: 2px; color: #f2c76e; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.hall-state-source[data-source="manual_confirmed"] { color: #68d391; }
+.hall-state-source[data-source="unknown"] { color: var(--dash-muted); }
+.hall-state-source[data-source="ai_inferred"] { color: #8bbcff; }
+.hall-state-edit { color: var(--dash-muted); font-size: 11px; }
+.hall-state-loading, .hall-state-error { margin: 14px 0; color: var(--dash-muted); font-size: 12px; }
+.hall-state-error { color: #ff9b9b; }
+.hall-state-dialog { width: min(480px, calc(100vw - 24px)); padding: 0; border: 1px solid var(--dash-border-strong); border-radius: 14px; background: #102438; color: var(--dash-text); }
+.hall-state-dialog::backdrop { background: rgba(0, 7, 15, .72); }
+.hall-state-dialog form { display: grid; gap: 13px; padding: 18px; }
+.hall-state-dialog header, .hall-state-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hall-state-dialog h3 { margin: 2px 0 0; }
+.hall-state-dialog label { display: grid; gap: 6px; color: #c7d3dc; font-size: 12px; }
+.hall-state-dialog input, .hall-state-dialog textarea { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--dash-border); border-radius: 8px; background: rgba(6, 17, 31, .68); color: var(--dash-text); font: inherit; }
+.hall-state-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hall-state-dialog-hint { margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.5; }
+.hall-state-dialog-hint.is-error { color: #ff9b9b; }
+.hall-state-dialog footer { justify-content: flex-end; }
+
+@media (max-width: 768px) {
+  .hall-state-row { grid-template-columns: minmax(90px, .8fr) minmax(0, 1.2fr) auto; gap: 7px; }
+  .hall-state-edit { display: none; }
+  .hall-state-source { font-size: 10px; }
+  .hall-state-form-grid { grid-template-columns: 1fr 1fr; }
+}

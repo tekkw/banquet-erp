@@ -28,6 +28,7 @@
   const SpeechSynthesisUtteranceApi = window.SpeechSynthesisUtterance;
   let events = [];
   let pendingProposal = null;
+  let pendingHallStateProposal = null;
   let pendingAssetProposal = null;
   let pendingAssetContext = null;
   let pendingAssetQuery = null;
@@ -103,6 +104,28 @@
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
   function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
+  function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t))/i.test(text) && /(그대로|현재|지금|확인|세팅|상태)/i.test(text); }
+  function hallStateLayout(text) { return /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
+  function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
+  async function interpretHallState(text) {
+    const spaces = await request("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc");
+    const normalized = normalizeHallName(text); const matches = spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
+    if (matches.length !== 1) throw new Error(matches.length ? "확인할 연회장을 하나만 입력해주세요." : "연회장 이름을 함께 입력해주세요. 예: 부라노1 30석 스쿨식 그대로야");
+    const seats = text.match(/(\d+)\s*석/i); const tables = text.match(/(\d+)\s*(?:t|테이블)/i); const layoutType = hallStateLayout(text);
+    if (!layoutType && !seats && !tables) throw new Error("레이아웃 타입이나 좌석·테이블 수를 입력해주세요.");
+    const existing = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`);
+    return { space: matches[0], previous: existing?.[0] || null, layoutType: layoutType || existing?.[0]?.layout_type || null, seats: seats ? Number(seats[1]) : existing?.[0]?.seats ?? null, tables: tables ? Number(tables[1]) : existing?.[0]?.tables ?? null, userText: text };
+  }
+  function showHallStateProposal(proposal) {
+    pendingHallStateProposal = proposal; pendingProposal = null;
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>현재 세팅 확인</h3><p><strong>${escapeHtml(proposal.space.space_name)}</strong></p><p>${escapeHtml([proposal.layoutType, proposal.tables != null ? `${proposal.tables}T` : "", proposal.seats != null ? `${proposal.seats}석` : ""].filter(Boolean).join(" · ") || "세팅 상세 미입력")}</p><p class="board-ai-status">사용자가 확인한 현재 상태로 저장합니다. 행사 종료 후에도 유지됩니다.</p><div class="board-ai-actions"><button type="button" class="primary-button" data-hall-state-approve>현재 상태 확인</button><button type="button" class="secondary-button" data-hall-state-cancel>취소</button></div></div>`;
+  }
+  async function applyHallStateProposal(proposal) {
+    const user = storedUser(); const payload = { space_id: proposal.space.id, space_key: proposal.space.space_code || null, venue_name: proposal.space.space_name, layout_type: proposal.layoutType, seats: proposal.seats, tables: proposal.tables, equipment: proposal.previous?.equipment || {}, note: proposal.previous?.note || null, source: "manual_confirmed", source_event_order_id: null, source_layout_id: null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    const rows = await request("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) });
+    if (!rows?.[0]?.id) throw new Error("현재 세팅 저장 결과가 없습니다.");
+    pendingHallStateProposal = null; aiInput.value = ""; showMessage(`${proposal.space.space_name} 현재 세팅을 확인 상태로 저장했습니다.`, true);
+  }
   function requestsDetailedReview(text) { return /(사진|이미지|장면).*(다시|자세히)|다시.*(봐|보|분석)/i.test(text); }
   function encodeStoragePath(path) { return String(path).split("/").map(encodeURIComponent).join("/"); }
   async function uploadSelectedAssetImage() {
@@ -526,6 +549,11 @@
       try { const result = await requestVisualQuery(text, includeImage); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("visual follow-up failed", error); showMessage(error.message || "시각 질문에 답하지 못했습니다."); }
       return;
     }
+    if (!followupContext && !selectedAssetImageFile && isHallStateConfirmationRequest(text)) {
+      showTransientMessage("현재 세팅 상태를 확인하고 있습니다…");
+      try { showHallStateProposal(await interpretHallState(text)); } catch (error) { console.error("hall state intake failed", error); showMessage(error.message || "현재 세팅 상태를 확인하지 못했습니다."); }
+      return;
+    }
     if (!followupContext && !explicitNewAsset && !selectedAssetImageFile && isAssetQueryRequest(text)) {
       showTransientMessage("자산 정보를 조회하고 있습니다…");
       try { const result = await handleAssetQuery(text); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
@@ -541,6 +569,8 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-hall-state-cancel]")) { pendingHallStateProposal = null; showMessage("현재 세팅 확인을 취소했습니다."); return; }
+    if (event.target.closest("[data-hall-state-approve]") && pendingHallStateProposal) { const proposal = pendingHallStateProposal; showTransientMessage("현재 세팅 상태를 저장하고 있습니다…"); try { await applyHallStateProposal(proposal); } catch (error) { console.error("hall state save failed", { status: error.status, body: error.body, error }); showHallStateProposal(proposal); aiResult.insertAdjacentHTML("afterbegin", `<p class="board-ai-status">${escapeHtml(error.message || "현재 세팅 상태 저장에 실패했습니다.")}</p>`); } return; }
     if (event.target.closest("[data-visual-register-asset]")) { try { await useVisualCaptureForAssetIntake(); } catch (error) { console.error(error); showMessage("캡처 사진을 자산 등록에 연결하지 못했습니다."); } return; }
     if (event.target.closest("[data-visual-clear]")) { visualSession = null; closeVisualCamera(); aiInput.value = ""; showMessage("시각 AI 캡처를 종료했습니다."); return; }
     if (event.target.closest("[data-asset-query-close]")) { showMessage(""); aiResult.innerHTML = ""; return; }

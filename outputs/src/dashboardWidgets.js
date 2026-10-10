@@ -10,6 +10,7 @@
   const definitions = [
     { id: "today-board", name: "운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6 },
     { id: "weekly-setup", name: "다음 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 4, rowSpan: 10, minColSpan: 4, minRowSpan: 5 },
+    { id: "hall-current-states", name: "현재 세팅 상태", selector: "#hallCurrentStatesWidget", colSpan: 4, rowSpan: 8, minColSpan: 4, minRowSpan: 5 },
     { id: "operations-status", name: "운영 현황", selector: ".operations-status-grid", colSpan: 6, rowSpan: 5, minColSpan: 4, minRowSpan: 5 },
     { id: "mini-calendar", name: "미니 캘린더", selector: ".dashboard-month-card", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
     { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 8, rowSpan: 5, minColSpan: 5, minRowSpan: 5 },
@@ -72,6 +73,7 @@
     decorateChrome();
     ensureQuickActions(home);
     setupDashboardAiOverlay(home);
+    ensureHallCurrentStatesWidget(home);
     const header = document.createElement("header");
     header.className = "dashboard-home-header";
     header.innerHTML = `<div><span class="dashboard-today">${new Intl.DateTimeFormat("ko-KR", { dateStyle: "full" }).format(new Date())}</span><small>연회 운영 대시보드</small></div><div class="dashboard-edit-actions"><button class="secondary-button" type="button" data-dashboard-edit>대시보드 편집</button><button class="secondary-button" type="button" data-widget-add hidden>+ 위젯 추가</button><button class="secondary-button" type="button" data-widget-reset hidden>기본 배치로 초기화</button><button class="secondary-button" type="button" data-widget-cancel hidden>취소</button><button class="primary-button" type="button" data-widget-save hidden>저장</button></div>`;
@@ -98,7 +100,154 @@
     draft = load();
     apply(draft);
     bind();
+    initHallCurrentStatesWidget();
   }
+
+  const hallState = { spaces: [], rows: [], suggestions: new Map(), dialog: null };
+  const hallConfig = () => window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
+  const hallEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
+  const nullableInteger = (value) => value === "" || value == null ? null : Number.parseInt(value, 10);
+  const normalizeLayout = (value) => String(value || "").toLowerCase().replace(/\s+/g, "").replace(/school|스쿨형/g, "스쿨식").replace(/round|원형/g, "라운드");
+  const normalizeVenue = (value) => String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타");
+
+  function setupChangeRequired(current, next) {
+    if (!current || !next) return null;
+    const currentLayout = normalizeLayout(current.layoutType || current.layout_type);
+    const nextLayout = normalizeLayout(next.layoutType || next.layout_type);
+    if (!currentLayout || !nextLayout) return null;
+    if (currentLayout !== nextLayout) return true;
+    const currentTables = nullableInteger(current.tables ?? current.table_count);
+    const nextTables = nullableInteger(next.tables ?? next.table_count);
+    if (currentTables != null || nextTables != null) return currentTables == null || nextTables == null ? null : currentTables !== nextTables;
+    const currentSeats = nullableInteger(current.seats ?? current.setup_capacity);
+    const nextSeats = nullableInteger(next.seats ?? next.setup_capacity);
+    return currentSeats == null || nextSeats == null ? null : currentSeats !== nextSeats;
+  }
+
+  async function hallRequest(path, options = {}) {
+    const config = hallConfig();
+    if (!config?.url || !config?.anonKey) throw new Error("Supabase 설정을 확인해주세요.");
+    const response = await fetch(`${config.url}/rest/v1/${path}`, { ...options, headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) } });
+    const text = await response.text();
+    if (!response.ok) { const error = new Error(`Supabase ${response.status}`); error.status = response.status; error.body = text; throw error; }
+    return text ? JSON.parse(text) : null;
+  }
+
+  function ensureHallCurrentStatesWidget(home) {
+    if (home.querySelector("#hallCurrentStatesWidget")) return;
+    const section = document.createElement("section");
+    section.id = "hallCurrentStatesWidget";
+    section.className = "hall-current-states-widget";
+    section.innerHTML = `<header><div><span class="hall-state-eyebrow">LIVE SETUP</span><h3>현재 세팅 상태</h3></div><button type="button" class="secondary-button" data-hall-refresh aria-label="현재 세팅 상태 새로고침">새로고침</button></header><p class="hall-state-help">마지막 확인 상태는 행사 종료 후에도 유지됩니다.</p><div class="hall-state-list" data-hall-state-list><p class="hall-state-loading">공간 상태를 불러오는 중…</p></div>`;
+    home.append(section);
+  }
+
+  function inferredLayout(event, notes) {
+    const text = `${event.venue || ""}\n${notes || ""}`;
+    const board = window.BANQUET_ERP_OPERATION_BOARD;
+    const layoutType = board?.inferLayoutType?.({ ...event, layoutEqpText: notes }) || ([/스쿨|school/i, /라운드|round|원형/i, /극장|theater/i, /u[- ]?shape|u자/i].map((regex, index) => regex.test(text) ? ["스쿨식", "라운드", "극장식", "U자"][index] : "").find(Boolean) || "");
+    const tableMatch = text.match(/(\d+)\s*(?:T|테이블)/i);
+    return { layout_type: layoutType || null, seats: Number(event.guest_count) || null, tables: tableMatch ? Number(tableMatch[1]) : null };
+  }
+
+  function buildEventSuggestions(spaces, orders, notes) {
+    const noteByEvent = notes.reduce((map, row) => { if (row.note_type === "layout_eqp") map[row.event_order_id] = `${map[row.event_order_id] || ""}\n${row.content || ""}`; return map; }, {});
+    const ended = orders.filter((row) => row.end_date && row.end_date < new Date().toISOString().slice(0, 10)).sort((a, b) => String(b.end_date).localeCompare(String(a.end_date)));
+    const suggestions = new Map();
+    for (const space of spaces) {
+      const key = normalizeVenue(space.space_name);
+      const event = ended.find((row) => normalizeVenue(row.venue).includes(key));
+      if (!event) continue;
+      suggestions.set(space.id, { id: null, space_id: space.id, space_key: space.space_code, venue_name: space.space_name, source: "event_inherited", source_event_order_id: event.id, confidence: 0.55, confirmed_at: null, updated_at: event.end_date, ...inferredLayout(event, noteByEvent[event.id]) });
+    }
+    return suggestions;
+  }
+
+  function formatSetup(row) {
+    if (!row) return "상태 미확인";
+    const details = [row.layout_type, row.tables != null ? `${row.tables}T` : "", row.seats != null ? `${row.seats}석` : ""].filter(Boolean);
+    return details.length ? details.join(" · ") : "세팅 상세 미입력";
+  }
+
+  function relativeConfirmed(row) {
+    if (!row?.confirmed_at) return "";
+    const days = Math.max(0, Math.floor((Date.now() - new Date(row.confirmed_at).getTime()) / 86400000));
+    if (days === 0) return "오늘 확인";
+    if (days < 7) return `${days}일 전 확인`;
+    return `마지막 확인 ${new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit" }).format(new Date(row.confirmed_at))}`;
+  }
+
+  function renderHallStates() {
+    const list = document.querySelector("[data-hall-state-list]");
+    if (!list) return;
+    const bySpace = new Map(hallState.rows.map((row) => [row.space_id, row]));
+    list.innerHTML = hallState.spaces.map((space) => {
+      const saved = bySpace.get(space.id);
+      const row = saved || hallState.suggestions.get(space.id) || null;
+      const source = saved?.source || row?.source || "unknown";
+      const label = source === "manual_confirmed" ? "확인됨" : source === "event_inherited" ? "이전 행사 기준" : source === "ai_inferred" ? "AI 추정 · 미확인" : "미확인";
+      const date = source === "manual_confirmed" ? relativeConfirmed(row) : "";
+      return `<button type="button" class="hall-state-row" data-hall-space-id="${space.id}"><span><strong>${hallEscape(space.space_name)}</strong><small>${hallEscape(space.floor || "")}</small></span><span class="hall-state-setup">${hallEscape(formatSetup(row))}</span><span class="hall-state-source" data-source="${source}">${label}${date ? `<small>${hallEscape(date)}</small>` : ""}</span><span class="hall-state-edit">수정</span></button>`;
+    }).join("") || `<p class="hall-state-loading">등록된 연회장 공간이 없습니다.</p>`;
+  }
+
+  async function loadHallStates() {
+    const list = document.querySelector("[data-hall-state-list]");
+    if (list) list.innerHTML = `<p class="hall-state-loading">공간 상태를 불러오는 중…</p>`;
+    try {
+      const [spaces, rows, orders, notes] = await Promise.all([
+        hallRequest("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc"),
+        hallRequest("hall_current_states?select=*&order=venue_name.asc"),
+        hallRequest("event_orders?select=id,event_name,venue,guest_count,start_date,end_date&end_date=not.is.null&order=end_date.desc&limit=200"),
+        hallRequest("event_notes?select=event_order_id,note_type,content&note_type=eq.layout_eqp&limit=1000"),
+      ]);
+      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.suggestions = buildEventSuggestions(hallState.spaces, orders || [], notes || []); renderHallStates();
+    } catch (error) {
+      console.error("hall current states load failed", { status: error.status, body: error.body, error });
+      if (list) list.innerHTML = `<p class="hall-state-error">현재 세팅 상태를 불러오지 못했습니다. ${hallEscape(error.message)}</p>`;
+    }
+  }
+
+  function ensureHallDialog() {
+    if (hallState.dialog) return hallState.dialog;
+    const dialog = document.createElement("dialog"); dialog.className = "hall-state-dialog";
+    dialog.innerHTML = `<form method="dialog" data-hall-state-form><header><div><span class="hall-state-eyebrow">CURRENT SETUP</span><h3 data-hall-dialog-title>현재 세팅 수정</h3></div><button type="button" class="secondary-button" data-hall-close>닫기</button></header><input type="hidden" name="spaceId"><label>레이아웃 타입<input name="layoutType" list="hallLayoutTypes" placeholder="예: 스쿨식"></label><datalist id="hallLayoutTypes"><option value="스쿨식"><option value="라운드"><option value="극장식"><option value="U자"></datalist><div class="hall-state-form-grid"><label>좌석수<input name="seats" type="number" min="0" inputmode="numeric"></label><label>테이블수<input name="tables" type="number" min="0" inputmode="numeric"></label></div><label>장비 메모<input name="equipment" placeholder="예: 빔프로젝터, 무선마이크 2"></label><label>비고<textarea name="note" rows="3"></textarea></label><p class="hall-state-dialog-hint" data-hall-dialog-hint></p><footer><button type="button" class="secondary-button" data-hall-close>취소</button><button type="submit" class="primary-button">현재 상태 확인 저장</button></footer></form>`;
+    document.body.append(dialog); hallState.dialog = dialog;
+    dialog.querySelectorAll("[data-hall-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
+    dialog.querySelector("[data-hall-state-form]").addEventListener("submit", saveHallState);
+    return dialog;
+  }
+
+  function openHallDialog(spaceId) {
+    const dialog = ensureHallDialog(); const form = dialog.querySelector("form");
+    const space = hallState.spaces.find((item) => item.id === spaceId); const saved = hallState.rows.find((item) => item.space_id === spaceId); const row = saved || hallState.suggestions.get(spaceId) || {};
+    form.elements.spaceId.value = spaceId; form.elements.layoutType.value = row.layout_type || ""; form.elements.seats.value = row.seats ?? ""; form.elements.tables.value = row.tables ?? ""; form.elements.equipment.value = typeof row.equipment === "string" ? row.equipment : row.equipment?.text || ""; form.elements.note.value = row.note || "";
+    dialog.querySelector("[data-hall-dialog-title]").textContent = `${space?.space_name || "연회장"} 현재 세팅`;
+    dialog.querySelector("[data-hall-dialog-hint]").textContent = !saved && row.source === "event_inherited" ? "마지막 종료 행사 정보를 참고값으로 채웠습니다. 저장할 때만 사용자 확인 상태가 됩니다." : "저장하면 사용자 확인 상태로 기록됩니다.";
+    if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
+  }
+
+  async function saveHallState(event) {
+    event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const space = hallState.spaces.find((item) => item.id === form.elements.spaceId.value);
+    if (!space) return;
+    const user = (() => { try { return JSON.parse(localStorage.getItem(window.BANQUET_ERP_CONSTANTS?.authStorageKey) || "null"); } catch { return null; } })();
+    const payload = { space_id: space.id, space_key: space.space_code || null, venue_name: space.space_name, layout_type: form.elements.layoutType.value.trim() || null, seats: nullableInteger(form.elements.seats.value), tables: nullableInteger(form.elements.tables.value), equipment: form.elements.equipment.value.trim() ? { text: form.elements.equipment.value.trim() } : {}, note: form.elements.note.value.trim() || null, source: "manual_confirmed", source_event_order_id: null, source_layout_id: null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    submit.disabled = true; submit.textContent = "저장 중…";
+    try { await hallRequest("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) }); hallState.dialog.close(); await loadHallStates(); }
+    catch (error) { console.error("hall current state save failed", { status: error.status, body: error.body, error }); dialogAlert(form, `현재 상태 저장 실패 (${hallEscape(error.message)})`); }
+    finally { submit.disabled = false; submit.textContent = "현재 상태 확인 저장"; }
+  }
+
+  function dialogAlert(form, message) { const hint = form.querySelector("[data-hall-dialog-hint]"); hint.textContent = message; hint.classList.add("is-error"); }
+
+  function initHallCurrentStatesWidget() {
+    const widget = document.querySelector("#hallCurrentStatesWidget"); if (!widget) return;
+    widget.addEventListener("click", (event) => { const row = event.target.closest("[data-hall-space-id]"); if (row) openHallDialog(row.dataset.hallSpaceId); });
+    widget.querySelector("[data-hall-refresh]")?.addEventListener("click", loadHallStates);
+    loadHallStates();
+  }
+
+  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, normalizeLayout, buildEventSuggestions };
 
   function setupDashboardAiOverlay(home) {
     const widget = home.querySelector(".dashboard-ai-widget");
