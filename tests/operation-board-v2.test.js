@@ -50,6 +50,25 @@ board._setStateForTest({
 assert(board.allBlocks(targetDate, []).some((item) => item.key === "manual:v2"));
 assert(!board.allBlocks(otherDate, []).some((item) => item.key === "manual:v2"));
 
+// 자산 AI 감사 로그는 DB에 남아 있어도 운영 타임라인에는 포함하지 않는다.
+assert.strictEqual(board.isAssetAuditRow({ title: "create_asset", metadata: { source: "board_asset_ai" } }), true);
+assert.strictEqual(board.isAssetAuditRow({ title: "move_asset", metadata: { recordType: "asset_change_audit" } }), true);
+assert.strictEqual(board.isAssetAuditRow({ title: "생수 세팅", metadata: { source: "manual_board_task" } }), false);
+board._setStateForTest({ completions: {}, plans: {}, checklist: [], manual: [
+  { key: "board-asset-ai:audit", kind: "manual", type: "manual", date: targetDate, time: "10:00", venue: "부라노1", title: "create_asset", metadataSource: "board_asset_ai" },
+  { key: "manual:water", kind: "manual", type: "manual", date: targetDate, time: "10:30", venue: "부라노1", eventOrderId: "event-0929", title: "생수 세팅", metadataSource: "manual_board_task" },
+] });
+const integrated = board.allBlocks(targetDate, [{ ...events[0], venue: "부라노1", schedule: [{ date: targetDate, time: "09:00", content: "세미나", venue: "부라노1" }, { date: targetDate, time: "12:00", content: "중식", venue: "부라노1" }] }]);
+assert(!integrated.some((item) => item.key === "board-asset-ai:audit"));
+assert(integrated.some((item) => item.key === "manual:water" && item.eventOrderId === "event-0929"));
+const integratedTimes = integrated.map((item) => item.time); assert(integratedTimes.indexOf("09:00") < integratedTimes.indexOf("10:30") && integratedTimes.indexOf("10:30") < integratedTimes.lastIndexOf("12:00"));
+const manualGroups = board.groupBlocksBySpace([{ key: "b1-task", venue: "부라노1", eventOrderId: "event-b1", time: "10:30" }, { key: "b2-event", venue: "부라노2", eventOrderId: "event-b2", time: "10:00" }]);
+assert.strictEqual(manualGroups[0].venues.find((venue) => venue.name === "부라노1").blocks.map((item) => item.key).join(","), "b1-task", "부라노1 작업은 부라노2 그룹에 섞이지 않아야 한다");
+assert.strictEqual(board.groupBlocksBySpace([{ key: "event-a", venue: "페스타", eventOrderId: "a", time: "09:00" }, { key: "event-b", venue: "페스타", eventOrderId: "b", time: "10:00" }])[0].venues.length, 2, "같은 장소라도 행사 ID가 다르면 작업 그룹을 분리한다");
+assert(source.includes("data-venue-task-add"));
+assert(source.includes('source: item.kind === "manual" ? "manual_board_task"'));
+assert(source.includes("data-general-board-add"));
+
 // D. 오늘 동작은 현재 로컬 날짜로 돌아가며, UI 버튼도 같은 경로를 사용한다.
 board.setSelectedDate(targetDate);
 const now = new Date();

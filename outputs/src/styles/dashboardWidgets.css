@@ -307,6 +307,9 @@ body {
 .next-setup-detail { border: 1px solid rgba(150, 180, 205, .1); background: rgba(6, 17, 31, .34); color: #bdcbd5; }
 .setup-item { color: #d6e0e7; font-size: 12px; }
 .operation-board-empty { padding: 24px; border: 1px dashed var(--dash-border-strong); border-radius: 10px; color: var(--dash-muted); text-align: center; }
+.operation-board-empty button { margin-top: 12px; }
+.operation-venue-add { width: 100%; min-height: 38px; margin-top: 8px; border: 1px dashed var(--dash-border-strong); border-radius: 8px; background: rgba(19, 47, 70, .4); color: var(--dash-text); font: inherit; font-size: 12px; cursor: pointer; }
+.operation-venue-add:hover { border-style: solid; background: rgba(76, 141, 255, .12); }
 .operation-detail-dialog { padding: 0; overflow: hidden; background: #102a40; color: var(--dash-text); }
 .operation-detail-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--dash-border); }
 .operation-detail-header h3 { margin: 0; font-size: 18px; }

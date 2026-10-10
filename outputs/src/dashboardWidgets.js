@@ -198,7 +198,7 @@
   function ensureHallCurrentStatesWidget(home) {
     if (home.querySelector("#hallCurrentStatesWidget")) return;
     if (!document.querySelector('link[data-hall-state-styles="v3"]')) {
-      const stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "./src/styles/dashboardWidgets.css?v=hall-layout-link-v3"; stylesheet.dataset.hallStateStyles = "v3"; document.head.append(stylesheet);
+      const stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "./src/styles/dashboardWidgets.css?v=board-group-tasks-v5"; stylesheet.dataset.hallStateStyles = "v3"; document.head.append(stylesheet);
     }
     const section = document.createElement("section");
     section.id = "hallCurrentStatesWidget";

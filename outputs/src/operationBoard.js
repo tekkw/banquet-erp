@@ -202,16 +202,14 @@
       const venues = new Map();
       groupBlocks.forEach((block) => {
         const venue = normalize(block.venue) || "장소 미입력";
-        if (!venues.has(venue)) venues.set(venue, []);
-        venues.get(venue).push(block);
+        const venueKey = `${venue}\u0000${block.eventOrderId || "general"}`;
+        if (!venues.has(venueKey)) venues.set(venueKey, { name: venue, eventOrderId: block.eventOrderId || null, blocks: [] });
+        venues.get(venueKey).blocks.push(block);
       });
       return {
         name,
         blocks: groupBlocks,
-        venues: [...venues].sort(([left], [right]) => left.localeCompare(right, "ko")).map(([venue, venueBlocks]) => ({
-          name: venue,
-          blocks: venueBlocks.sort((left, right) => String(left.time).localeCompare(String(right.time))),
-        })),
+        venues: [...venues.values()].sort((left, right) => left.name.localeCompare(right.name, "ko") || String(left.eventOrderId || "").localeCompare(String(right.eventOrderId || ""))).map((venue) => ({ ...venue, blocks: venue.blocks.sort((left, right) => String(left.time).localeCompare(String(right.time))) })),
       };
     });
   }
@@ -308,6 +306,11 @@
     catch { return { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [] }; }
   }
   function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  const ASSET_AUDIT_TITLES = new Set(["create_asset", "increase_asset_quantity", "decrease_asset_quantity", "move_asset", "update_asset_location"]);
+  function isAssetAuditRow(row) {
+    const metadata = row?.metadata || {}; const source = String(metadata.source || "").toLowerCase(); const recordType = String(metadata.recordType || "").toLowerCase();
+    return source === "board_asset_ai" || /asset.*(?:audit|change|movement|log)|(?:audit|change|movement).*asset/.test(recordType) || ((source.includes("audit") || recordType.includes("audit")) && ASSET_AUDIT_TITLES.has(String(row?.title || "")));
+  }
   async function remoteRequest(path, options = {}) {
     const config = window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
     if (!config?.url || !config?.anonKey) throw new Error("Supabase 설정 없음");
@@ -326,12 +329,13 @@
         remoteRequest(`operation_board_checklist_items?select=*&board_date=eq.${boardDate}&order=sort_order.asc`),
       ]);
       (items || []).forEach((row) => {
+        if (isAssetAuditRow(row)) { state.manual = state.manual.filter((item) => item.key !== row.item_key); return; }
         state.completions[row.item_key] = !!row.is_completed;
         if (row.metadata?.plannedDate) state.plans[row.item_key] = row.metadata.plannedDate;
         if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
         if (row.metadata?.noteType === "field_note") {
           state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== row.item_key), { key: row.item_key, date: row.board_date, eventOrderId: row.event_order_id, venue: row.venue_name, content: row.memo || row.title }];
-        } else if (row.metadata?.recordType !== "board_ai_change_log" && row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, title: row.title, memo: row.memo || "", completed: !!row.is_completed }];
+        } else if (row.metadata?.recordType !== "board_ai_change_log" && row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "" }];
       });
       state.checklist = [...state.checklist.filter((item) => item.date !== boardDate), ...(checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, date: boardDate, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }))];
       remoteLoadedDates.add(boardDate);
@@ -342,7 +346,7 @@
   }
   function syncItem(item) {
     const override = state.reminders[item.key]; const resolved = override == null || override === "default" ? defaultReminder : override;
-    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
+    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", boardDate: item.date || dateKey(), venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
     return remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) }).catch((error) => console.error("운영보드 저장 실패", error));
   }
   function syncChecklist(item, removed = false) {
@@ -351,7 +355,7 @@
   }
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function allBlocks(boardDate = selectedDate, events = currentEvents) {
-    return [...buildAutoBlocks(events, boardDate), ...state.manual.filter((x) => x.date === boardDate)].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
+    return [...buildAutoBlocks(events, boardDate), ...state.manual.filter((x) => x.date === boardDate && !String(x.key || "").startsWith("board-asset-ai:") && x.metadataSource !== "board_asset_ai")].sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
@@ -381,11 +385,11 @@
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
     const spaceGroups = groupBlocksBySpace(blocks);
-    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label><button class="primary-button" type="button" data-board-add>작업 추가</button></div></div>
+    root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label></div></div>
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<p class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br>직접 작업을 추가할 수 있습니다.</p>'}</div>
-      <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>
+      <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<div class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br><button class="primary-button" type="button" data-general-board-add>일반 작업 추가</button></div>'}</div>
+      <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><input name="eventOrderId" type="hidden"><input name="spaceId" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>
       <dialog class="operation-dialog operation-detail-dialog" data-operation-detail><div data-operation-detail-content></div></dialog>`;
     blocks.forEach((block) => {
       const count = state.fieldNotes.filter((note) => note.date === selectedDate && String(note.eventOrderId) === String(block.eventOrderId)).length;
@@ -400,7 +404,11 @@
     const mobile = window.matchMedia?.("(max-width: 768px)").matches;
     return `<div class="operation-space-groups">${groups.map((group, index) => {
       const open = !mobile || (mobileOpenGroups ? mobileOpenGroups.has(group.name) : index === 0);
-      const venues = group.venues.map((venue) => `<section class="operation-venue-group" data-venue-group="${escapeHtml(venue.name)}"><h4>${escapeHtml(venue.name)}</h4>${venue.blocks.map((block) => `<section class="operation-time-group"><time>${escapeHtml(block.time)}</time><div>${renderBlock(block)}</div></section>`).join("")}</section>`).join("");
+      const venues = group.venues.map((venue) => {
+        const targets = [...new Map(venue.blocks.filter((block) => block.eventOrderId && block.type !== "next_setup").map((block) => [String(block.eventOrderId), block])).values()];
+        const addActions = targets.map((target) => { const event = currentEvents.find((item) => String(item.id) === String(target.eventOrderId)); const label = targets.length > 1 ? `+ ${event?.eventName || "행사"} 작업 추가` : "+ 작업 추가"; return `<button type="button" class="operation-venue-add" data-venue-task-add data-event-order-id="${escapeHtml(target.eventOrderId)}" data-venue="${escapeHtml(venue.name)}" data-space-id="${escapeHtml(target.spaceId || "")}">${escapeHtml(label)}</button>`; }).join("");
+        return `<section class="operation-venue-group" data-venue-group="${escapeHtml(venue.name)}"><h4>${escapeHtml(venue.name)}</h4>${venue.blocks.map((block) => `<section class="operation-time-group"><time>${escapeHtml(block.time)}</time><div>${renderBlock(block)}</div></section>`).join("")}${addActions}</section>`;
+      }).join("");
       return `<section class="operation-space-group" data-space-group-section="${escapeHtml(group.name)}"><button class="operation-space-group-toggle" type="button" data-space-group-toggle="${escapeHtml(group.name)}" aria-expanded="${open}"><span aria-hidden="true">${open ? "▼" : "▶"}</span><strong>${escapeHtml(group.name)}</strong><small>${group.blocks.length}건</small></button><div class="operation-space-group-body">${venues}</div></section>`;
     }).join("")}</div>`;
   }
@@ -459,7 +467,8 @@
         };
       });
     });
-    root.querySelector("[data-board-add]").onclick = () => openDialog();
+    root.querySelector("[data-general-board-add]")?.addEventListener("click", () => openDialog());
+    root.querySelectorAll("[data-venue-task-add]").forEach((button) => button.onclick = () => openDialog(null, { eventOrderId: button.dataset.eventOrderId, venue: button.dataset.venue, spaceId: button.dataset.spaceId }));
     root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
     root.querySelector("[data-board-date]").onchange = (event) => { selectDate(event.target.value); render(); };
     root.querySelectorAll("[data-board-date-step]").forEach((button) => button.onclick = () => { selectDate(addDays(selectedDate, Number(button.dataset.boardDateStep))); render(); });
@@ -519,10 +528,11 @@
     render();
   }
   function closeDialog() { const dialog = root.querySelector(".operation-dialog"); dialog.querySelector("form").reset(); dialog.close(); }
-  function openDialog(item) {
+  function openDialog(item, context = null) {
     const dialog = root.querySelector(".operation-dialog"); const form = dialog.querySelector("form"); form.reset();
     if (item) Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
-    dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue: normalize(data.venue), spaceId: `venue:${normalize(data.venue).toLowerCase().replace(/\s+/g, "")}`, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
+    if (context) Object.entries(context).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value || ""; });
+    form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, allBlocks, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], ...value }; } };
 })();
