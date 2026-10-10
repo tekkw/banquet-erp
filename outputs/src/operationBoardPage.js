@@ -104,17 +104,17 @@
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
   function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
-  function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t))/i.test(text) && /(그대로|현재|지금|확인|세팅|상태)/i.test(text); }
-  function hallStateLayout(text) { return /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
+  function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t)|비어\s*있|철수)/i.test(text) && /(그대로|현재|지금|확인|세팅|상태|변경|바꿨|바꿨어|비어\s*있|철수)/i.test(text); }
+  function hallStateLayout(text) { return /비어\s*있|철수|empty/i.test(text) ? "empty" : /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
   function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
   async function interpretHallState(text) {
     const spaces = await request("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc");
     const normalized = normalizeHallName(text); const matches = spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
     if (matches.length !== 1) throw new Error(matches.length ? "확인할 연회장을 하나만 입력해주세요." : "연회장 이름을 함께 입력해주세요. 예: 부라노1 30석 스쿨식 그대로야");
-    const seats = text.match(/(\d+)\s*석/i); const tables = text.match(/(\d+)\s*(?:t|테이블)/i); const layoutType = hallStateLayout(text);
+    const seats = text.match(/(\d+)\s*석/i); const tables = text.match(/(\d+)\s*(?:t|테이블)/i); const layoutType = hallStateLayout(text); const empty = layoutType === "empty";
     if (!layoutType && !seats && !tables) throw new Error("레이아웃 타입이나 좌석·테이블 수를 입력해주세요.");
     const existing = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`);
-    return { space: matches[0], previous: existing?.[0] || null, layoutType: layoutType || existing?.[0]?.layout_type || null, seats: seats ? Number(seats[1]) : existing?.[0]?.seats ?? null, tables: tables ? Number(tables[1]) : existing?.[0]?.tables ?? null, userText: text };
+    return { space: matches[0], previous: existing?.[0] || null, layoutType: layoutType || existing?.[0]?.layout_type || null, seats: empty ? 0 : seats ? Number(seats[1]) : existing?.[0]?.seats ?? null, tables: empty ? 0 : tables ? Number(tables[1]) : existing?.[0]?.tables ?? null, userText: text };
   }
   function showHallStateProposal(proposal) {
     pendingHallStateProposal = proposal; pendingProposal = null;

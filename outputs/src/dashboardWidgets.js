@@ -103,7 +103,7 @@
     initHallCurrentStatesWidget();
   }
 
-  const hallState = { spaces: [], rows: [], suggestions: new Map(), dialog: null };
+  const hallState = { spaces: [], rows: [], orders: [], notes: [], suggestions: new Map(), questions: [], dialog: null, resultMessage: "" };
   const hallConfig = () => window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
   const hallEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const nullableInteger = (value) => value === "" || value == null ? null : Number.parseInt(value, 10);
@@ -124,6 +124,18 @@
     return currentSeats == null || nextSeats == null ? null : currentSeats !== nextSeats;
   }
 
+  const dateKey = (value) => { if (!value) return ""; const date = new Date(value); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
+  function needsHallStateConfirmation(state, latestEvent, now = new Date(), latestChangeAt = null) {
+    if (!state) return { needed: true, reason: "state_missing" };
+    if (state.source === "ai_inferred") return { needed: true, reason: "ai_inferred" };
+    if (state.source === "event_inherited") return { needed: true, reason: "event_inherited" };
+    const confirmedAt = state.confirmed_at ? new Date(state.confirmed_at) : null;
+    if (!confirmedAt || Number.isNaN(confirmedAt.getTime())) return { needed: true, reason: "confirmation_missing" };
+    if (latestChangeAt && new Date(latestChangeAt) > confirmedAt) return { needed: true, reason: "setup_changed" };
+    if (latestEvent?.end_date && latestEvent.id !== state.source_event_order_id && latestEvent.end_date > dateKey(confirmedAt)) return { needed: true, reason: "event_ended" };
+    return { needed: false, reason: "confirmed", ageDays: Math.max(0, Math.floor((now.getTime() - confirmedAt.getTime()) / 86400000)) };
+  }
+
   async function hallRequest(path, options = {}) {
     const config = hallConfig();
     if (!config?.url || !config?.anonKey) throw new Error("Supabase 설정을 확인해주세요.");
@@ -135,10 +147,13 @@
 
   function ensureHallCurrentStatesWidget(home) {
     if (home.querySelector("#hallCurrentStatesWidget")) return;
+    if (!document.querySelector('link[data-hall-state-styles="v2"]')) {
+      const stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "./src/styles/dashboardWidgets.css?v=hall-current-state-v2"; stylesheet.dataset.hallStateStyles = "v2"; document.head.append(stylesheet);
+    }
     const section = document.createElement("section");
     section.id = "hallCurrentStatesWidget";
     section.className = "hall-current-states-widget";
-    section.innerHTML = `<header><div><span class="hall-state-eyebrow">LIVE SETUP</span><h3>현재 세팅 상태</h3></div><button type="button" class="secondary-button" data-hall-refresh aria-label="현재 세팅 상태 새로고침">새로고침</button></header><p class="hall-state-help">마지막 확인 상태는 행사 종료 후에도 유지됩니다.</p><div class="hall-state-list" data-hall-state-list><p class="hall-state-loading">공간 상태를 불러오는 중…</p></div>`;
+    section.innerHTML = `<header><div><span class="hall-state-eyebrow">LIVE SETUP</span><h3>현재 세팅 상태</h3></div><button type="button" class="secondary-button" data-hall-refresh aria-label="현재 세팅 상태 새로고침">새로고침</button></header><p class="hall-state-help">마지막 확인 상태는 행사 종료 후에도 유지됩니다.</p><div class="hall-confirmation-panel" data-hall-confirmations hidden></div><p class="hall-confirmation-result" data-hall-result hidden></p><div class="hall-state-list" data-hall-state-list><p class="hall-state-loading">공간 상태를 불러오는 중…</p></div>`;
     home.append(section);
   }
 
@@ -152,15 +167,47 @@
 
   function buildEventSuggestions(spaces, orders, notes) {
     const noteByEvent = notes.reduce((map, row) => { if (row.note_type === "layout_eqp") map[row.event_order_id] = `${map[row.event_order_id] || ""}\n${row.content || ""}`; return map; }, {});
-    const ended = orders.filter((row) => row.end_date && row.end_date < new Date().toISOString().slice(0, 10)).sort((a, b) => String(b.end_date).localeCompare(String(a.end_date)));
+    const ended = orders.filter((row) => row.end_date && row.end_date <= new Date().toISOString().slice(0, 10)).sort((a, b) => String(b.end_date).localeCompare(String(a.end_date)));
     const suggestions = new Map();
     for (const space of spaces) {
-      const key = normalizeVenue(space.space_name);
-      const event = ended.find((row) => normalizeVenue(row.venue).includes(key));
+      const matchingIds = new Set(eventsForSpace(space, ended).map((row) => row.id));
+      const event = ended.find((row) => matchingIds.has(row.id));
       if (!event) continue;
       suggestions.set(space.id, { id: null, space_id: space.id, space_key: space.space_code, venue_name: space.space_name, source: "event_inherited", source_event_order_id: event.id, confidence: 0.55, confirmed_at: null, updated_at: event.end_date, ...inferredLayout(event, noteByEvent[event.id]) });
     }
     return suggestions;
+  }
+
+  function eventsForSpace(space, orders) {
+    const board = window.BANQUET_ERP_OPERATION_BOARD;
+    if (board?.spacesOverlap) return orders.filter((row) => board.spacesOverlap({ venue: space.space_name }, { venue: row.venue }));
+    const key = normalizeVenue(space.space_name);
+    return orders.filter((row) => normalizeVenue(row.venue).includes(key));
+  }
+
+  function buildConfirmationQuestions(spaces, states, orders, now = new Date()) {
+    const today = dateKey(now); const tomorrow = dateKey(new Date(now.getTime() + 86400000)); const bySpace = new Map(states.map((row) => [row.space_id, row]));
+    return spaces.map((space) => {
+      const events = eventsForSpace(space, orders); const ended = events.filter((row) => row.end_date && row.end_date <= today).sort((a, b) => String(b.end_date).localeCompare(String(a.end_date)))[0] || null;
+      const upcoming = events.filter((row) => row.start_date && row.start_date >= today).sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))[0] || null;
+      const state = bySpace.get(space.id) || null; const check = needsHallStateConfirmation(state, ended, now);
+      if (!check.needed) return null;
+      const priority = ended?.end_date === today ? 0 : !state && upcoming?.start_date === today ? 1 : !state && upcoming?.start_date === tomorrow ? 2 : 3;
+      return { space, state, latestEvent: ended, nextEvent: upcoming, reason: check.reason, priority };
+    }).filter(Boolean).sort((a, b) => a.priority - b.priority || String(b.latestEvent?.end_date || "").localeCompare(String(a.latestEvent?.end_date || "")) || a.space.space_name.localeCompare(b.space.space_name, "ko")).slice(0, 5);
+  }
+
+  function renderConfirmationQuestions() {
+    const panel = document.querySelector("[data-hall-confirmations]"); const result = document.querySelector("[data-hall-result]");
+    if (!panel) return;
+    panel.hidden = !hallState.questions.length;
+    panel.innerHTML = hallState.questions.length ? `<strong>현재 세팅 확인 필요 ${hallState.questions.length}건</strong>${hallState.questions.map((question) => {
+      const current = question.state || hallState.suggestions.get(question.space.id) || null;
+      const reason = question.latestEvent ? `${question.space.space_name} 행사가 종료되었습니다.` : `${question.space.space_name}의 현재 상태가 확인되지 않았습니다.`;
+      const prompt = current ? `현재도 ${formatSetup(current)} 상태인가요?` : "지금 어떤 상태인가요?";
+      return `<article class="hall-confirmation-card" data-hall-question-space="${question.space.id}"><div><strong>${hallEscape(question.space.space_name)}</strong><p>${hallEscape(reason)} ${hallEscape(prompt)}</p></div><div>${current ? `<button type="button" class="primary-button" data-hall-unchanged="${question.space.id}">그대로</button>` : ""}<button type="button" class="secondary-button" data-hall-changed="${question.space.id}">${current ? "변경됨" : "상태 입력"}</button></div></article>`;
+    }).join("")}` : "";
+    result.hidden = !hallState.resultMessage; result.textContent = hallState.resultMessage;
   }
 
   function formatSetup(row) {
@@ -181,6 +228,7 @@
     const list = document.querySelector("[data-hall-state-list]");
     if (!list) return;
     const bySpace = new Map(hallState.rows.map((row) => [row.space_id, row]));
+    renderConfirmationQuestions();
     list.innerHTML = hallState.spaces.map((space) => {
       const saved = bySpace.get(space.id);
       const row = saved || hallState.suggestions.get(space.id) || null;
@@ -201,7 +249,7 @@
         hallRequest("event_orders?select=id,event_name,venue,guest_count,start_date,end_date&end_date=not.is.null&order=end_date.desc&limit=200"),
         hallRequest("event_notes?select=event_order_id,note_type,content&note_type=eq.layout_eqp&limit=1000"),
       ]);
-      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.suggestions = buildEventSuggestions(hallState.spaces, orders || [], notes || []); renderHallStates();
+      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.orders = orders || []; hallState.notes = notes || []; hallState.suggestions = buildEventSuggestions(hallState.spaces, hallState.orders, hallState.notes); hallState.questions = buildConfirmationQuestions(hallState.spaces, hallState.rows, hallState.orders); renderHallStates();
     } catch (error) {
       console.error("hall current states load failed", { status: error.status, body: error.body, error });
       if (list) list.innerHTML = `<p class="hall-state-error">현재 세팅 상태를 불러오지 못했습니다. ${hallEscape(error.message)}</p>`;
@@ -227,13 +275,34 @@
     if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
   }
 
+  function comparisonMessage(spaceId, current) {
+    const today = dateKey(new Date()); const next = eventsForSpace(hallState.spaces.find((space) => space.id === spaceId) || {}, hallState.orders).filter((row) => row.start_date && (row.start_date > today || row.end_date > today)).sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)))[0];
+    if (!next) return "현재 상태 확인 완료.";
+    const note = hallState.notes.filter((row) => row.event_order_id === next.id && row.note_type === "layout_eqp").map((row) => row.content).join("\n"); const required = setupChangeRequired(current, inferredLayout(next, note));
+    return required === true ? "현재 상태 확인 완료. 다음 행사 전 세팅 변경이 필요합니다." : required === false ? "현재 상태 확인 완료. 현재 세팅 그대로 사용 가능합니다." : "현재 상태 확인 완료. 다음 행사 세팅 정보를 추가로 확인해주세요.";
+  }
+
+  async function persistManualHallState(space, values, sourceEventId = null) {
+    const user = (() => { try { return JSON.parse(localStorage.getItem(window.BANQUET_ERP_CONSTANTS?.authStorageKey) || "null"); } catch { return null; } })();
+    const payload = { space_id: space.id, space_key: space.space_code || null, venue_name: space.space_name, layout_type: values.layout_type || null, seats: values.seats ?? null, tables: values.tables ?? null, equipment: values.equipment || {}, note: values.note || null, source: "manual_confirmed", source_event_order_id: sourceEventId, source_layout_id: values.source_layout_id || null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    const rows = await hallRequest("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) });
+    if (!rows?.[0]?.id) throw new Error("현재 세팅 저장 결과가 없습니다.");
+    hallState.resultMessage = comparisonMessage(space.id, rows[0]); return rows[0];
+  }
+
+  async function confirmHallStateUnchanged(spaceId) {
+    const question = hallState.questions.find((item) => item.space.id === spaceId); const current = question?.state || hallState.suggestions.get(spaceId);
+    if (!question || !current) return;
+    await persistManualHallState(question.space, current, question.latestEvent?.id || current.source_event_order_id || null); await loadHallStates();
+  }
+
   async function saveHallState(event) {
     event.preventDefault(); const form = event.currentTarget; const submit = form.querySelector('[type="submit"]'); const space = hallState.spaces.find((item) => item.id === form.elements.spaceId.value);
     if (!space) return;
-    const user = (() => { try { return JSON.parse(localStorage.getItem(window.BANQUET_ERP_CONSTANTS?.authStorageKey) || "null"); } catch { return null; } })();
-    const payload = { space_id: space.id, space_key: space.space_code || null, venue_name: space.space_name, layout_type: form.elements.layoutType.value.trim() || null, seats: nullableInteger(form.elements.seats.value), tables: nullableInteger(form.elements.tables.value), equipment: form.elements.equipment.value.trim() ? { text: form.elements.equipment.value.trim() } : {}, note: form.elements.note.value.trim() || null, source: "manual_confirmed", source_event_order_id: null, source_layout_id: null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    const question = hallState.questions.find((item) => item.space.id === space.id); const layoutType = form.elements.layoutType.value.trim();
+    const payload = { layout_type: /^(비어|철수|empty)/i.test(layoutType) ? "empty" : layoutType || null, seats: /^(비어|철수|empty)/i.test(layoutType) ? 0 : nullableInteger(form.elements.seats.value), tables: /^(비어|철수|empty)/i.test(layoutType) ? 0 : nullableInteger(form.elements.tables.value), equipment: form.elements.equipment.value.trim() ? { text: form.elements.equipment.value.trim() } : {}, note: form.elements.note.value.trim() || null };
     submit.disabled = true; submit.textContent = "저장 중…";
-    try { await hallRequest("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) }); hallState.dialog.close(); await loadHallStates(); }
+    try { await persistManualHallState(space, payload, question?.latestEvent?.id || null); hallState.dialog.close(); await loadHallStates(); }
     catch (error) { console.error("hall current state save failed", { status: error.status, body: error.body, error }); dialogAlert(form, `현재 상태 저장 실패 (${hallEscape(error.message)})`); }
     finally { submit.disabled = false; submit.textContent = "현재 상태 확인 저장"; }
   }
@@ -242,12 +311,16 @@
 
   function initHallCurrentStatesWidget() {
     const widget = document.querySelector("#hallCurrentStatesWidget"); if (!widget) return;
-    widget.addEventListener("click", (event) => { const row = event.target.closest("[data-hall-space-id]"); if (row) openHallDialog(row.dataset.hallSpaceId); });
+    widget.addEventListener("click", async (event) => {
+      const unchanged = event.target.closest("[data-hall-unchanged]"); if (unchanged) { unchanged.disabled = true; try { await confirmHallStateUnchanged(unchanged.dataset.hallUnchanged); } catch (error) { console.error("hall unchanged confirmation failed", error); hallState.resultMessage = `현재 상태 저장 실패 (${error.message})`; renderConfirmationQuestions(); } return; }
+      const changed = event.target.closest("[data-hall-changed]"); if (changed) { openHallDialog(changed.dataset.hallChanged); return; }
+      const row = event.target.closest("[data-hall-space-id]"); if (row) openHallDialog(row.dataset.hallSpaceId);
+    });
     widget.querySelector("[data-hall-refresh]")?.addEventListener("click", loadHallStates);
     loadHallStates();
   }
 
-  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, normalizeLayout, buildEventSuggestions };
+  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, needsHallStateConfirmation, buildConfirmationQuestions, normalizeLayout, buildEventSuggestions };
 
   function setupDashboardAiOverlay(home) {
     const widget = home.querySelector(".dashboard-ai-widget");
