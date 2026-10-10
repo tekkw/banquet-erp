@@ -1248,7 +1248,7 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
   const systemPrompt = [
     "You are an intent parser for a Korean banquet operations board.",
     "Return only one compact JSON object, without markdown or prose.",
-    "Allowed intents: update_schedule_time, update_guest_count, add_field_note, unsupported.",
+    "Allowed intents: update_schedule_time, update_guest_count, add_field_note, add_schedule, unsupported.",
     "Treat Korean field reports in completed form as ERP update requests. For example, '페스타 커피브레이크가 13시로 바뀌었어' means update_schedule_time to 13:00, not unsupported.",
     "Likewise, '인원이 55명으로 바뀌었어' means update_guest_count, while equipment or movement requests without a supported data field should become add_field_note.",
     "Never invent an eventOrderId or scheduleId. Use only IDs present in boardContext or selection.",
@@ -1257,6 +1257,11 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
     "For update_schedule_time, target must contain eventOrderId, scheduleId, venue, content, currentTime and change.time in HH:MM.",
     "For update_guest_count, target must contain eventOrderId, eventName, venue, currentGuestCount and change.guestCount as an integer. This changes representative guest count only.",
     "For add_field_note, target must identify exactly one eventOrderId and venue, and change.note must preserve the user's requested note.",
+    "Use add_schedule only for an official event program entry being newly added: coffee break, check-in, lunch, dinner, pre-meeting, setup, rehearsal, or event start/end.",
+    "Do not use add_schedule for field chores such as bringing water, moving chairs, preparing tables, or installing banners; those remain add_field_note/manual work. If ambiguous, ask whether this is an official event schedule or a field task.",
+    "A phrase that changes an existing time (for example '13시 커피브레이크를 14시로 바꿔') remains update_schedule_time, never add_schedule.",
+    "For add_schedule, target must contain eventOrderId, eventName and the event's real venue. change must contain date copied exactly from boardContext.selectedDate, time in HH:MM, content preserving the user's wording, venue using the matched event venue, and people as a number or null.",
+    "For add_schedule with no time, set needsClarification=true and question='몇 시 일정인가요?'. Never invent a time.",
     "A choice has label, eventOrderId, and optional scheduleId. Keep question and confirmationText short in Korean.",
     "Required shape: {intent,confidence,needsClarification,question,choices,target,change,confirmationText}.",
   ].join("\n");
@@ -1271,16 +1276,23 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
   const proposal = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
   if (!proposal) throw new Error("AI board command JSON parsing failed.");
   const intent = String(proposal.intent ?? "unsupported");
-  if (!["update_schedule_time", "update_guest_count", "add_field_note"].includes(intent)) return { intent: "unsupported", confidence: Number(proposal.confidence) || 0, needsClarification: false, choices: [], target: {}, change: {}, confirmationText: "" };
-  const target = proposal.target && typeof proposal.target === "object" ? proposal.target as Record<string, unknown> : {};
-  const event = events.find((item) => String(item.eventOrderId) === String(target.eventOrderId));
+  if (!["update_schedule_time", "update_guest_count", "add_field_note", "add_schedule"].includes(intent)) return { intent: "unsupported", confidence: Number(proposal.confidence) || 0, needsClarification: false, choices: [], target: {}, change: {}, confirmationText: "" };
+  const parsedTarget = proposal.target && typeof proposal.target === "object" ? proposal.target as Record<string, unknown> : {};
+  const selectedEventId = selection && typeof selection === "object" ? String(selection.eventOrderId ?? "") : "";
+  const event = events.find((item) => String(item.eventOrderId) === (selectedEventId || String(parsedTarget.eventOrderId))) ?? (intent === "add_schedule" && events.length === 1 ? events[0] : undefined);
+  const target = event ? { ...parsedTarget, eventOrderId: event.eventOrderId, eventName: event.eventName, venue: event.venue } : parsedTarget;
   const schedules = event && Array.isArray(event.schedules) ? event.schedules as Array<Record<string, unknown>> : [];
   const schedule = schedules.find((item) => String(item.scheduleId) === String(target.scheduleId));
   const targetIsValid = !!event && (intent !== "update_schedule_time" || !!schedule);
+  if (intent === "add_schedule" && !selection && events.length > 1) {
+    return { intent, confidence: 0, needsClarification: true, question: `${boardContext.selectedDate || "선택 날짜"} 등록 행사가 ${events.length}건입니다. 어느 행사에 추가할까요?`, choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
+  }
   if (!targetIsValid && !proposal.needsClarification) {
     return { intent, confidence: 0, needsClarification: true, question: "어느 행사를 변경할까요?", choices: events.map((item) => ({ label: `${item.venue || "장소 미입력"} · ${item.eventName || "행사"}`, eventOrderId: item.eventOrderId })), target: {}, change: proposal.change ?? {}, confirmationText: "" };
   }
-  return { ...proposal, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
+  const change = proposal.change && typeof proposal.change === "object" ? proposal.change as Record<string, unknown> : {};
+  const safeChange = intent === "add_schedule" ? { ...change, date: String(boardContext.selectedDate ?? ""), venue: String(event?.venue ?? change.venue ?? ""), people: toOptionalNumber(change.people) } : change;
+  return { ...proposal, target, change: safeChange, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
 }
 
 function normalizeVisualSummary(value: unknown) {

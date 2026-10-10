@@ -33,10 +33,12 @@ assert(!page.includes("JSON.stringify({ people: count })"));
 assert(page.includes('noteType: "field_note"'));
 assert(board.includes("field-note-badge"));
 
-// E: only an explicit approval calls applyProposal; cancel does not write.
+// E: only an explicit button or voice approval calls applyProposal; cancel does not write.
 assert(page.includes('closest("[data-ai-approve]")'));
 assert(page.includes('closest("[data-ai-cancel]")'));
-assert(page.indexOf("await applyProposal(proposal)") > page.indexOf('closest("[data-ai-approve]")'));
+assert(page.includes('/^(?:추가해|추가|응|네|예|확인|좋아|진행해)'));
+const approvalHandler = page.indexOf('closest("[data-ai-approve]")');
+assert(page.indexOf("await applyProposal(proposal)", approvalHandler) > approvalHandler);
 
 assert(html.includes('id="boardAiForm"'));
 assert(css.includes("bottom: var(--mobile-bottom-nav-height)"));

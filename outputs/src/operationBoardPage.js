@@ -1,7 +1,7 @@
 (function initializeOperationBoardPage() {
   const constants = window.BANQUET_ERP_CONSTANTS;
   const board = window.BANQUET_ERP_OPERATION_BOARD;
-  const cacheKey = "banquet-erp-events-cache-v2";
+  const cacheKey = "banquet-erp-events-cache-v3";
   const correctionLogKey = "banquetErp.eventOrderCorrections.v1";
   const app = document.getElementById("boardApp");
   const login = document.getElementById("boardLogin");
@@ -99,16 +99,33 @@
       const [dates, schedules, items, notes] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc"), childRows("event_items", ids, "created_at.asc,id.asc"), childRows("event_notes", ids, "created_at.asc,id.asc")]);
       const byDate = grouped(dates); const bySchedule = grouped(schedules); const byItem = grouped(items); const byNote = grouped(notes);
       events = rows.map((row) => ({ id: row.id, eventName: row.event_name || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", originalFilename: row.original_filename || "", layoutText: row.layout_text || row.layout_type || row.layout || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })), items: byItem[row.id] || [], notes: byNote[row.id] || [] }));
-      localStorage.setItem(cacheKey, JSON.stringify({ version: 2, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
+      localStorage.setItem(cacheKey, JSON.stringify({ version: 3, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
     } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; return { ok: false, error }; }
   }
-  function selectedEvents() { const date = board.getSelectedDate(); return events.filter((event) => [...(event.calendarDates || []), event.startDate, event.endDate].includes(date)); }
-  function aiContext() {
-    return { selectedDate: board.getSelectedDate(), expandedSpaceGroups: [...document.querySelectorAll("[data-space-group-toggle][aria-expanded=true]")].map((node) => node.dataset.spaceGroupToggle), events: selectedEvents().map((event) => ({ eventOrderId: event.id, eventName: event.eventName, venue: event.venue, guestCount: event.guestCount, schedules: event.schedule.map((row) => ({ scheduleId: row.id, date: row.date, time: row.time, content: row.content, venue: row.venue, people: row.people })) })), recentConversation: recentConversation.slice(-3) };
+  function selectedEvents(date = board.getSelectedDate()) { return events.filter((event) => eventDateKeys(event).includes(date)); }
+  function boardCommandDate(text) { if (/내일/.test(text)) return shiftDateKey(seoulTodayKey(), 1); if (/오늘/.test(text)) return seoulTodayKey(); return board.getSelectedDate(); }
+  function commandVenueMatches(event, text) {
+    const source = normalizedVenue(text).replace(/센터/g, ""); const values = [event.venue, ...(event.schedule || []).map((row) => row.venue)].map((value) => normalizedVenue(value).replace(/센터/g, ""));
+    if (/컨벤션AB|컨벤션전체/.test(source)) return values.some((value) => /컨벤션AB|컨벤션전체/.test(value));
+    if (/컨벤션A(?!B)/.test(source)) return values.some((value) => /컨벤션A(?!B)|컨벤션[12](?:$|[^0-9])/.test(value));
+    if (/컨벤션B/.test(source)) return values.some((value) => /컨벤션B|컨벤션3(?:$|[^0-9])/.test(value));
+    const numbered = source.match(/(카프리|부라노)([123])/); if (numbered) return values.some((value) => value.includes(numbered[0]));
+    const generic = venueTerm(text); return generic ? eventVenueMatches(event, generic) : true;
+  }
+  function aiContext(question = "") {
+    const selectedDate = boardCommandDate(question); const candidates = selectedEvents(selectedDate).filter((event) => commandVenueMatches(event, question));
+    return { selectedDate, expandedSpaceGroups: [...document.querySelectorAll("[data-space-group-toggle][aria-expanded=true]")].map((node) => node.dataset.spaceGroupToggle), events: candidates.map((event) => ({ eventOrderId: event.id, eventName: event.eventName, venue: event.venue || eventVenue(event), guestCount: event.guestCount, schedules: event.schedule.map((row) => ({ scheduleId: row.id, date: row.date, time: row.time, content: row.content, venue: row.venue, people: row.people })) })), recentConversation: recentConversation.slice(-3) };
+  }
+  function scheduleTimeFromText(text) {
+    const match = String(text).match(/(?:(오전|오후)\s*)?(\d{1,2})\s*시(?:\s*(?:(\d{1,2})\s*분|(반)))?/); if (!match) return "";
+    let hour = Number(match[2]); const minute = match[4] ? 30 : Number(match[3] || 0); if (match[1] === "오후" && hour < 12) hour += 12; if (match[1] === "오전" && hour === 12) hour = 0;
+    return hour <= 23 && minute <= 59 ? `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` : "";
   }
   async function interpret(userText, selection = null) {
-    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "board_command", question: userText, boardContext: aiContext(), selection }) });
-    const body = await response.json(); if (!response.ok) throw new Error(body.message || "AI 해석 실패"); return body.proposal;
+    const boardContext = aiContext(userText); const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "board_command", question: userText, boardContext, selection }) });
+    const body = await response.json(); if (!response.ok) throw new Error(body.message || "AI 해석 실패"); const proposal = body.proposal || {};
+    if (proposal.intent === "add_schedule") { proposal.change ||= {}; proposal.change.date = boardContext.selectedDate; proposal.change.time = scheduleTimeFromText(userText); if (!proposal.change.time) { proposal.needsClarification = true; proposal.question = "몇 시 일정인가요?"; } }
+    return proposal;
   }
   function seoulTodayKey() {
     const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -132,7 +149,7 @@
   function eventDateKeys(event) { return [...new Set([...(event.calendarDates || []), event.startDate, event.endDate, String(event.eventDateTime || "").slice(0, 10), ...(event.schedule || []).map((row) => row.date)].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort(); }
   function eventInPeriod(event, period) { return !period || eventDateKeys(event).some((key) => key >= period.start && key <= period.end); }
   function eventQueryType(text) { if (/(원본|엑셀|파일).*(띄워|열어|보여|보기)|(?:띄워|열어|보여).*(원본|엑셀)/i.test(text)) return "open_event_original"; if (/레이아웃|배치|스쿨식|극장식|라운드/i.test(text)) return "get_event_layout"; if (/인원|몇\s*명|guest/i.test(text)) return "get_event_guest_count"; if (/일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크/i.test(text)) return "get_event_schedule"; if (/메뉴|품목|아이템|식음|장비/i.test(text)) return "get_event_items"; return "find_events_by_period_space"; }
-  function isEventQueryRequest(text) { const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
+  function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
   function displayEventDate(event) { const key = eventDateKeys(event)[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
   function eventChoiceLabel(event) { return `${displayEventDate(event)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
@@ -581,6 +598,7 @@
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
+    if (proposal.intent === "add_schedule") return `${proposal.change?.venue || proposal.target?.venue || "행사"}\n${proposal.change?.time || "-"}\n${proposal.change?.content || "일정"}`;
     if (proposal.intent === "update_guest_count") return `${proposal.target?.venue || proposal.target?.eventName || "행사"}\n${proposal.target?.currentGuestCount ?? "-"}명 → ${proposal.change?.guestCount ?? "-"}명`;
     return `${proposal.target?.venue || proposal.target?.eventName || "현장"}\n${proposal.change?.note || ""}`;
   }
@@ -590,8 +608,9 @@
       const choices = Array.isArray(proposal.choices) ? proposal.choices : [];
       aiResult.innerHTML = `<h3>대상 확인</h3><p>${escapeHtml(proposal.question || "어느 행사를 변경할까요?")}</p><div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-ai-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div><div class="board-ai-actions"><button type="button" data-ai-cancel>취소</button></div>`; speakBoardReply(proposal.question || "대상을 확인해주세요."); finishFieldAiAnswer(); return;
     }
-    if (!["update_schedule_time", "update_guest_count", "add_field_note"].includes(proposal.intent)) { showMessage("현재 현장 AI에서는 시간/인원/메모 변경만 가능합니다."); return; }
-    aiResult.innerHTML = `<h3>변경 제안</h3><p class="board-ai-change">${escapeHtml(proposalSummary(proposal))}</p><p>${escapeHtml(proposal.confirmationText || "변경할까요?")}</p><div class="board-ai-actions"><button type="button" data-ai-approve>변경하기</button><button type="button" data-ai-edit>수정</button><button type="button" data-ai-cancel>취소</button></div>`;
+    if (!["update_schedule_time", "update_guest_count", "add_field_note", "add_schedule"].includes(proposal.intent)) { showMessage("현재 현장 AI에서는 시간/인원/메모/일정 추가만 가능합니다."); return; }
+    const isAddSchedule = proposal.intent === "add_schedule";
+    aiResult.innerHTML = `<h3>${isAddSchedule ? "일정 추가" : "변경 제안"}</h3><p class="board-ai-change">${escapeHtml(proposalSummary(proposal))}</p><p>${escapeHtml(proposal.confirmationText || (isAddSchedule ? "이 일정을 추가할까요?" : "변경할까요?"))}</p><div class="board-ai-actions"><button type="button" data-ai-approve>${isAddSchedule ? "추가" : "변경하기"}</button><button type="button" data-ai-edit>수정</button><button type="button" data-ai-cancel>취소</button></div>`;
     speakBoardReply(proposal.confirmationText || "변경 내용을 확인해주세요."); finishFieldAiAnswer();
   }
   function logLocally(entry) { try { const rows = JSON.parse(localStorage.getItem(correctionLogKey) || "[]"); localStorage.setItem(correctionLogKey, JSON.stringify([...(Array.isArray(rows) ? rows : []), entry].slice(-500))); window.dispatchEvent(new CustomEvent("banquet:correction-recorded")); } catch { /* storage unavailable */ } }
@@ -622,6 +641,16 @@
         throw boardAiError("schedule_not_found", "schedule patch returned no exact row");
       }
       auditSaved = await tryPersistAudit(proposal, userText, proposal.target.currentTime, proposal.change.time);
+    } else if (proposal.intent === "add_schedule") {
+      const change = proposal.change || {}; const content = String(change.content || "").trim(); const venue = String(change.venue || proposal.target?.venue || "").trim();
+      if (!proposal.target?.eventOrderId || !/^\d{4}-\d{2}-\d{2}$/.test(change.date || "") || !/^\d{2}:\d{2}$/.test(change.time || "") || !content) throw boardAiError("schedule_target_missing", "invalid add schedule proposal");
+      const existing = await request(`event_schedules?select=id,schedule_date,schedule_time,content,venue&event_order_id=eq.${encodeURIComponent(proposal.target.eventOrderId)}&schedule_date=eq.${encodeURIComponent(change.date)}`);
+      const comparable = (value) => String(value || "").replace(/\s+/g, "").toLowerCase();
+      const duplicate = (existing || []).find((row) => row.schedule_time === change.time && comparable(row.content) === comparable(content) && comparable(row.venue) === comparable(venue));
+      if (duplicate) throw boardAiError("schedule_duplicate", `${Number(change.time.slice(0, 2))}시${change.time.slice(3) === "00" ? "" : ` ${Number(change.time.slice(3))}분`} ${content} 일정이 이미 있습니다.`);
+      const inserted = await request("event_schedules", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ event_order_id: proposal.target.eventOrderId, schedule_date: change.date, schedule_time: change.time, content, venue: venue || null, people: change.people ?? null }) });
+      if (!Array.isArray(inserted) || inserted.length !== 1 || !inserted[0]?.id) throw boardAiError("schedule_insert_failed", "schedule insert returned no row");
+      proposal.target.scheduleId = inserted[0].id; auditSaved = await tryPersistAudit(proposal, userText, "", `${change.date} ${change.time} ${content}`);
     } else if (proposal.intent === "update_guest_count") {
       const count = Number(proposal.change?.guestCount); if (!proposal.target?.eventOrderId || !Number.isInteger(count) || count < 0) throw new Error("invalid guest proposal");
       await request(`event_orders?id=eq.${encodeURIComponent(proposal.target.eventOrderId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify({ guest_count: count }) });
@@ -634,7 +663,7 @@
     } else throw new Error("unsupported intent");
     const refreshResult = await (refresh)();
     if (!refreshResult?.ok) console.error("board AI refresh failed", { status: refreshResult?.error?.status, body: refreshResult?.error?.body, error: refreshResult?.error });
-    const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
+    const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "add_schedule" ? `${Number(proposal.change.time.slice(0, 2))}시${proposal.change.time.slice(3) === "00" ? "" : ` ${Number(proposal.change.time.slice(3))}분`} ${proposal.change.content}를 추가했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
     showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success, true); aiInput.value = "";
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
@@ -657,6 +686,8 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    if (pendingProposal?.intent === "add_schedule" && /^(?:추가해|추가|응|네|예|확인|좋아|진행해)[.!\s]*$/i.test(text)) { const proposal = pendingProposal; showTransientMessage("승인된 일정을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board schedule add failed", error); showMessage(error.code === "schedule_duplicate" ? error.message : "일정 저장에 실패했습니다. 기존 일정은 유지됩니다.", true); } return; }
+    if (pendingProposal?.intent === "add_schedule" && pendingProposal.needsClarification) { const time = scheduleTimeFromText(text); if (time && pendingProposal.target?.eventOrderId) { pendingProposal.change ||= {}; pendingProposal.change.time = time; pendingProposal.needsClarification = false; pendingProposal.confidence = Math.max(0.7, Number(pendingProposal.confidence) || 0); pendingProposal.confirmationText = `${pendingProposal.change.venue || pendingProposal.target.venue || "행사"}에 ${time} ${pendingProposal.change.content || "일정"}을 추가할까요?`; pendingProposal.userText = `${pendingProposal.userText || ""} ${text}`.trim(); aiInput.value = ""; showProposal(pendingProposal); return; } }
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
@@ -730,7 +761,7 @@
     if (event.target.closest("[data-ai-edit]")) { aiInput.focus(); aiInput.select(); return; }
     const choice = event.target.closest("[data-ai-choice]");
     if (choice && pendingProposal) { const selected = pendingProposal.choices[Number(choice.dataset.aiChoice)]; const originalText = pendingProposal.userText || aiInput.value.trim(); showMessage("선택한 대상을 확인하고 있습니다…"); try { const proposal = await interpret(originalText, selected); proposal.userText = originalText; showProposal(proposal); } catch (error) { console.error(error); showMessage("대상을 확인하지 못했습니다."); } return; }
-    if (event.target.closest("[data-ai-approve]") && pendingProposal) { const proposal = pendingProposal; showMessage("승인된 변경을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board AI apply failed", { code: error.code, error }); showMessage(error.code === "schedule_not_found" || error.code === "schedule_target_missing" ? "변경할 일정을 찾지 못했습니다. 최신 일정을 다시 불러와주세요." : error.code === "schedule_patch_failed" ? "일정 수정에 실패했습니다. 기존 일정은 유지됩니다." : "변경 저장에 실패했습니다. 기존 데이터는 유지됩니다."); } }
+    if (event.target.closest("[data-ai-approve]") && pendingProposal) { const proposal = pendingProposal; showTransientMessage("승인된 변경을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board AI apply failed", { code: error.code, error }); showMessage(error.code === "schedule_duplicate" ? error.message : error.code === "schedule_not_found" || error.code === "schedule_target_missing" ? "변경할 일정을 찾지 못했습니다. 최신 일정을 다시 불러와주세요." : error.code === "schedule_patch_failed" || error.code === "schedule_insert_failed" ? "일정 저장에 실패했습니다. 기존 일정은 유지됩니다." : "변경 저장에 실패했습니다. 기존 데이터는 유지됩니다.", true); } }
   });
   document.querySelectorAll("[data-board-page-step]").forEach((button) => button.onclick = () => moveBoardDate(Number(button.dataset.boardPageStep)));
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
