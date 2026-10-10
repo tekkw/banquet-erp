@@ -17,14 +17,13 @@ assert(page.includes("speechRecognition.continuous = false"));
 assert(page.includes("speechRecognition.stop()"));
 assert(page.includes("speechRecognition.abort()"));
 assert(page.includes("aiInput.value = speechInputValue(speechFinalText)"));
-assert(page.includes("인식된 문장을 확인한 후 보내기를 눌러주세요."));
 assert(page.includes("마이크 권한이 필요합니다."));
 assert(page.includes("이 브라우저에서는 음성 입력을 지원하지 않습니다."));
 assert(page.includes("speechButton.disabled = true"));
 
-// Voice only fills the existing input. It must not auto-submit or add an audio API.
+// Field AI reuses the existing form/router and never adds an audio API.
 const speechBlock = page.slice(page.indexOf("function setSpeechStatus"), page.indexOf('visualCameraButton.addEventListener("click"'));
-assert(!speechBlock.includes("requestSubmit"));
+assert(speechBlock.includes("aiForm.requestSubmit()"));
 assert(!speechBlock.includes("aiForm.submit"));
 assert(!page.includes("transcriptions"));
 assert(!page.includes("audio/transcription"));
@@ -36,7 +35,7 @@ assert(page.indexOf("isAssetQueryRequest(text)", submitStart) > submitStart);
 assert(page.indexOf("isAssetIntakeRequest(text)", submitStart) > submitStart);
 assert(page.includes("(?:\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"));
 
-assert(css.includes('.board-speech-button[data-state="listening"]'));
+assert(css.includes('.board-field-ai-button[data-state="listening"]'));
 assert(css.includes(".board-speech-status"));
 
 console.log("board speech input V5 tests passed");

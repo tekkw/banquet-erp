@@ -43,6 +43,8 @@
   let speechBaseText = "";
   let speechFinalText = "";
   let speechErrorMessage = "";
+  let fieldAiAutoSubmit = false;
+  let fieldAiAwaitingAnswer = false;
   let voiceReplyEnabled = false;
   let lastSpokenText = "";
 
@@ -79,6 +81,7 @@
     return result;
   }
   function grouped(rows) { return rows.reduce((map, row) => { (map[row.event_order_id] ||= []).push(row); return map; }, {}); }
+  function rememberConversation(user, answer) { recentConversation.push({ user, answer }); recentConversation = recentConversation.slice(-3); }
   async function refresh() {
     status.textContent = "최신 일정 동기화 중";
     try {
@@ -92,7 +95,7 @@
   }
   function selectedEvents() { const date = board.getSelectedDate(); return events.filter((event) => [...(event.calendarDates || []), event.startDate, event.endDate].includes(date)); }
   function aiContext() {
-    return { selectedDate: board.getSelectedDate(), expandedSpaceGroups: [...document.querySelectorAll("[data-space-group-toggle][aria-expanded=true]")].map((node) => node.dataset.spaceGroupToggle), events: selectedEvents().map((event) => ({ eventOrderId: event.id, eventName: event.eventName, venue: event.venue, guestCount: event.guestCount, schedules: event.schedule.map((row) => ({ scheduleId: row.id, date: row.date, time: row.time, content: row.content, venue: row.venue, people: row.people })) })), recentConversation: recentConversation.slice(-2) };
+    return { selectedDate: board.getSelectedDate(), expandedSpaceGroups: [...document.querySelectorAll("[data-space-group-toggle][aria-expanded=true]")].map((node) => node.dataset.spaceGroupToggle), events: selectedEvents().map((event) => ({ eventOrderId: event.id, eventName: event.eventName, venue: event.venue, guestCount: event.guestCount, schedules: event.schedule.map((row) => ({ scheduleId: row.id, date: row.date, time: row.time, content: row.content, venue: row.venue, people: row.people })) })), recentConversation: recentConversation.slice(-3) };
   }
   async function interpret(userText, selection = null) {
     const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify({ mode: "board_command", question: userText, boardContext: aiContext(), selection }) });
@@ -104,6 +107,7 @@
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
   function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
+  function isDeicticVisualQuery(text) { return /(?:이거|이것|저거|저것|이\s*물건|지금\s*보이는|앞에\s*있는|이\s*세팅)/i.test(text); }
   function isHallStateQueryRequest(text) { return /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(?:지금|현재).*(?:세팅|상태).*(?:보여|알려|뭐|어떻게)|(?:세팅|상태).*(?:보여|알려)/i.test(text); }
   function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t)|비어\s*있|철수)/i.test(text) && /(그대로|현재|지금|확인|세팅|상태|변경|바꿨|바꿨어|비어\s*있|철수)/i.test(text); }
   function hallStateLayout(text) { return /비어\s*있|철수|empty/i.test(text) ? "empty" : /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
@@ -136,14 +140,15 @@
     const spaces = await request("venue_spaces?select=id,space_name,space_code&is_active=eq.true&order=space_name.asc"); const matches = operationalHallMatches(spaces, text);
     if (matches.length !== 1) throw new Error("확인할 연회장 이름을 하나만 입력해주세요.");
     const state = await currentHallState(matches[0]);
-    if (!state) { showMessage(`${matches[0].space_name} 현재 세팅은 아직 확인되지 않았습니다.`); return; }
+    if (!state) { const answer = `${matches[0].space_name} 현재 세팅은 아직 확인되지 않았습니다.`; rememberConversation(text, answer); showMessage(answer); return; }
     const layouts = state.source_layout_id ? await request(`venue_layouts?select=id,layout_name&id=eq.${encodeURIComponent(state.source_layout_id)}&is_active=eq.true&limit=1`) : []; const layout = layouts?.[0];
     const answer = `${matches[0].space_name}은 현재 ${[state.layout_type, state.tables != null ? `${state.tables}T` : "", state.seats != null ? `${state.seats}석` : ""].filter(Boolean).join(" · ")}으로 확인되어 있습니다.`;
-    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${escapeHtml(matches[0].space_name)} 현재 세팅</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">${state.source_layout_id ? layout ? `현재 도면: ${escapeHtml(layout.layout_name)}` : "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"}</p>${layout ? `<div class="board-ai-actions"><a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(layout.id)}">현재 도면 보기</a></div>` : ""}</div>`; speakBoardReply(answer);
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${escapeHtml(matches[0].space_name)} 현재 세팅</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">${state.source_layout_id ? layout ? `현재 도면: ${escapeHtml(layout.layout_name)}` : "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"}</p>${layout ? `<div class="board-ai-actions"><a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(layout.id)}">현재 도면 보기</a></div>` : ""}</div>`; rememberConversation(text, answer); speakBoardReply(answer); finishFieldAiAnswer();
   }
   function showHallStateProposal(proposal) {
     pendingHallStateProposal = proposal; pendingProposal = null;
     aiResult.innerHTML = `<div class="board-ai-proposal"><h3>현재 세팅 확인</h3><p><strong>${escapeHtml(proposal.space.space_name)}</strong></p><p>${escapeHtml([proposal.layoutType, proposal.tables != null ? `${proposal.tables}T` : "", proposal.seats != null ? `${proposal.seats}석` : ""].filter(Boolean).join(" · ") || "세팅 상세 미입력")}</p><p class="board-ai-status">사용자가 확인한 현재 상태로 저장합니다. 행사 종료 후에도 유지됩니다.</p><div class="board-ai-actions"><button type="button" class="primary-button" data-hall-state-approve>현재 상태 확인</button><button type="button" class="secondary-button" data-hall-state-cancel>취소</button></div></div>`;
+    speakBoardReply(`${proposal.space.space_name} 현재 세팅 내용을 확인해주세요.`); finishFieldAiAnswer();
   }
   async function applyHallStateProposal(proposal) {
     const user = storedUser(); const payload = { space_id: proposal.space.id, space_key: proposal.space.space_code || null, venue_name: proposal.space.space_name, layout_type: proposal.layoutType, seats: proposal.seats, tables: proposal.tables, equipment: proposal.previous?.equipment || {}, note: proposal.previous?.note || null, source: "manual_confirmed", source_event_order_id: null, source_layout_id: null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
@@ -198,7 +203,7 @@
   }
   function speakBoardReply(text) {
     const spokenText = conciseBoardReply(text);
-    if (!voiceReplyEnabled || !speechSynthesisApi || !SpeechSynthesisUtteranceApi || !spokenText || spokenText === lastSpokenText) return;
+    if (speechListening || !voiceReplyEnabled || !speechSynthesisApi || !SpeechSynthesisUtteranceApi || !spokenText || spokenText === lastSpokenText) return;
     try {
       speechSynthesisApi.cancel();
       const utterance = new SpeechSynthesisUtteranceApi(spokenText); utterance.lang = "ko-KR"; utterance.rate = 1;
@@ -219,7 +224,7 @@
   }
   function setSpeechButtonState(state) {
     speechButton.dataset.state = state;
-    speechButton.textContent = state === "listening" ? "🔴 듣는 중" : state === "processing" ? "텍스트 변환 중..." : "🎤";
+    speechButton.textContent = state === "listening" ? "🔴 듣는 중" : state === "processing" ? "● 확인 중" : "🎙 현장 AI";
     speechButton.setAttribute("aria-label", state === "listening" ? "음성 입력 중지" : state === "processing" ? "음성을 텍스트로 변환 중" : "음성 입력");
   }
   function speechInputValue(transcript) { return [speechBaseText, transcript.trim()].filter(Boolean).join(" "); }
@@ -238,24 +243,40 @@
       speechFinalText = finalText.trim(); aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
     };
     speechRecognition.onerror = (event) => {
+      fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = false;
       speechErrorMessage = event.error === "not-allowed" || event.error === "service-not-allowed" ? "마이크 권한이 필요합니다." : event.error === "no-speech" || event.error === "audio-capture" ? "음성을 인식하지 못했습니다. 다시 시도해주세요." : "음성 입력 중 오류가 발생했습니다. 다시 시도해주세요.";
       setSpeechStatus(speechErrorMessage, true);
     };
     speechRecognition.onend = () => {
       speechListening = false; setSpeechButtonState("idle");
-      if (speechFinalText) { aiInput.value = speechInputValue(speechFinalText); resizeAiInput(); setSpeechStatus("인식된 문장을 확인한 후 보내기를 눌러주세요."); }
+      if (speechFinalText) {
+        aiInput.value = speechInputValue(speechFinalText); resizeAiInput();
+        if (fieldAiAutoSubmit) { fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); aiForm.requestSubmit(); }
+        else setSpeechStatus("인식된 문장을 확인한 후 보내기를 눌러주세요.");
+      }
       else { aiInput.value = speechBaseText; resizeAiInput(); if (!speechErrorMessage) setSpeechStatus("음성을 인식하지 못했습니다. 다시 시도해주세요.", true); }
     };
     return speechRecognition;
   }
   function toggleSpeechRecognition() {
     if (speechListening) { setSpeechButtonState("processing"); setSpeechStatus("텍스트 변환 중..."); speechRecognition.stop(); return; }
-    cancelBoardSpeech();
+    fieldAiAwaitingAnswer = false; cancelBoardSpeech();
     const recognition = ensureSpeechRecognition();
     if (!recognition) { setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); return; }
-    speechBaseText = aiInput.value.trim(); speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
+    fieldAiAutoSubmit = true; speechBaseText = ""; speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
     try { recognition.start(); } catch (error) { console.error("speech recognition start failed", error); setSpeechButtonState("idle"); setSpeechStatus("음성 입력을 시작하지 못했습니다. 다시 시도해주세요.", true); }
   }
+  async function waitForVisualFrame() {
+    if (visualVideo.videoWidth && visualVideo.videoHeight) return;
+    await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(new Error("카메라 화면이 준비되지 않았습니다.")), 3000); visualVideo.addEventListener("loadeddata", () => { clearTimeout(timeout); resolve(); }, { once: true }); });
+  }
+  async function captureOneFrameForFieldAi(text) {
+    await openVisualCamera(); await waitForVisualFrame();
+    visualSession = { id: crypto.randomUUID(), imageDataUrl: captureVisualFrame(), visualSummary: null, recentConversation: [] };
+    closeVisualCamera();
+    return requestVisualQuery(text, true);
+  }
+  function finishFieldAiAnswer() { if (!fieldAiAwaitingAnswer) return; fieldAiAwaitingAnswer = false; setSpeechButtonState("idle"); setSpeechStatus("● 답변 완료"); }
   function captureVisualFrame() {
     const width = visualVideo.videoWidth; const height = visualVideo.videoHeight;
     if (!width || !height) throw new Error("카메라 화면이 준비되지 않았습니다.");
@@ -282,7 +303,8 @@
     const assetResult = result.assetResult; const assetCards = Array.isArray(assetResult?.assets) ? assetResult.assets.map((asset) => assetResultCard(asset, assetResult.queryType)).join("") : "";
     const finalAnswer = result.answer || "확인할 내용을 찾지 못했습니다.";
     aiResult.innerHTML = `<div class="board-visual-result"><span class="board-visual-current">현재 캡처 기준</span><div class="board-visual-answer">${escapeHtml(finalAnswer)}</div>${objects}${assetCards}<div class="board-ai-actions"><button type="button" data-visual-register-asset>이 사진 자산에 등록</button><button type="button" data-visual-clear>캡처 종료</button></div></div>`;
-    speakBoardReply(finalAnswer);
+    rememberConversation(visualSession?.recentConversation?.at(-1)?.question || "시각 질문", finalAnswer); speakBoardReply(finalAnswer);
+    finishFieldAiAnswer();
   }
   async function captureAndAnalyzeVisual() {
     const imageDataUrl = captureVisualFrame();
@@ -335,7 +357,7 @@
     if (result.needsClarification) {
       const choices = Array.isArray(result.choices) ? result.choices : [];
       aiResult.innerHTML = `<h3>자산 선택</h3><p>${escapeHtml(result.question || "어떤 자산을 찾으시나요?")}</p><div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-asset-query-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div><div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div>`;
-      return;
+      speakBoardReply(result.question || "어떤 자산을 찾으시나요?"); finishFieldAiAnswer(); return;
     }
     const assets = Array.isArray(result.assets) ? result.assets : [];
     const movements = Array.isArray(result.movements) ? result.movements.slice(0, 10) : [];
@@ -343,7 +365,8 @@
     const finalAnswer = result.answer || "등록된 자산에서 찾지 못했습니다.";
     aiResult.innerHTML = `<div class="board-asset-query-result">${result.analysisTitle ? `<h3>${escapeHtml(result.analysisTitle)}</h3>` : ""}<p class="board-ai-status">${escapeHtml(finalAnswer)}</p>${analysisItems.map(analysisResultCard).join("")}${movements.map(movementResultCard).join("")}${assets.map((asset) => assetResultCard(asset, result.queryType)).join("")}${result.hasMore ? `<button class="board-asset-more" type="button" data-asset-query-more>더 보기</button>` : ""}<div class="board-ai-actions"><button type="button" data-asset-query-close>닫기</button></div></div>`;
     const needsScreenDetail = movements.length > 0 || result.queryType === "list_assets_by_location";
-    speakBoardReply(result.speechText || (needsScreenDetail ? `${finalAnswer} 자세한 내용은 화면을 확인해주세요.` : finalAnswer));
+    rememberConversation(userText, finalAnswer); speakBoardReply(result.speechText || (needsScreenDetail ? `${finalAnswer} 자세한 내용은 화면을 확인해주세요.` : finalAnswer));
+    finishFieldAiAnswer();
   }
   function beginAssetUpdateFromQuery(asset, action) {
     const intent = action === "increase" ? "increase_asset_quantity" : action === "decrease" ? "decrease_asset_quantity" : "update_asset_location";
@@ -377,18 +400,19 @@
     pendingProposal = null; pendingAssetQuery = null; pendingAssetContext = buildAssetContext(proposal, userText, context); pendingAssetProposal = pendingAssetContext.latestProposal;
     const thumbnail = uploadedAssetImage?.publicUrl || selectedAssetPreviewUrl;
     const image = thumbnail ? `<img class="board-asset-thumbnail" src="${escapeHtml(thumbnail)}" alt="선택한 자산 사진">` : "";
-    if (proposal.intent === "unsupported") { aiResult.innerHTML = `<p class="board-ai-status">현재는 등록 / 수량 추가 / 위치 변경만 지원합니다.</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; return; }
-    if (proposal.intent === "update_asset_location" && proposal.partialMoveUnsupported) { aiResult.innerHTML = `<div class="board-asset-proposal"><h3>일부 수량 이동 미지원</h3><p class="board-ai-status">${escapeHtml(proposal.question || "일부 수량 이동은 아직 지원하지 않습니다.")}</p><div class="board-ai-actions"><button type="button" data-asset-cancel>확인</button></div></div>`; return; }
+    if (proposal.intent === "unsupported") { aiResult.innerHTML = `<p class="board-ai-status">현재는 등록 / 수량 추가 / 위치 변경만 지원합니다.</p><div class="board-ai-actions"><button type="button" data-asset-cancel>닫기</button></div>`; speakBoardReply("현재는 등록, 수량 추가, 위치 변경만 지원합니다."); finishFieldAiAnswer(); return; }
+    if (proposal.intent === "update_asset_location" && proposal.partialMoveUnsupported) { aiResult.innerHTML = `<div class="board-asset-proposal"><h3>일부 수량 이동 미지원</h3><p class="board-ai-status">${escapeHtml(proposal.question || "일부 수량 이동은 아직 지원하지 않습니다.")}</p><div class="board-ai-actions"><button type="button" data-asset-cancel>확인</button></div></div>`; speakBoardReply(proposal.question || "일부 수량 이동은 아직 지원하지 않습니다."); finishFieldAiAnswer(); return; }
     if (proposal.needsClarification || Number(proposal.confidence) < 0.7) {
       const choices = Array.isArray(proposal.choices) ? proposal.choices : [];
       aiResult.innerHTML = `<div class="board-asset-proposal"><div class="board-asset-heading">${image}<div><h3>자산 정보 확인</h3>${currentAssetSummary(pendingAssetContext.asset)}<p>${escapeHtml(proposal.question || "수량과 보관 위치를 알려주세요.")}</p></div></div>${choices.length ? `<div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-asset-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div>` : ""}<div class="board-ai-actions"><button type="button" data-asset-cancel>취소</button></div></div>`;
-      return;
+      speakBoardReply(proposal.question || "수량과 보관 위치를 알려주세요."); finishFieldAiAnswer(); return;
     }
     const asset = proposal.asset || {};
     const current = proposal.intent === "increase_asset_quantity" ? `<p class="board-asset-current">현재 ${proposal.currentQuantity ?? 0}${escapeHtml(asset.unit || "")} + ${proposal.addQuantity ?? 0}${escapeHtml(asset.unit || "")} → ${proposal.newQuantity ?? 0}${escapeHtml(asset.unit || "")}</p>` : proposal.intent === "decrease_asset_quantity" ? `<p class="board-asset-current">현재 ${proposal.currentQuantity ?? 0}${escapeHtml(asset.unit || "")}<br>사용 ${proposal.decreaseQuantity ?? 0}${escapeHtml(asset.unit || "")}<br>${proposal.currentQuantity ?? 0} → ${proposal.newQuantity ?? 0}</p>` : proposal.intent === "update_asset_location" ? `<p class="board-asset-current"><strong>현재 위치</strong><br>${escapeHtml(movementPlace(proposal.currentFloor, proposal.currentLocation))}<br><strong>변경 위치</strong><br>${escapeHtml(movementPlace(asset.floor, asset.location))}</p>` : "";
     const approveText = proposal.intent === "increase_asset_quantity" || proposal.intent === "decrease_asset_quantity" ? `${proposal.newQuantity ?? "새 수량"}으로 반영` : proposal.intent === "update_asset_location" ? "위치 변경" : "자산 등록";
     const createAlternative = proposal.intent === "increase_asset_quantity" ? `<button type="button" data-asset-create-new>새 자산으로 등록</button>` : "";
     aiResult.innerHTML = `<div class="board-asset-proposal"><div class="board-asset-heading">${image}<div><h3>${assetIntentLabel(proposal.intent)}</h3><p>${escapeHtml(proposal.confirmationText || "이 내용으로 반영할까요?")}</p>${current}</div></div><form id="boardAssetProposalForm">${renderAssetFields(asset, true)}</form><div class="board-ai-actions"><button type="button" data-asset-approve>${approveText}</button><button type="button" data-asset-edit>수정</button>${createAlternative}<button type="button" data-asset-cancel>취소</button></div></div>`;
+    speakBoardReply(proposal.confirmationText || "변경 내용을 확인해주세요."); finishFieldAiAnswer();
   }
   function readAssetFields() {
     const form = document.getElementById("boardAssetProposalForm");
@@ -486,7 +510,7 @@
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
     showMessage(auditSaved ? actionLabel : proposal.intent === "update_asset_location" ? "위치는 변경했지만 이동 기록 저장은 실패했습니다." : `${actionLabel} 변경 기록 저장은 실패했습니다.`, true);
   }
-  function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak) speakBoardReply(message); }
+  function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak || fieldAiAwaitingAnswer) speakBoardReply(message); finishFieldAiAnswer(); }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
@@ -497,10 +521,11 @@
     pendingProposal = proposal;
     if (proposal.needsClarification || Number(proposal.confidence) < 0.7) {
       const choices = Array.isArray(proposal.choices) ? proposal.choices : [];
-      aiResult.innerHTML = `<h3>대상 확인</h3><p>${escapeHtml(proposal.question || "어느 행사를 변경할까요?")}</p><div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-ai-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div><div class="board-ai-actions"><button type="button" data-ai-cancel>취소</button></div>`; return;
+      aiResult.innerHTML = `<h3>대상 확인</h3><p>${escapeHtml(proposal.question || "어느 행사를 변경할까요?")}</p><div class="board-ai-choices">${choices.map((choice, index) => `<button class="board-ai-choice" type="button" data-ai-choice="${index}">${escapeHtml(choice.label)}</button>`).join("")}</div><div class="board-ai-actions"><button type="button" data-ai-cancel>취소</button></div>`; speakBoardReply(proposal.question || "대상을 확인해주세요."); finishFieldAiAnswer(); return;
     }
     if (!["update_schedule_time", "update_guest_count", "add_field_note"].includes(proposal.intent)) { showMessage("현재 현장 AI에서는 시간/인원/메모 변경만 가능합니다."); return; }
     aiResult.innerHTML = `<h3>변경 제안</h3><p class="board-ai-change">${escapeHtml(proposalSummary(proposal))}</p><p>${escapeHtml(proposal.confirmationText || "변경할까요?")}</p><div class="board-ai-actions"><button type="button" data-ai-approve>변경하기</button><button type="button" data-ai-edit>수정</button><button type="button" data-ai-cancel>취소</button></div>`;
+    speakBoardReply(proposal.confirmationText || "변경 내용을 확인해주세요."); finishFieldAiAnswer();
   }
   function logLocally(entry) { try { const rows = JSON.parse(localStorage.getItem(correctionLogKey) || "[]"); localStorage.setItem(correctionLogKey, JSON.stringify([...(Array.isArray(rows) ? rows : []), entry].slice(-500))); window.dispatchEvent(new CustomEvent("banquet:correction-recorded")); } catch { /* storage unavailable */ } }
   async function persistAudit(proposal, userText, before, after) {
@@ -568,6 +593,11 @@
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
+    if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
+      showTransientMessage("현재 화면에서 한 프레임을 확인하고 있습니다…");
+      try { const result = await captureOneFrameForFieldAi(text); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("field AI visual capture failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : "정보를 확인하지 못했습니다."); }
+      return;
+    }
     if (!followupContext && !selectedAssetImageFile && visualSession?.visualSummary && isVisualQueryRequest(text)) {
       const includeImage = requestsDetailedReview(text);
       showTransientMessage(includeImage ? "같은 캡처를 다시 자세히 확인하고 있습니다…" : "현재 캡처 요약을 기준으로 답변하고 있습니다…");
@@ -591,7 +621,7 @@
       catch (error) { console.error("asset intake failed", { status: error.status, body: error.body, error }); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "자산 확인에 실패했습니다. 저장된 내용은 없습니다."); }
       return;
     }
-    showMessage("변경 내용을 확인하고 있습니다…"); try { const proposal = await interpret(text); proposal.userText = text; recentConversation.push({ user: text, proposal }); showProposal(proposal); } catch (error) { console.error(error); showMessage("AI 확인에 실패했습니다. 잠시 후 다시 시도해주세요."); }
+    showTransientMessage("변경 내용을 확인하고 있습니다…"); try { const proposal = await interpret(text); proposal.userText = text; recentConversation.push({ user: text, proposal }); recentConversation = recentConversation.slice(-3); showProposal(proposal); } catch (error) { console.error(error); showMessage("정보를 확인하지 못했습니다."); }
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
