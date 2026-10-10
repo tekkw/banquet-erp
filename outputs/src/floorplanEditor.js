@@ -4934,10 +4934,19 @@
       return String(value || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
     }
 
-    return {
+    const api = {
       bindEvents,
       openEditor,
+      async openLayoutPreviewById(layoutId) {
+        if (!allLibraryLayouts.length || !allLibraryLayouts.some((row) => String(row.id) === String(layoutId))) await loadAllLibraryLayouts();
+        const layout = allLibraryLayouts.find((row) => String(row.id) === String(layoutId));
+        if (!layout) return false;
+        showLibraryPreview(layout);
+        return true;
+      },
     };
+    window.BANQUET_ERP_FLOORPLAN_EDITOR_INSTANCE = api;
+    return api;
   }
 
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {

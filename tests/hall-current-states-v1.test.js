@@ -21,6 +21,14 @@ assert.strictEqual(api.setupChangeRequired({ layout_type: "스쿨식", seats: 30
 assert.strictEqual(api.setupChangeRequired({ layout_type: "라운드", tables: 7 }, { layout_type: "라운드", tables: 7 }), false, "같은 라운드 테이블 수는 변경이 필요 없다");
 assert.strictEqual(api.setupChangeRequired(null, { layout_type: "라운드", tables: 7 }), null, "미확인 상태를 같다고 단정하지 않는다");
 
+const school30 = { id: "school-30", space_id: "burano-1", layout_name: "부라노1 세미나 30석", layout_type: "school", setup_capacity: 30, table_count: 15, updated_at: "2026-10-10" };
+const school40 = { id: "school-40", space_id: "burano-1", layout_name: "스쿨 40석", layout_type: "school", setup_capacity: 40, table_count: 20, updated_at: "2026-10-09" };
+const round7 = { id: "round-7", space_id: "burano-1", layout_name: "라운드 7T", layout_type: "round", setup_capacity: 70, table_count: 7, updated_at: "2026-10-08" };
+assert.strictEqual(api.recommendLayouts({ layout_type: "school", seats: 30, tables: 15 }, [round7, school40, school30])[0].id, "school-30", "형태, 좌석, 테이블이 모두 같은 도면을 우선 추천한다");
+assert.strictEqual(api.compareLayouts(school30, { ...school30, id: "same" }), "same");
+assert.strictEqual(api.compareLayouts(school30, school40), "minor_change");
+assert.strictEqual(api.compareLayouts(school30, round7), "major_change");
+
 const now = new Date("2026-10-10T12:00:00+09:00");
 assert.strictEqual(api.needsHallStateConfirmation(null, null, now).needed, true, "상태가 없으면 확인이 필요하다");
 assert.strictEqual(api.needsHallStateConfirmation({ source: "event_inherited" }, null, now).needed, true, "행사 승계 상태는 확인이 필요하다");
@@ -49,10 +57,20 @@ assert(boardPage.includes('source: "manual_confirmed"'));
 assert(boardPage.includes("data-hall-state-approve"));
 assert(boardPage.includes('layoutType === "empty"'));
 assert(boardPage.includes("바꿨어"));
+assert(boardPage.includes("isHallStateQueryRequest"));
+assert(boardPage.includes("현재 도면 보기"));
 
 const widget = fs.readFileSync("outputs/src/dashboardWidgets.js", "utf8");
 assert(widget.includes("data-hall-unchanged"));
 assert(widget.includes("source_event_order_id: sourceEventId"));
 assert(widget.includes("다음 행사 전 세팅 변경이 필요합니다."));
+assert(widget.includes("data-hall-layout-choice"));
+assert(widget.includes("현재 상태와 비슷한 저장 도면 (최대 3개)"));
+assert(widget.includes("payload.source_layout_id"));
+assert(widget.includes("연결된 도면을 찾을 수 없습니다."));
+
+const floorplanEditor = fs.readFileSync("outputs/src/floorplanEditor.js", "utf8");
+assert(floorplanEditor.includes("openLayoutPreviewById"));
+assert(floorplanEditor.includes("showLibraryPreview(layout)"));
 
 console.log("hall-current-states-v1 tests passed");

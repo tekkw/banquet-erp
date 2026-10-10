@@ -561,11 +561,13 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .hall-state-row strong { font-size: 13px; }
 .hall-state-row small { color: var(--dash-muted); font-size: 10px; }
 .hall-state-setup { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.hall-state-layout-name { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hall-state-source { display: grid; justify-items: end; gap: 2px; color: #f2c76e; font-size: 11px; font-weight: 700; white-space: nowrap; }
 .hall-state-source[data-source="manual_confirmed"] { color: #68d391; }
 .hall-state-source[data-source="unknown"] { color: var(--dash-muted); }
 .hall-state-source[data-source="ai_inferred"] { color: #8bbcff; }
 .hall-state-edit { color: var(--dash-muted); font-size: 11px; }
+.hall-state-edit button { min-height: 30px; padding: 4px 8px; border: 1px solid var(--dash-border); border-radius: 7px; background: transparent; color: var(--dash-text); font-size: 10px; cursor: pointer; }
 .hall-state-loading, .hall-state-error { margin: 14px 0; color: var(--dash-muted); font-size: 12px; }
 .hall-state-error { color: #ff9b9b; }
 .hall-state-dialog { width: min(480px, calc(100vw - 24px)); padding: 0; border: 1px solid var(--dash-border-strong); border-radius: 14px; background: #102438; color: var(--dash-text); }
@@ -576,6 +578,16 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .hall-state-dialog label { display: grid; gap: 6px; color: #c7d3dc; font-size: 12px; }
 .hall-state-dialog input, .hall-state-dialog textarea { width: 100%; box-sizing: border-box; padding: 10px 11px; border: 1px solid var(--dash-border); border-radius: 8px; background: rgba(6, 17, 31, .68); color: var(--dash-text); font: inherit; }
 .hall-state-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.hall-layout-picker { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.hall-layout-picker > span { overflow: hidden; color: var(--dash-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.hall-layout-picker > div { grid-column: 1 / -1; display: grid; gap: 6px; max-height: 270px; padding: 8px; overflow: auto; border: 1px solid var(--dash-border); border-radius: 9px; background: rgba(6, 17, 31, .46); }
+.hall-layout-picker > div[hidden] { display: none; }
+.hall-layout-picker > div > p { margin: 0 0 3px; color: var(--dash-muted); font-size: 11px; }
+.hall-layout-option { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 54px; padding: 6px; border: 1px solid rgba(150, 180, 205, .14); border-radius: 8px; background: rgba(19, 47, 70, .56); color: var(--dash-text); text-align: left; cursor: pointer; }
+.hall-layout-option.is-recommended { border-color: rgba(242, 199, 110, .45); }
+.hall-layout-option img { width: 72px; height: 48px; object-fit: cover; border-radius: 5px; background: #fff; }
+.hall-layout-option span { display: grid; gap: 3px; }
+.hall-layout-option small { color: var(--dash-muted); }
 .hall-state-dialog-hint { margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.5; }
 .hall-state-dialog-hint.is-error { color: #ff9b9b; }
 .hall-state-dialog footer { justify-content: flex-end; }

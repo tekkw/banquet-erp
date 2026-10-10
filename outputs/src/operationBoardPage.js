@@ -104,6 +104,7 @@
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
   function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
+  function isHallStateQueryRequest(text) { return /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(?:지금|현재).*(?:세팅|상태).*(?:보여|알려|뭐|어떻게)|(?:세팅|상태).*(?:보여|알려)/i.test(text); }
   function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t)|비어\s*있|철수)/i.test(text) && /(그대로|현재|지금|확인|세팅|상태|변경|바꿨|바꿨어|비어\s*있|철수)/i.test(text); }
   function hallStateLayout(text) { return /비어\s*있|철수|empty/i.test(text) ? "empty" : /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
   function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
@@ -115,6 +116,15 @@
     if (!layoutType && !seats && !tables) throw new Error("레이아웃 타입이나 좌석·테이블 수를 입력해주세요.");
     const existing = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`);
     return { space: matches[0], previous: existing?.[0] || null, layoutType: layoutType || existing?.[0]?.layout_type || null, seats: empty ? 0 : seats ? Number(seats[1]) : existing?.[0]?.seats ?? null, tables: empty ? 0 : tables ? Number(tables[1]) : existing?.[0]?.tables ?? null, userText: text };
+  }
+  async function showHallStateQuery(text) {
+    const spaces = await request("venue_spaces?select=id,space_name&is_active=eq.true&order=space_name.asc"); const normalized = normalizeHallName(text); const matches = spaces.filter((space) => normalized.includes(normalizeHallName(space.space_name)));
+    if (matches.length !== 1) throw new Error("확인할 연회장 이름을 하나만 입력해주세요.");
+    const rows = await request(`hall_current_states?select=*&space_id=eq.${encodeURIComponent(matches[0].id)}&limit=1`); const state = rows?.[0];
+    if (!state) { showMessage(`${matches[0].space_name} 현재 세팅은 아직 확인되지 않았습니다.`); return; }
+    const layouts = state.source_layout_id ? await request(`venue_layouts?select=id,layout_name&id=eq.${encodeURIComponent(state.source_layout_id)}&is_active=eq.true&limit=1`) : []; const layout = layouts?.[0];
+    const answer = `${matches[0].space_name}은 현재 ${[state.layout_type, state.tables != null ? `${state.tables}T` : "", state.seats != null ? `${state.seats}석` : ""].filter(Boolean).join(" · ")}으로 확인되어 있습니다.`;
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${escapeHtml(matches[0].space_name)} 현재 세팅</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">${state.source_layout_id ? layout ? `현재 도면: ${escapeHtml(layout.layout_name)}` : "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"}</p>${layout ? `<div class="board-ai-actions"><a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(layout.id)}">현재 도면 보기</a></div>` : ""}</div>`; speakBoardReply(answer);
   }
   function showHallStateProposal(proposal) {
     pendingHallStateProposal = proposal; pendingProposal = null;
@@ -549,6 +559,7 @@
       try { const result = await requestVisualQuery(text, includeImage); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("visual follow-up failed", error); showMessage(error.message || "시각 질문에 답하지 못했습니다."); }
       return;
     }
+    if (!followupContext && !selectedAssetImageFile && isHallStateQueryRequest(text)) { showTransientMessage("현재 세팅 상태를 조회하고 있습니다…"); try { await showHallStateQuery(text); aiInput.value = ""; } catch (error) { console.error("hall state query failed", error); showMessage(error.message || "현재 세팅 상태를 조회하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && isHallStateConfirmationRequest(text)) {
       showTransientMessage("현재 세팅 상태를 확인하고 있습니다…");
       try { showHallStateProposal(await interpretHallState(text)); } catch (error) { console.error("hall state intake failed", error); showMessage(error.message || "현재 세팅 상태를 확인하지 못했습니다."); }

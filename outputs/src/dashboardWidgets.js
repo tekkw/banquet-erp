@@ -103,11 +103,12 @@
     initHallCurrentStatesWidget();
   }
 
-  const hallState = { spaces: [], rows: [], orders: [], notes: [], suggestions: new Map(), questions: [], dialog: null, resultMessage: "" };
+  const hallState = { spaces: [], rows: [], orders: [], notes: [], layouts: [], previewFiles: new Map(), suggestions: new Map(), questions: [], dialog: null, resultMessage: "" };
   const hallConfig = () => window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
   const hallEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
   const nullableInteger = (value) => value === "" || value == null ? null : Number.parseInt(value, 10);
-  const normalizeLayout = (value) => String(value || "").toLowerCase().replace(/\s+/g, "").replace(/school|스쿨형/g, "스쿨식").replace(/round|원형/g, "라운드");
+  const normalizeLayout = (value) => String(value || "").toLowerCase().replace(/\s+/g, "").replace(/school|스쿨형/g, "스쿨식").replace(/round|원형/g, "라운드").replace(/u_shape|u자/g, "u자").replace(/t_shape/g, "t-shape").replace(/hollow_square|ㅁ-shape/g, "ㅁ-shape");
+  const layoutDisplayType = (value) => ({ school: "스쿨식", round: "라운드", buffet: "뷔페식", u_shape: "U자", t_shape: "T-Shape", hollow_square: "ㅁ-Shape", custom: "기타" }[String(value || "").toLowerCase()] || value || "");
   const normalizeVenue = (value) => String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타");
 
   function setupChangeRequired(current, next) {
@@ -122,6 +123,26 @@
     const currentSeats = nullableInteger(current.seats ?? current.setup_capacity);
     const nextSeats = nullableInteger(next.seats ?? next.setup_capacity);
     return currentSeats == null || nextSeats == null ? null : currentSeats !== nextSeats;
+  }
+
+  function layoutSummary(layout) {
+    if (!layout) return null;
+    return { id: layout.id, name: layout.layout_name || "이름 없는 레이아웃", layoutType: normalizeLayout(layout.layout_type), seats: nullableInteger(layout.setup_capacity), tables: nullableInteger(layout.table_count), spaceId: layout.space_id || null, previewFileId: layout.preview_file_id || null };
+  }
+
+  function compareLayouts(currentLayout, nextLayout) {
+    const current = layoutSummary(currentLayout); const next = layoutSummary(nextLayout);
+    if (!current || !next || !current.layoutType || !next.layoutType) return "major_change";
+    if (current.layoutType !== next.layoutType) return "major_change";
+    return current.seats === next.seats && current.tables === next.tables ? "same" : "minor_change";
+  }
+
+  function recommendLayouts(state, layouts, limit = 3) {
+    const stateType = normalizeLayout(state?.layout_type || state?.layoutType); const seats = nullableInteger(state?.seats); const tables = nullableInteger(state?.tables);
+    return [...layouts].sort((left, right) => {
+      const score = (layout) => (normalizeLayout(layout.layout_type) === stateType ? 100 : 0) + (nullableInteger(layout.setup_capacity) === seats ? 20 : 0) + (nullableInteger(layout.table_count) === tables ? 10 : 0);
+      return score(right) - score(left) || String(right.updated_at || right.created_at || "").localeCompare(String(left.updated_at || left.created_at || ""));
+    }).slice(0, limit);
   }
 
   const dateKey = (value) => { if (!value) return ""; const date = new Date(value); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; };
@@ -147,8 +168,8 @@
 
   function ensureHallCurrentStatesWidget(home) {
     if (home.querySelector("#hallCurrentStatesWidget")) return;
-    if (!document.querySelector('link[data-hall-state-styles="v2"]')) {
-      const stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "./src/styles/dashboardWidgets.css?v=hall-current-state-v2"; stylesheet.dataset.hallStateStyles = "v2"; document.head.append(stylesheet);
+    if (!document.querySelector('link[data-hall-state-styles="v3"]')) {
+      const stylesheet = document.createElement("link"); stylesheet.rel = "stylesheet"; stylesheet.href = "./src/styles/dashboardWidgets.css?v=hall-layout-link-v3"; stylesheet.dataset.hallStateStyles = "v3"; document.head.append(stylesheet);
     }
     const section = document.createElement("section");
     section.id = "hallCurrentStatesWidget";
@@ -216,6 +237,14 @@
     return details.length ? details.join(" · ") : "세팅 상세 미입력";
   }
 
+  function layoutForState(row) { return row?.source_layout_id ? hallState.layouts.find((layout) => layout.id === row.source_layout_id) || null : null; }
+  function layoutPreviewUrl(layout) {
+    const file = hallState.previewFiles.get(String(layout?.preview_file_id || ""));
+    if (!file) return "";
+    if (file.public_url) return file.public_url;
+    return file.bucket && file.storage_path ? `${hallConfig().url}/storage/v1/object/public/${encodeURIComponent(file.bucket)}/${String(file.storage_path).split("/").map(encodeURIComponent).join("/")}` : "";
+  }
+
   function relativeConfirmed(row) {
     if (!row?.confirmed_at) return "";
     const days = Math.max(0, Math.floor((Date.now() - new Date(row.confirmed_at).getTime()) / 86400000));
@@ -235,7 +264,8 @@
       const source = saved?.source || row?.source || "unknown";
       const label = source === "manual_confirmed" ? "확인됨" : source === "event_inherited" ? "이전 행사 기준" : source === "ai_inferred" ? "AI 추정 · 미확인" : "미확인";
       const date = source === "manual_confirmed" ? relativeConfirmed(row) : "";
-      return `<button type="button" class="hall-state-row" data-hall-space-id="${space.id}"><span><strong>${hallEscape(space.space_name)}</strong><small>${hallEscape(space.floor || "")}</small></span><span class="hall-state-setup">${hallEscape(formatSetup(row))}</span><span class="hall-state-source" data-source="${source}">${label}${date ? `<small>${hallEscape(date)}</small>` : ""}</span><span class="hall-state-edit">수정</span></button>`;
+      const linked = layoutForState(row); const layoutText = row?.source_layout_id ? linked ? linked.layout_name : "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음";
+      return `<article class="hall-state-row" role="button" tabindex="0" data-hall-space-id="${space.id}"><span><strong>${hallEscape(space.space_name)}</strong><small>${hallEscape(space.floor || "")}</small></span><span class="hall-state-setup">${hallEscape(formatSetup(row))}<small class="hall-state-layout-name">현재 도면: ${hallEscape(layoutText)}</small></span><span class="hall-state-source" data-source="${source}">${label}${date ? `<small>${hallEscape(date)}</small>` : ""}</span><span class="hall-state-edit">${linked ? `<button type="button" data-hall-preview-layout="${linked.id}">도면 보기</button>` : "수정"}</span></article>`;
     }).join("") || `<p class="hall-state-loading">등록된 연회장 공간이 없습니다.</p>`;
   }
 
@@ -243,13 +273,15 @@
     const list = document.querySelector("[data-hall-state-list]");
     if (list) list.innerHTML = `<p class="hall-state-loading">공간 상태를 불러오는 중…</p>`;
     try {
-      const [spaces, rows, orders, notes] = await Promise.all([
+      const [spaces, rows, orders, notes, layouts] = await Promise.all([
         hallRequest("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc"),
         hallRequest("hall_current_states?select=*&order=venue_name.asc"),
         hallRequest("event_orders?select=id,event_name,venue,guest_count,start_date,end_date&end_date=not.is.null&order=end_date.desc&limit=200"),
         hallRequest("event_notes?select=event_order_id,note_type,content&note_type=eq.layout_eqp&limit=1000"),
+        hallRequest("venue_layouts?select=id,space_id,layout_name,layout_type,setup_capacity,table_count,preview_file_id,created_at,updated_at,is_active&is_active=eq.true&order=updated_at.desc"),
       ]);
-      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.orders = orders || []; hallState.notes = notes || []; hallState.suggestions = buildEventSuggestions(hallState.spaces, hallState.orders, hallState.notes); hallState.questions = buildConfirmationQuestions(hallState.spaces, hallState.rows, hallState.orders); renderHallStates();
+      const previewIds = [...new Set((layouts || []).map((layout) => layout.preview_file_id).filter(Boolean))]; const files = previewIds.length ? await hallRequest(`files?select=id,public_url,storage_path,bucket,original_filename&id=in.(${previewIds.join(",")})`) : [];
+      hallState.spaces = spaces || []; hallState.rows = rows || []; hallState.orders = orders || []; hallState.notes = notes || []; hallState.layouts = layouts || []; hallState.previewFiles = new Map((files || []).map((file) => [String(file.id), file])); hallState.suggestions = buildEventSuggestions(hallState.spaces, hallState.orders, hallState.notes); hallState.questions = buildConfirmationQuestions(hallState.spaces, hallState.rows, hallState.orders); renderHallStates();
     } catch (error) {
       console.error("hall current states load failed", { status: error.status, body: error.body, error });
       if (list) list.innerHTML = `<p class="hall-state-error">현재 세팅 상태를 불러오지 못했습니다. ${hallEscape(error.message)}</p>`;
@@ -259,9 +291,11 @@
   function ensureHallDialog() {
     if (hallState.dialog) return hallState.dialog;
     const dialog = document.createElement("dialog"); dialog.className = "hall-state-dialog";
-    dialog.innerHTML = `<form method="dialog" data-hall-state-form><header><div><span class="hall-state-eyebrow">CURRENT SETUP</span><h3 data-hall-dialog-title>현재 세팅 수정</h3></div><button type="button" class="secondary-button" data-hall-close>닫기</button></header><input type="hidden" name="spaceId"><label>레이아웃 타입<input name="layoutType" list="hallLayoutTypes" placeholder="예: 스쿨식"></label><datalist id="hallLayoutTypes"><option value="스쿨식"><option value="라운드"><option value="극장식"><option value="U자"></datalist><div class="hall-state-form-grid"><label>좌석수<input name="seats" type="number" min="0" inputmode="numeric"></label><label>테이블수<input name="tables" type="number" min="0" inputmode="numeric"></label></div><label>장비 메모<input name="equipment" placeholder="예: 빔프로젝터, 무선마이크 2"></label><label>비고<textarea name="note" rows="3"></textarea></label><p class="hall-state-dialog-hint" data-hall-dialog-hint></p><footer><button type="button" class="secondary-button" data-hall-close>취소</button><button type="submit" class="primary-button">현재 상태 확인 저장</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" data-hall-state-form><header><div><span class="hall-state-eyebrow">CURRENT SETUP</span><h3 data-hall-dialog-title>현재 세팅 수정</h3></div><button type="button" class="secondary-button" data-hall-close>닫기</button></header><input type="hidden" name="spaceId"><label>레이아웃 타입<input name="layoutType" list="hallLayoutTypes" placeholder="예: 스쿨식"></label><datalist id="hallLayoutTypes"><option value="스쿨식"><option value="라운드"><option value="극장식"><option value="U자"><option value="empty"></datalist><div class="hall-state-form-grid"><label>좌석수<input name="seats" type="number" min="0" inputmode="numeric"></label><label>테이블수<input name="tables" type="number" min="0" inputmode="numeric"></label></div><section class="hall-layout-picker"><button type="button" class="secondary-button" data-hall-layout-toggle>레이아웃 선택</button><span data-hall-selected-layout>연결된 도면 없음</span><div data-hall-layout-options hidden></div></section><label>장비 메모<input name="equipment" placeholder="예: 빔프로젝터, 무선마이크 2"></label><label>비고<textarea name="note" rows="3"></textarea></label><p class="hall-state-dialog-hint" data-hall-dialog-hint></p><footer><button type="button" class="secondary-button" data-hall-close>취소</button><button type="submit" class="primary-button">현재 상태 확인 저장</button></footer></form>`;
     document.body.append(dialog); hallState.dialog = dialog;
     dialog.querySelectorAll("[data-hall-close]").forEach((button) => button.addEventListener("click", () => dialog.close()));
+    dialog.querySelector("[data-hall-layout-toggle]").addEventListener("click", () => { const options = dialog.querySelector("[data-hall-layout-options]"); options.hidden = !options.hidden; });
+    dialog.querySelector("[data-hall-layout-options]").addEventListener("click", (event) => { const choice = event.target.closest("[data-hall-layout-choice]"); if (choice) selectHallLayout(choice.dataset.hallLayoutChoice); });
     dialog.querySelector("[data-hall-state-form]").addEventListener("submit", saveHallState);
     return dialog;
   }
@@ -269,10 +303,24 @@
   function openHallDialog(spaceId) {
     const dialog = ensureHallDialog(); const form = dialog.querySelector("form");
     const space = hallState.spaces.find((item) => item.id === spaceId); const saved = hallState.rows.find((item) => item.space_id === spaceId); const row = saved || hallState.suggestions.get(spaceId) || {};
-    form.elements.spaceId.value = spaceId; form.elements.layoutType.value = row.layout_type || ""; form.elements.seats.value = row.seats ?? ""; form.elements.tables.value = row.tables ?? ""; form.elements.equipment.value = typeof row.equipment === "string" ? row.equipment : row.equipment?.text || ""; form.elements.note.value = row.note || "";
+    form.elements.spaceId.value = spaceId; form.elements.layoutType.value = row.layout_type || ""; form.elements.seats.value = row.seats ?? ""; form.elements.tables.value = row.tables ?? ""; form.elements.equipment.value = typeof row.equipment === "string" ? row.equipment : row.equipment?.text || ""; form.elements.note.value = row.note || ""; form.dataset.sourceLayoutId = row.source_layout_id || ""; form.dataset.originalSignature = stateSignature(row);
+    renderHallLayoutOptions(spaceId, row);
     dialog.querySelector("[data-hall-dialog-title]").textContent = `${space?.space_name || "연회장"} 현재 세팅`;
     dialog.querySelector("[data-hall-dialog-hint]").textContent = !saved && row.source === "event_inherited" ? "마지막 종료 행사 정보를 참고값으로 채웠습니다. 저장할 때만 사용자 확인 상태가 됩니다." : "저장하면 사용자 확인 상태로 기록됩니다.";
     if (typeof dialog.showModal === "function") dialog.showModal(); else dialog.setAttribute("open", "");
+  }
+
+  function stateSignature(value) { return `${normalizeLayout(value?.layout_type || value?.layoutType)}|${nullableInteger(value?.seats)}|${nullableInteger(value?.tables)}`; }
+  function renderHallLayoutOptions(spaceId, state) {
+    const form = hallState.dialog.querySelector("form"); const options = form.querySelector("[data-hall-layout-options]"); const layouts = hallState.layouts.filter((layout) => layout.space_id === spaceId); const recommended = recommendLayouts(state, layouts); const recommendedIds = new Set(recommended.map((layout) => layout.id));
+    const others = layouts.filter((layout) => !recommendedIds.has(layout.id)); const card = (layout, recommendedCard) => { const summary = layoutSummary(layout); const preview = layoutPreviewUrl(layout); return `<button type="button" class="hall-layout-option${recommendedCard ? " is-recommended" : ""}" data-hall-layout-choice="${layout.id}">${preview ? `<img src="${hallEscape(preview)}" alt="">` : ""}<span><strong>${hallEscape(summary.name)}</strong><small>${hallEscape(layoutDisplayType(layout.layout_type))} · ${summary.seats ?? 0}석 · ${summary.tables ?? 0}T</small></span></button>`; };
+    options.innerHTML = layouts.length ? `<p>현재 상태와 비슷한 저장 도면 (최대 3개)</p>${recommended.map((layout) => card(layout, true)).join("")}${others.length ? `<p>이 공간의 다른 저장 도면</p>${others.map((layout) => card(layout, false)).join("")}` : ""}` : `<p>이 공간에 저장된 레이아웃이 없습니다.</p>`;
+    const linked = hallState.layouts.find((layout) => layout.id === form.dataset.sourceLayoutId); form.querySelector("[data-hall-selected-layout]").textContent = linked ? linked.layout_name : form.dataset.sourceLayoutId ? "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"; options.hidden = true;
+  }
+
+  function selectHallLayout(layoutId) {
+    const form = hallState.dialog.querySelector("form"); const layout = hallState.layouts.find((item) => item.id === layoutId); if (!layout) return; const summary = layoutSummary(layout);
+    form.dataset.sourceLayoutId = layout.id; form.elements.layoutType.value = layoutDisplayType(layout.layout_type); form.elements.seats.value = summary.seats ?? ""; form.elements.tables.value = summary.tables ?? ""; form.querySelector("[data-hall-selected-layout]").textContent = layout.layout_name; form.querySelector("[data-hall-layout-options]").hidden = true;
   }
 
   function comparisonMessage(spaceId, current) {
@@ -301,8 +349,9 @@
     if (!space) return;
     const question = hallState.questions.find((item) => item.space.id === space.id); const layoutType = form.elements.layoutType.value.trim();
     const payload = { layout_type: /^(비어|철수|empty)/i.test(layoutType) ? "empty" : layoutType || null, seats: /^(비어|철수|empty)/i.test(layoutType) ? 0 : nullableInteger(form.elements.seats.value), tables: /^(비어|철수|empty)/i.test(layoutType) ? 0 : nullableInteger(form.elements.tables.value), equipment: form.elements.equipment.value.trim() ? { text: form.elements.equipment.value.trim() } : {}, note: form.elements.note.value.trim() || null };
+    const selectedLayout = hallState.layouts.find((layout) => layout.id === form.dataset.sourceLayoutId); payload.source_layout_id = selectedLayout && stateSignature(payload) === stateSignature(layoutSummary(selectedLayout)) ? selectedLayout.id : null; const layoutWasUnlinked = Boolean(form.dataset.sourceLayoutId && !payload.source_layout_id);
     submit.disabled = true; submit.textContent = "저장 중…";
-    try { await persistManualHallState(space, payload, question?.latestEvent?.id || null); hallState.dialog.close(); await loadHallStates(); }
+    try { await persistManualHallState(space, payload, question?.latestEvent?.id || null); if (layoutWasUnlinked) hallState.resultMessage = "현재 상태가 변경되어 도면 연결이 해제되었습니다."; hallState.dialog.close(); await loadHallStates(); }
     catch (error) { console.error("hall current state save failed", { status: error.status, body: error.body, error }); dialogAlert(form, `현재 상태 저장 실패 (${hallEscape(error.message)})`); }
     finally { submit.disabled = false; submit.textContent = "현재 상태 확인 저장"; }
   }
@@ -312,15 +361,17 @@
   function initHallCurrentStatesWidget() {
     const widget = document.querySelector("#hallCurrentStatesWidget"); if (!widget) return;
     widget.addEventListener("click", async (event) => {
+      const preview = event.target.closest("[data-hall-preview-layout]"); if (preview) { event.stopPropagation(); const opened = await window.BANQUET_ERP_FLOORPLAN_EDITOR_INSTANCE?.openLayoutPreviewById(preview.dataset.hallPreviewLayout); if (!opened) { hallState.resultMessage = "연결된 도면을 찾을 수 없습니다."; renderConfirmationQuestions(); } return; }
       const unchanged = event.target.closest("[data-hall-unchanged]"); if (unchanged) { unchanged.disabled = true; try { await confirmHallStateUnchanged(unchanged.dataset.hallUnchanged); } catch (error) { console.error("hall unchanged confirmation failed", error); hallState.resultMessage = `현재 상태 저장 실패 (${error.message})`; renderConfirmationQuestions(); } return; }
       const changed = event.target.closest("[data-hall-changed]"); if (changed) { openHallDialog(changed.dataset.hallChanged); return; }
       const row = event.target.closest("[data-hall-space-id]"); if (row) openHallDialog(row.dataset.hallSpaceId);
     });
     widget.querySelector("[data-hall-refresh]")?.addEventListener("click", loadHallStates);
     loadHallStates();
+    const requestedLayoutId = new URLSearchParams(window.location.search).get("layoutPreview"); if (requestedLayoutId) setTimeout(() => window.BANQUET_ERP_FLOORPLAN_EDITOR_INSTANCE?.openLayoutPreviewById(requestedLayoutId), 0);
   }
 
-  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, needsHallStateConfirmation, buildConfirmationQuestions, normalizeLayout, buildEventSuggestions };
+  window.BANQUET_ERP_HALL_STATES = { setupChangeRequired, needsHallStateConfirmation, buildConfirmationQuestions, normalizeLayout, buildEventSuggestions, layoutSummary, recommendLayouts, compareLayouts };
 
   function setupDashboardAiOverlay(home) {
     const widget = home.querySelector(".dashboard-ai-widget");
