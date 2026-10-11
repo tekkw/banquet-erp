@@ -1,7 +1,8 @@
 (function initializeOperationBoardPage() {
   const constants = window.BANQUET_ERP_CONSTANTS;
   const board = window.BANQUET_ERP_OPERATION_BOARD;
-  const cacheKey = "banquet-erp-events-cache-v5";
+  const cacheKey = "banquet-erp-events-cache-v6";
+  const layoutRecommendations = window.BANQUET_ERP_BOARD_LAYOUT_RECOMMENDATIONS;
   const correctionLogKey = "banquetErp.eventOrderCorrections.v1";
   const app = document.getElementById("boardApp");
   const login = document.getElementById("boardLogin");
@@ -30,6 +31,7 @@
   let events = [];
   let pendingProposal = null;
   let pendingHallStateProposal = null;
+  let pendingLayoutRecommendation = null;
   let pendingAssetProposal = null;
   let pendingAssetContext = null;
   let pendingAssetQuery = null;
@@ -99,7 +101,7 @@
       const [dates, schedules, items, notes] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc"), childRows("event_items", ids, "created_at.asc,id.asc"), childRows("event_notes", ids, "created_at.asc,id.asc")]);
       const byDate = grouped(dates); const bySchedule = grouped(schedules); const byItem = grouped(items); const byNote = grouped(notes);
       events = rows.map((row) => ({ id: row.id, eventName: row.event_name || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", originalFilename: row.original_filename || "", layoutText: row.layout_text || row.layout_type || row.layout || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })), items: byItem[row.id] || [], notes: byNote[row.id] || [] }));
-      localStorage.setItem(cacheKey, JSON.stringify({ version: 5, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
+      localStorage.setItem(cacheKey, JSON.stringify({ version: 6, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
     } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; return { ok: false, error }; }
   }
   function selectedEvents(date = board.getSelectedDate()) { return events.filter((event) => eventDateKeys(event).includes(date)); }
@@ -256,6 +258,85 @@
     const rows = await request("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) });
     if (!rows?.[0]?.id) throw new Error("현재 세팅 저장 결과가 없습니다.");
     pendingHallStateProposal = null; aiInput.value = ""; showMessage(`${proposal.space.space_name} 현재 세팅을 확인 상태로 저장했습니다.`, true);
+  }
+  function isLayoutRecommendationRequest(text) {
+    if (!layoutRecommendations || /(이|그|해당)\s*행사/.test(text)) return false;
+    const parsed = layoutRecommendations.parseRequest(text);
+    const knownType = ["school", "round", "u_shape", "box_shape", "t_shape", "theater"].includes(parsed.layoutType);
+    return knownType && /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(추천|레이아웃|배치|세팅|보여|알려)/i.test(text);
+  }
+  function recommendationSpaceMatches(spaces, text) {
+    const recommendationVenueName = (value) => normalizedVenue(value).replace(/센터/g, "");
+    const normalizedText = recommendationVenueName(text);
+    const convention = currentStateConventionUnit(text);
+    if (convention) {
+      const conventionSpaces = spaces.filter((space) => /컨벤션[123]$/.test(recommendationVenueName(space.space_name)));
+      const member = (number) => conventionSpaces.find((space) => recommendationVenueName(space.space_name).endsWith(`컨벤션${number}`)); const one = member(1); const two = member(2); const three = member(3);
+      if (!one || !two || !three) return [];
+      return [{ ...(convention === "B" ? three : one), space_name: `컨벤션 ${convention}`, space_code: `CONV_${convention}`, memberSpaceIds: convention === "A" ? [one.id, two.id] : convention === "B" ? [three.id] : [one.id, two.id, three.id], conventionUnit: convention }];
+    }
+    const exactNumber = normalizedText.match(/(부라노|카프리)([123])/);
+    if (exactNumber) return spaces.filter((space) => recommendationVenueName(space.space_name).endsWith(exactNumber[0]));
+    const whole = normalizedText.match(/(부라노|카프리)(?:전체|전관|ALL)/);
+    if (whole) return spaces.filter((space) => { const name = recommendationVenueName(space.space_name); return name === whole[1] || name === `${whole[1]}전체`; });
+    const simple = normalizedText.match(/(부라노|카프리|페스타|포이어)/);
+    if (!simple) return [];
+    return spaces.filter((space) => recommendationVenueName(space.space_name) === simple[1]);
+  }
+  function layoutPreviewImage(file) {
+    if (!file) return "";
+    if (file.public_url) return file.public_url;
+    if (!file.bucket || !file.storage_path) return "";
+    return `${constants.supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(file.bucket)}/${encodeStoragePath(file.storage_path)}`;
+  }
+  function recommendationLabel(layout, requestData, index) {
+    if (index === 0 && requestData.people != null && layout.recommendationCapacity === requestData.people) return "정원 일치";
+    if (index === 0 && requestData.seatsPerTable != null && Number(layout.seats_per_table) === requestData.seatsPerTable) return "좌석 구성 일치";
+    return index === 0 ? "가장 가까운 구성" : "유사 구성";
+  }
+  function renderLayoutRecommendations(result) {
+    pendingLayoutRecommendation = result;
+    const cards = result.layouts.map((layout, index) => {
+      const image = layout.previewUrl ? `<img src="${escapeHtml(layout.previewUrl)}" alt="${escapeHtml(layout.layout_name || "레이아웃")} 썸네일">` : '<div class="board-layout-placeholder">저장 미리보기</div>';
+      const summary = [layoutRecommendations.layoutTypeLabel(layout.layout_type), layout.recommendationCapacity != null ? `${layout.recommendationCapacity}석` : "좌석수 미입력", layout.table_count != null ? `${layout.table_count}T` : "테이블수 미입력", layout.seats_per_table != null ? `테이블당 ${layout.seats_per_table}석` : ""].filter(Boolean).join(" · ");
+      return `<article class="board-layout-recommendation-card">${image}<div><small>${escapeHtml(recommendationLabel(layout, result.request, index))}</small><h3>${escapeHtml(layout.layout_name || "이름 없는 레이아웃")}</h3><p>${escapeHtml(summary)}</p><div class="board-ai-actions"><a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(layout.id)}" target="_blank" rel="noopener">미리보기</a><button type="button" data-layout-recommend-select="${escapeHtml(layout.id)}">현재 세팅으로 선택</button></div></div></article>`;
+    }).join("");
+    const answer = `${result.space.space_name} ${layoutRecommendations.layoutTypeLabel(result.request.layoutType)} 저장 레이아웃 ${result.layouts.length}건을 추천합니다.`;
+    aiResult.innerHTML = `<section class="board-layout-recommendations"><p class="board-ai-status">${escapeHtml(answer)}</p>${cards}</section>`;
+    rememberConversation(result.userText, answer); speakBoardReply(`가장 가까운 추천은 ${result.layouts[0].layout_name || "첫 번째 레이아웃"}입니다.`); finishFieldAiAnswer();
+  }
+  async function handleLayoutRecommendation(text) {
+    const parsed = layoutRecommendations.parseRequest(text);
+    const spaces = await request("venue_spaces?select=id,space_name,space_code,floor&is_active=eq.true&order=space_name.asc");
+    const matches = recommendationSpaceMatches(spaces, text);
+    if (matches.length !== 1) throw new Error(matches.length ? "추천할 공간을 하나만 정확히 입력해주세요." : "저장된 공간을 정확히 입력해주세요. 예: 부라노1, 카프리1, 컨벤션 A");
+    const space = matches[0]; const memberIds = space.memberSpaceIds || [space.id];
+    const layouts = await request(`venue_layouts?select=*&space_id=in.(${memberIds.join(",")})&is_active=eq.true&order=updated_at.desc`);
+    const sameType = (layouts || []).filter((layout) => layoutRecommendations.normalizeLayoutType(layout.layout_type) === parsed.layoutType);
+    if (!sameType.length) { showMessage(`${space.space_name}에 저장된 ${layoutRecommendations.layoutTypeLabel(parsed.layoutType)} 레이아웃이 없습니다.`, true); return; }
+    const ids = sameType.map((layout) => layout.id); const objects = await request(`venue_layout_objects?select=layout_id,object_type,seat_count&layout_id=in.(${ids.join(",")})&is_active=eq.true`);
+    const objectInfo = (objects || []).reduce((map, row) => { const item = map[row.layout_id] ||= { seats: 0, tables: 0 }; item.seats += Number(row.seat_count || 0); if (/table/i.test(row.object_type || "")) item.tables += 1; return map; }, {});
+    const enriched = sameType.map((layout) => ({ ...layout, object_seats: objectInfo[layout.id]?.seats || null, table_count: layout.table_count ?? objectInfo[layout.id]?.tables ?? null }));
+    const ranked = layoutRecommendations.rankLayouts(parsed, enriched, 3);
+    const previewIds = [...new Set(ranked.map((layout) => layout.preview_file_id).filter(Boolean))];
+    const files = previewIds.length ? await request(`files?select=id,public_url,storage_path,bucket&id=in.(${previewIds.join(",")})`) : [];
+    const fileMap = new Map((files || []).map((file) => [String(file.id), file]));
+    renderLayoutRecommendations({ queryType: "recommend_layouts", userText: text, request: parsed, space, layouts: ranked.map((layout) => ({ ...layout, previewUrl: layoutPreviewImage(fileMap.get(String(layout.preview_file_id || ""))) })) });
+  }
+  function showLayoutSelectionProposal(layout) {
+    const result = pendingLayoutRecommendation; if (!result) return;
+    const current = result.currentState || null; const changeLevel = layoutRecommendations.compareLayouts(current, layout);
+    pendingLayoutRecommendation = { ...result, selectedLayout: layout, changeLevel };
+    const changeText = ({ same: "현재 세팅과 동일", minor_change: "같은 타입의 좌석·테이블 변경", major_change: "레이아웃 타입 변경" })[changeLevel] || "현재 상태 미확인";
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>현재 세팅으로 선택</h3><p><strong>${escapeHtml(result.space.space_name)}</strong></p><p>${escapeHtml(layout.layout_name || "이름 없는 레이아웃")} · ${escapeHtml(changeText)}</p><p class="board-ai-status">승인하면 저장된 레이아웃을 현재 세팅에 연결합니다.</p><div class="board-ai-actions"><button type="button" class="primary-button" data-layout-recommend-approve>선택 확인</button><button type="button" class="secondary-button" data-layout-recommend-cancel>취소</button></div></div>`;
+    speakBoardReply(`${layout.layout_name || "선택한 레이아웃"}을 현재 세팅으로 선택할까요?`); finishFieldAiAnswer();
+  }
+  async function applyLayoutRecommendation(result) {
+    const layout = result.selectedLayout; const user = storedUser(); const previous = await currentHallState(result.space);
+    const payload = { space_id: result.space.id, space_key: result.space.space_code || null, venue_name: result.space.space_name, layout_type: layoutRecommendations.layoutTypeLabel(layout.layout_type), seats: layout.recommendationCapacity, tables: layout.table_count ?? null, equipment: previous?.equipment || {}, note: previous?.note || null, source: "manual_confirmed", source_event_order_id: /이\s*행사에/.test(result.userText) ? activeEventContexts[0]?.eventOrderId || null : null, source_layout_id: layout.id, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    const rows = await request("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) });
+    if (!rows?.[0]?.id || rows[0].source_layout_id !== layout.id) throw new Error("현재 세팅 저장 결과를 확인하지 못했습니다.");
+    pendingLayoutRecommendation = null; showMessage(`${result.space.space_name} 현재 세팅을 ${layout.layout_name || "선택한 레이아웃"}으로 연결했습니다.`, true);
   }
   function requestsDetailedReview(text) { return /(사진|이미지|장면).*(다시|자세히)|다시.*(봐|보|분석)/i.test(text); }
   function encodeStoragePath(path) { return String(path).split("/").map(encodeURIComponent).join("/"); }
@@ -708,6 +789,7 @@
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
+    if (!followupContext && !selectedAssetImageFile && isLayoutRecommendationRequest(text)) { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (!followupContext && !selectedAssetImageFile && isEventQueryRequest(text)) { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
       showTransientMessage("현재 화면에서 한 프레임을 확인하고 있습니다…");
@@ -741,6 +823,10 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    const layoutSelection = event.target.closest("[data-layout-recommend-select]");
+    if (layoutSelection && pendingLayoutRecommendation) { const layout = pendingLayoutRecommendation.layouts.find((item) => String(item.id) === String(layoutSelection.dataset.layoutRecommendSelect)); if (layout) { try { pendingLayoutRecommendation.currentState = await currentHallState(pendingLayoutRecommendation.space); showLayoutSelectionProposal(layout); } catch (error) { console.error("layout current state lookup failed", error); showMessage("현재 세팅을 확인하지 못했습니다."); } } return; }
+    if (event.target.closest("[data-layout-recommend-cancel]") && pendingLayoutRecommendation) { const result = { ...pendingLayoutRecommendation, selectedLayout: null }; renderLayoutRecommendations(result); return; }
+    if (event.target.closest("[data-layout-recommend-approve]") && pendingLayoutRecommendation?.selectedLayout) { const result = pendingLayoutRecommendation; showTransientMessage("선택한 레이아웃을 현재 세팅에 연결하고 있습니다…"); try { await applyLayoutRecommendation(result); } catch (error) { console.error("layout recommendation apply failed", error); showLayoutSelectionProposal(result.selectedLayout); aiResult.insertAdjacentHTML("afterbegin", `<p class="board-ai-status">${escapeHtml(error.message || "현재 세팅 저장에 실패했습니다.")}</p>`); } return; }
     const eventChoice = event.target.closest("[data-event-query-choice]");
     if (eventChoice && pendingEventQuery) { const selected = pendingEventQuery.result.events[Number(eventChoice.dataset.eventQueryChoice)]; if (selected) await handleEventQuery(pendingEventQuery.userText, selected, pendingEventQuery.result.queryType); return; }
     const eventAction = event.target.closest("[data-event-query-action]");

@@ -48,6 +48,13 @@ body.operation-board-page { min-width: 0; margin: 0; background: #081a2b; color:
 .board-visual-camera-button { padding-inline: 10px !important; background: #173955 !important; white-space: nowrap; }
 .board-speech-status { grid-column: 1 / -1; color: #bfdbfe; font-size: 12px; line-height: 1.35; }
 .board-speech-status[data-error="true"] { color: #fda4af; }
+.board-layout-recommendations { display: grid; gap: 10px; }
+.board-layout-recommendation-card { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 12px; padding: 10px; border: 1px solid #334b63; border-radius: 12px; background: #10283d; }
+.board-layout-recommendation-card img, .board-layout-placeholder { width: 112px; height: 84px; object-fit: cover; border-radius: 8px; background: #e2e8f0; color: #475569; }
+.board-layout-placeholder { display: grid; place-items: center; font-size: 12px; }
+.board-layout-recommendation-card h3 { margin: 2px 0 4px; font-size: 15px; }
+.board-layout-recommendation-card p { margin: 0 0 8px; font-size: 12px; color: #cbd5e1; }
+.board-layout-recommendation-card small { color: #f6d365; font-weight: 700; }
 .board-visual-camera { display: grid; gap: 8px; margin-bottom: 8px; padding: 8px; border: 1px solid rgba(96,165,250,.3); border-radius: 12px; background: #06131f; }
 .board-visual-camera[hidden] { display: none; }
 .board-visual-camera video { width: 100%; max-height: min(52dvh,420px); border-radius: 9px; background: #000; object-fit: contain; }
