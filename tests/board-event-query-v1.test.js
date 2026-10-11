@@ -8,7 +8,7 @@ const helperStart = page.indexOf("  function seoulTodayKey()");
 const helperEnd = page.indexOf("  function isAssetAnalyticsRequest", helperStart);
 assert(helperStart > 0 && helperEnd > helperStart, "event query helpers must remain independently testable");
 
-const context = { Intl, console, Date, activeEventContexts: [] };
+const context = { Intl, console, Date, activeEventContexts: [], board: { getSelectedDate: () => "2026-10-12" } };
 vm.createContext(context);
 vm.runInContext(`${page.slice(helperStart, helperEnd)}\nthis.api = { queryPeriod, normalizedVenue, venueTerm, eventVenueMatches, eventDateKeys, eventInPeriod, eventQueryType, explicitLayoutTexts };`, context);
 const api = context.api;
@@ -43,6 +43,6 @@ assert(page.includes("window.openStoredExcel(event.storagePath)"), "original act
 assert(page.includes("등록된 원본 파일이 없습니다."));
 assert(page.includes("등록된 이벤오더에서 조건에 맞는 행사를 찾지 못했습니다."));
 assert(page.includes("등록된 이벤오더에서 레이아웃 정보를 찾지 못했습니다."));
-assert(boardHtml.includes("operationBoardPage.js?v=18-event-query-fixes"), "board cache version must be bumped");
+assert(boardHtml.includes("operationBoardPage.js?v=19-event-query-period"), "board cache version must be bumped");
 
 console.log("board event query V1 tests passed");

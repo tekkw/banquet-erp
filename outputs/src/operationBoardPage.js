@@ -1,7 +1,7 @@
 (function initializeOperationBoardPage() {
   const constants = window.BANQUET_ERP_CONSTANTS;
   const board = window.BANQUET_ERP_OPERATION_BOARD;
-  const cacheKey = "banquet-erp-events-cache-v4";
+  const cacheKey = "banquet-erp-events-cache-v5";
   const correctionLogKey = "banquetErp.eventOrderCorrections.v1";
   const app = document.getElementById("boardApp");
   const login = document.getElementById("boardLogin");
@@ -99,7 +99,7 @@
       const [dates, schedules, items, notes] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc"), childRows("event_items", ids, "created_at.asc,id.asc"), childRows("event_notes", ids, "created_at.asc,id.asc")]);
       const byDate = grouped(dates); const bySchedule = grouped(schedules); const byItem = grouped(items); const byNote = grouped(notes);
       events = rows.map((row) => ({ id: row.id, eventName: row.event_name || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", originalFilename: row.original_filename || "", layoutText: row.layout_text || row.layout_type || row.layout || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })), items: byItem[row.id] || [], notes: byNote[row.id] || [] }));
-      localStorage.setItem(cacheKey, JSON.stringify({ version: 4, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
+      localStorage.setItem(cacheKey, JSON.stringify({ version: 5, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
     } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; return { ok: false, error }; }
   }
   function selectedEvents(date = board.getSelectedDate()) { return events.filter((event) => eventDateKeys(event).includes(date)); }
@@ -132,35 +132,37 @@
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${values.year}-${values.month}-${values.day}`;
   }
   function shiftDateKey(key, days) { const date = new Date(`${key}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
-  function queryPeriod(text) {
-    const today = seoulTodayKey(); const weekday = new Date(`${today}T00:00:00Z`).getUTCDay(); const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
-    if (/지난\s*주/.test(text)) { const end = shiftDateKey(today, mondayOffset - 1); return { start: shiftDateKey(end, -6), end, label: "지난 주" }; }
-    if (/이번\s*주/.test(text)) { const start = shiftDateKey(today, mondayOffset); return { start, end: shiftDateKey(start, 6), label: "이번 주" }; }
-    if (/이번\s*달/.test(text)) { const start = `${today.slice(0, 7)}-01`; const next = new Date(`${start}T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); return { start, end: shiftDateKey(next.toISOString().slice(0, 10), -1), label: "이번 달" }; }
+  function queryPeriod(text, anchorDate = board.getSelectedDate()) {
+    const today = seoulTodayKey(); const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorDate || "") ? anchorDate : today; const weekday = new Date(`${anchor}T00:00:00Z`).getUTCDay(); const mondayOffset = weekday === 0 ? -6 : 1 - weekday; const weekStart = shiftDateKey(anchor, mondayOffset);
+    if (/지난\s*주/.test(text)) { const start = shiftDateKey(weekStart, -7); return { start, end: shiftDateKey(start, 6), label: "지난 주" }; }
+    if (/다음\s*주/.test(text)) { const start = shiftDateKey(weekStart, 7); return { start, end: shiftDateKey(start, 6), label: "다음 주" }; }
+    if (/이번\s*주/.test(text)) return { start: weekStart, end: shiftDateKey(weekStart, 6), label: "이번 주" };
+    if (/다음\s*달/.test(text)) { const next = new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); const start = next.toISOString().slice(0, 10); next.setUTCMonth(next.getUTCMonth() + 1); return { start, end: shiftDateKey(next.toISOString().slice(0, 10), -1), label: "다음 달" }; }
+    if (/이번\s*달/.test(text)) { const start = `${anchor.slice(0, 7)}-01`; const next = new Date(`${start}T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); return { start, end: shiftDateKey(next.toISOString().slice(0, 10), -1), label: "이번 달" }; }
     if (/내일/.test(text)) { const key = shiftDateKey(today, 1); return { start: key, end: key, label: "내일" }; }
     if (/오늘/.test(text)) return { start: today, end: today, label: "오늘" };
     const direct = text.match(/(?:(\d{4})\s*(?:년|[.\/-]))?\s*(\d{1,2})\s*(?:월|[.\/-])\s*(\d{1,2})\s*(?:일)?/);
     if (direct) { const key = `${direct[1] || today.slice(0, 4)}-${String(direct[2]).padStart(2, "0")}-${String(direct[3]).padStart(2, "0")}`; return { start: key, end: key, label: `${Number(direct[2])}/${Number(direct[3])}` }; }
     return null;
   }
-  function normalizedVenue(value) { return String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리"); }
-  function venueTerm(text) { return ["카프리", "컨벤션", "부라노", "페스타", "포이어"].find((name) => normalizedVenue(text).includes(name)) || ""; }
+  function normalizedVenue(value) { const normalized = String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리"); return normalized.replace(/카프리(I{1,3}(?:\+I{1,3})*)/g, (_, units) => `카프리${units.split("+").map((unit) => ({ I: "1", II: "2", III: "3" })[unit] || unit).join("+")}`); }
+  function venueTerm(text) { const normalized = normalizedVenue(text); const capri = normalized.match(/카프리(?:[123](?:\+[123])*)?/); if (capri) return capri[0]; return ["컨벤션", "부라노", "페스타", "포이어"].find((name) => normalized.includes(name)) || ""; }
   function eventVenueMatches(event, term) { if (!term) return true; return [event.venue, ...(event.schedule || []).map((row) => row.venue)].map(normalizedVenue).some((value) => value.includes(normalizedVenue(term))); }
   function eventDateKeys(event) { return [...new Set([...(event.calendarDates || []), event.startDate, event.endDate, String(event.eventDateTime || "").slice(0, 10), ...(event.schedule || []).map((row) => row.date)].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort(); }
   function eventInPeriod(event, period) {
     if (!period) return true;
     const calendarDates = (event.calendarDates || []).filter((key) => /^\d{4}-\d{2}-\d{2}$/.test(key));
-    if (calendarDates.length) return calendarDates.some((key) => key >= period.start && key <= period.end);
+    if (calendarDates.some((key) => key >= period.start && key <= period.end)) return true;
     const start = /^\d{4}-\d{2}-\d{2}$/.test(event.startDate || "") ? event.startDate : String(event.eventDateTime || "").slice(0, 10);
     const end = /^\d{4}-\d{2}-\d{2}$/.test(event.endDate || "") ? event.endDate : start;
-    if (/^\d{4}-\d{2}-\d{2}$/.test(start)) return start <= period.end && (end || start) >= period.start;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(start) && start <= period.end && (end || start) >= period.start) return true;
     return (event.schedule || []).some((row) => row.date >= period.start && row.date <= period.end);
   }
   function eventQueryType(text) { if (/(원본|엑셀|파일).*(띄워|열어|보여|보기)|(?:띄워|열어|보여).*(원본|엑셀)/i.test(text)) return "open_event_original"; if (/레이아웃|배치|스쿨식|극장식|라운드/i.test(text)) return "get_event_layout"; if (/인원|몇\s*명|guest/i.test(text)) return "get_event_guest_count"; if (/일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크/i.test(text)) return "get_event_schedule"; if (/메뉴|품목|아이템|식음|장비/i.test(text)) return "get_event_items"; return "find_events_by_period_space"; }
   function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
-  function displayEventDate(event) { const key = eventDateKeys(event)[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
+  function displayEventDate(event, period = null) { const keys = eventDateKeys(event); const key = (period ? keys.find((value) => value >= period.start && value <= period.end) : "") || keys[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
-  function eventChoiceLabel(event) { return `${displayEventDate(event)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
+  function eventChoiceLabel(event, period = null) { return `${displayEventDate(event, period)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
   function textValues(row) { return Object.values(row || {}).filter((value) => ["string", "number"].includes(typeof value)).map(String); }
   function explicitLayoutTexts(event) {
     const pattern = /(레이아웃|배치|스쿨식|극장식|라운드|U\s*자|좌석|테이블)/i;
@@ -173,28 +175,32 @@
   }
   function showEventChoices(result, userText) {
     pendingEventQuery = { result, userText }; const label = [result.period?.label, result.venue, "행사"].filter(Boolean).join(" "); const answer = `${label || "조건에 맞는 행사"}는 ${result.events.length}건입니다.`;
-    aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(label || "등록 행사 검색")}</h3><p>${escapeHtml(answer)} 하나를 선택해주세요.</p><div class="board-ai-choices">${result.events.map((event, index) => `<button class="board-ai-choice" type="button" data-event-query-choice="${index}">${escapeHtml(eventChoiceLabel(event))}</button>`).join("")}</div></div>`;
+    aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(label || "등록 행사 검색")}</h3><p>${escapeHtml(answer)} 하나를 선택해주세요.</p><div class="board-ai-choices">${result.events.map((event, index) => `<button class="board-ai-choice" type="button" data-event-query-choice="${index}">${escapeHtml(eventChoiceLabel(event, result.period))}</button>`).join("")}</div></div>`;
     rememberConversation(userText, answer); speakBoardReply(`${answer} 화면에서 하나를 선택해주세요.`); finishFieldAiAnswer();
   }
-  async function showEventAnswer(event, queryType, userText) {
+  async function showEventAnswer(event, queryType, userText, period = null) {
     rememberActiveEvent(event); pendingEventQuery = null; let answer = ""; let details = ""; let sourceBadge = "";
     if (queryType === "open_event_original") { if (!event.storagePath) answer = "등록된 원본 파일이 없습니다."; else { answer = `${event.eventName || "선택한 행사"}의 원본 엑셀을 열었습니다.`; window.openStoredExcel(event.storagePath); } }
     else if (queryType === "get_event_guest_count") answer = event.guestCount !== "" && event.guestCount != null ? `${event.eventName || "선택한 행사"}의 등록 인원은 ${event.guestCount}명입니다.` : "등록된 이벤오더에서 인원 정보를 찾지 못했습니다.";
     else if (queryType === "get_event_schedule") { const rows = (event.schedule || []).filter((row) => !/커피\s*브레이크|커피브레이크/i.test(userText) || /커피\s*브레이크|커피브레이크/i.test(row.content)); answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 일정입니다.` : "등록된 이벤오더에서 일정 정보를 찾지 못했습니다."; details = rows.map((row) => [row.date, row.time, row.content, row.venue].filter(Boolean).join(" · ")).join("\n"); }
     else if (queryType === "get_event_items") { const rows = event.items || []; answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 품목입니다.` : "등록된 이벤오더에서 품목 정보를 찾지 못했습니다."; details = rows.slice(0, 20).map((row) => [row.item_name, row.quantity, row.amount].filter((value) => value !== "" && value != null).join(" · ")).join("\n"); }
     else if (queryType === "get_event_layout") { const saved = await savedEventLayout(event); const extracted = extractedLayoutTexts(event); const fallback = fallbackLayoutTexts(event); if (saved) { sourceBadge = "저장 레이아웃"; answer = `${event.eventName || "선택한 행사"}의 저장 레이아웃은 ${saved.layout_name || saved.layout_type}입니다.`; details = [saved.layout_type, saved.table_type, saved.table_count != null ? `${saved.table_count}T` : "", saved.layout_notes].filter(Boolean).join(" · "); } else if (extracted.length) { sourceBadge = "원본 이벤오더 기준"; answer = `원본 이벤오더에는 ${extracted.join(", ")}으로 기재되어 있습니다.`; details = extracted.join("\n"); } else if (fallback.length) { sourceBadge = "등록 운영 데이터"; answer = `${event.eventName || "선택한 행사"}의 등록 데이터에서 레이아웃 정보를 찾았습니다.`; details = fallback.join("\n"); } else answer = "등록된 이벤오더에서 레이아웃 정보를 찾지 못했습니다."; }
-    else answer = `${displayEventDate(event)} · ${eventVenue(event)}\n${event.eventName || "행사명 미등록"}${event.guestCount !== "" ? `\n${event.guestCount}명` : ""}`;
+    else answer = `${displayEventDate(event, period)} · ${eventVenue(event)}\n${event.eventName || "행사명 미등록"}${event.guestCount !== "" ? `\n${event.guestCount}명` : ""}`;
     const actions = `<div class="board-ai-actions">${event.storagePath ? '<button type="button" data-event-query-action="open_event_original">원본 엑셀 보기</button>' : ""}<button type="button" data-event-query-action="get_event_schedule">일정 보기</button><button type="button" data-event-query-action="get_event_layout">레이아웃 보기</button></div>`;
-    aiResult.innerHTML = `<article class="board-event-query-card" data-event-order-id="${escapeHtml(event.id)}"><h3>${escapeHtml(displayEventDate(event))} · ${escapeHtml(eventVenue(event))}</h3><strong>${escapeHtml(event.eventName || "행사명 미등록")}</strong>${sourceBadge ? `<small class="board-event-source-badge">${escapeHtml(sourceBadge)}</small>` : ""}<p>${escapeHtml(answer).replace(/\n/g, "<br>")}</p>${details ? `<pre>${escapeHtml(details)}</pre>` : ""}${actions}</article>`;
+    aiResult.innerHTML = `<article class="board-event-query-card" data-event-order-id="${escapeHtml(event.id)}"><h3>${escapeHtml(displayEventDate(event, period))} · ${escapeHtml(eventVenue(event))}</h3><strong>${escapeHtml(event.eventName || "행사명 미등록")}</strong>${sourceBadge ? `<small class="board-event-source-badge">${escapeHtml(sourceBadge)}</small>` : ""}<p>${escapeHtml(answer).replace(/\n/g, "<br>")}</p>${details ? `<pre>${escapeHtml(details)}</pre>` : ""}${actions}</article>`;
     rememberConversation(userText, answer); speakBoardReply(answer); finishFieldAiAnswer();
   }
   async function handleEventQuery(text, selectedEvent = null, forcedType = "") {
-    const queryType = forcedType || eventQueryType(text); const period = queryPeriod(text); const venue = venueTerm(text); let matches = [];
+    const queryType = forcedType || eventQueryType(text); const anchorDate = board.getSelectedDate(); const hasRelativePeriod = /(이번|다음|지난)\s*(?:주|달)/.test(text); let period = queryPeriod(text, anchorDate); const venue = venueTerm(text); const allowAll = /전체\s*(?:보여|알려|검색)?/.test(text); let matches = [];
+    if (hasRelativePeriod && !period) { showMessage("요청한 기간을 해석하지 못했습니다. 이번 주, 다음 주처럼 다시 말씀해주세요.", true); return; }
+    if (!period && venue && !allowAll) period = queryPeriod("이번 주", anchorDate);
     if (selectedEvent) matches = [selectedEvent]; else if (!period && !venue && activeEventContexts[0]) matches = events.filter((event) => event.id === activeEventContexts[0].eventOrderId); else matches = events.filter((event) => eventInPeriod(event, period) && eventVenueMatches(event, venue));
+    matches.sort((left, right) => { const leftDate = eventDateKeys(left).find((key) => !period || (key >= period.start && key <= period.end)) || eventDateKeys(left)[0] || "9999-99-99"; const rightDate = eventDateKeys(right).find((key) => !period || (key >= period.start && key <= period.end)) || eventDateKeys(right)[0] || "9999-99-99"; return leftDate.localeCompare(rightDate) || String(left.eventName).localeCompare(String(right.eventName), "ko"); });
+    console.debug("event query debug", { inputText: text, anchorDate, resolvedPeriod: period, venueTerm: venue, totalEvents: events.length, periodMatched: events.filter((event) => eventInPeriod(event, period)).length, venueMatched: events.filter((event) => eventVenueMatches(event, venue)).length, finalMatched: matches.length });
     if (!matches.length) { const answer = "등록된 이벤오더에서 조건에 맞는 행사를 찾지 못했습니다."; rememberConversation(text, answer); showMessage(answer, true); return; }
     const queryResult = { queryType, resolvedPeriod: period ? { start: period.start, end: period.end } : null, matchedCount: matches.length, period, venue, events: matches };
     if (matches.length > 1) { showEventChoices(queryResult, text); return; }
-    await showEventAnswer(matches[0], queryType, text);
+    await showEventAnswer(matches[0], queryType, text, period);
   }
   function isAssetAnalyticsRequest(text) { return /(재고.*(?:이하|부족|낮은|적은)|(?:오늘|어제|이번\s*주|지난\s*주|이번\s*달|지난\s*달|최근\s*(?:7|30)일).*(?:썼|사용|소모|들어온|입고|추가된|옮|이동|자산\s*현황)|(?:가장|많이|순위|top).*(?:사용|썼|소모|옮|이동)|자산.*(?:현황|요약|활동))/i.test(text); }
   function isAssetQueryRequest(text) { return isAssetAnalyticsRequest(text) || /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황)|이동\s*이력|최근\s*이동|마지막.*옮)/i.test(text); }

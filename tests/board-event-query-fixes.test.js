@@ -8,7 +8,7 @@ const preview = fs.readFileSync("outputs/event-order-preview.html", "utf8");
 
 const helperStart = page.indexOf("  function seoulTodayKey()");
 const helperEnd = page.indexOf("  function isAssetAnalyticsRequest", helperStart);
-const context = { Intl, Date, console, activeEventContexts: [] };
+const context = { Intl, Date, console, activeEventContexts: [], board: { getSelectedDate: () => "2026-10-12" } };
 vm.createContext(context);
 vm.runInContext(`${page.slice(helperStart, helperEnd)}\nthis.api = { queryPeriod, eventInPeriod, eventVenueMatches, extractedLayoutTexts, fallbackLayoutTexts };`, context);
 const api = context.api;
@@ -24,7 +24,7 @@ const lastWeek = api.queryPeriod("지난 주");
 assert.equal(api.eventInPeriod(makeEvent("outside", period.start), lastWeek), false);
 const thisMonth = api.queryPeriod("이번 달");
 assert.equal(api.eventInPeriod(makeEvent("outside-month", "2025-01-01"), thisMonth), false);
-assert(page.includes("if (calendarDates.length)"), "event_calendar_dates must be authoritative when present");
+assert(page.includes("calendarDates.some"), "event_calendar_dates must participate in final date matching");
 assert(page.includes("resolvedPeriod: period ? { start: period.start, end: period.end }"));
 assert(page.includes("matchedCount: matches.length"));
 
