@@ -21,7 +21,7 @@ assert(edge.includes("등록된 자산에서 찾지 못했습니다."));
 assert(page.includes("function isAssetQueryRequest"));
 assert(page.includes("function isAssetIntakeRequest"));
 const submitStart = page.indexOf('aiForm.addEventListener("submit"');
-assert(page.indexOf("isAssetQueryRequest(text)", submitStart) < page.indexOf("isAssetIntakeRequest(text)", submitStart));
+assert(page.indexOf('route === "asset_query"', submitStart) < page.indexOf('route === "asset_intake"', submitStart));
 assert(page.includes("async function handleAssetQuery(text, selection = null, offset = 0)"));
 const queryRegexSource = page.match(/function isAssetQueryRequest\(text\) \{ return (?:isAssetAnalyticsRequest\(text\) \|\| )?(\/.*?\/i)\.test\(text\); \}/)?.[1];
 assert(page.includes("function isAssetDecreaseRequest"));

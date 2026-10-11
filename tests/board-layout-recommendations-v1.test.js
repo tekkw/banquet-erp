@@ -26,7 +26,8 @@ assert(page.includes("space_id=in.(${memberIds.join(\",\")})"), "D: 선택 공�
 assert(page.includes("저장된 ${layoutRecommendations.layoutTypeLabel(parsed.layoutType)} 레이아웃이 없습니다."), "E: 같은 공간·타입 후보가 없으면 명시적으로 안내한다");
 assert(page.includes("../index.html?layoutPreview=${encodeURIComponent(layout.id)}"), "F: 기존 레이아웃 미리보기 진입점을 재사용한다");
 assert(page.includes("source_layout_id: layout.id"), "G: 승인된 현재 세팅에 source_layout_id를 저장한다");
-assert(page.indexOf("&& isLayoutRecommendationRequest(text))") < page.indexOf("&& isEventQueryRequest(text))"), "H: 음성/텍스트 공통 submit 경로에서 추천을 먼저 분기한다");
+const submitStart = page.indexOf('aiForm.addEventListener("submit"');
+assert(page.indexOf('route === "event_query"', submitStart) < page.indexOf('route === "recommend_layouts"', submitStart), "H: 음성/텍스트 공통 submit 경로에서 행사 조회를 우선하고 명시적 추천은 추천으로 분기한다");
 assert(page.includes('queryType: "recommend_layouts"'));
 assert(page.includes('source: "manual_confirmed"'));
 assert(page.includes("data-layout-recommend-approve"), "현재 세팅 연결 전에 명시적 승인을 받는다");

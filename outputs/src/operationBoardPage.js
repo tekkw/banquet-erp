@@ -205,10 +205,11 @@
     await showEventAnswer(matches[0], queryType, text, period);
   }
   function isAssetAnalyticsRequest(text) { return /(재고.*(?:이하|부족|낮은|적은)|(?:오늘|어제|이번\s*주|지난\s*주|이번\s*달|지난\s*달|최근\s*(?:7|30)일).*(?:썼|사용|소모|들어온|입고|추가된|옮|이동|자산\s*현황)|(?:가장|많이|순위|top).*(?:사용|썼|소모|옮|이동)|자산.*(?:현황|요약|활동))/i.test(text); }
-  function isAssetQueryRequest(text) { return isAssetAnalyticsRequest(text) || /(어디|어느\s*위치|몇\s*(?:개|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황)|이동\s*이력|최근\s*이동|마지막.*옮)/i.test(text); }
+  function isAssetQueryRequest(text) { return isAssetAnalyticsRequest(text) || /(어디|어느\s*위치|위치.*(?:알려|보여|뭐)|몇\s*(?:개|장|박스|세트|대|병|롤|팩)?\s*(?:있|남)|뭐\s*(?:있|있지|보여)|목록|사진\s*(?:보여|있)|찾아\s*줘|검색\s*해|보유\s*(?:수량|현황)|이동\s*이력|최근\s*이동|마지막.*옮)/i.test(text); }
   function isAssetDecreaseRequest(text) { return /(?:\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s*(?:개|ea|box|박스|세트|대|병|롤|팩)/i.test(text) && /(썼|사용(?:했|해|함|\s*$)|소모|가져갔|가져감|출고|나갔|꺼냈|소비)/i.test(text); }
   function isAssetMoveRequest(text) { return /(창고|사무실|선반|린넨|부라노|컨벤션|\d+\s*(?:층|f))/i.test(text) && /(옮겼|옮겨|이동(?:했|해|함)?|위치\s*변경)/i.test(text); }
-  function isAssetIntakeRequest(text) { return isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(등록|넣었|추가|입고|늘려|증가|옮겼|옮겨|이동|변경|보관했|발견)/i.test(text)); }
+  function isAssetIntakeRequest(text) { const explicitMutation = isAssetDecreaseRequest(text) || isAssetMoveRequest(text) || (/(자산|비품|소모품|장비|서무|종이컵|멀티탭|수량|위치|보관)/i.test(text) && /(?:등록해|등록했|넣었|추가해|추가했|입고했|늘려|증가시켜|옮겼|옮겨|이동했|위치\s*바꿔|위치\s*변경해|보관했|발견했)/i.test(text)); if (!explicitMutation) return false; return !/(?:알려\s*줘?|뭐야|어디\s*(?:있어|야)|몇\s*(?:개|장|명|박스|세트|대|병|롤|팩)?|보여\s*줘?|추천해\s*줘?)/i.test(text) || isAssetDecreaseRequest(text) || isAssetMoveRequest(text); }
+  function isBoardCommandRequest(text) { return /(일정|스케줄|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료)|인원|게스트|메모)/i.test(text) && /(추가|넣어|수정|변경|바꿔|등록|남겨|적어)/i.test(text); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
   function isDeicticVisualQuery(text) { return /(?:이거|이것|저거|저것|이\s*물건|지금\s*보이는|앞에\s*있는|이\s*세팅)/i.test(text); }
   function isHallStateQueryRequest(text) { return /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(?:지금|현재).*(?:세팅|상태).*(?:보여|알려|뭐|어떻게)|(?:세팅|상태).*(?:보여|알려)/i.test(text); }
@@ -264,6 +265,15 @@
     const parsed = layoutRecommendations.parseRequest(text);
     const knownType = ["school", "round", "u_shape", "box_shape", "t_shape", "theater"].includes(parsed.layoutType);
     return knownType && /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(추천|레이아웃|배치|세팅|보여|알려)/i.test(text);
+  }
+  function boardAiRoute(text) {
+    if (isEventQueryRequest(text)) return "event_query";
+    if (isLayoutRecommendationRequest(text)) return "recommend_layouts";
+    if (isHallStateQueryRequest(text)) return "hall_state_query";
+    if (isAssetQueryRequest(text)) return "asset_query";
+    if (isBoardCommandRequest(text)) return "board_command";
+    if (isAssetIntakeRequest(text)) return "asset_intake";
+    return "board_command";
   }
   function recommendationSpaceMatches(spaces, text) {
     const recommendationVenueName = (value) => normalizedVenue(value).replace(/센터/g, "");
@@ -789,8 +799,9 @@
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
-    if (!followupContext && !selectedAssetImageFile && isLayoutRecommendationRequest(text)) { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
-    if (!followupContext && !selectedAssetImageFile && isEventQueryRequest(text)) { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
+    const route = !followupContext && !selectedAssetImageFile ? boardAiRoute(text) : "asset_intake";
+    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
+    if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
       showTransientMessage("현재 화면에서 한 프레임을 확인하고 있습니다…");
       try { const result = await captureOneFrameForFieldAi(text); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("field AI visual capture failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : "정보를 확인하지 못했습니다."); }
@@ -802,18 +813,18 @@
       try { const result = await requestVisualQuery(text, includeImage); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("visual follow-up failed", error); showMessage(error.message || "시각 질문에 답하지 못했습니다."); }
       return;
     }
-    if (!followupContext && !selectedAssetImageFile && isHallStateQueryRequest(text)) { showTransientMessage("현재 세팅 상태를 조회하고 있습니다…"); try { await showHallStateQuery(text); aiInput.value = ""; } catch (error) { console.error("hall state query failed", error); showMessage(error.message || "현재 세팅 상태를 조회하지 못했습니다."); } return; }
+    if (route === "hall_state_query") { showTransientMessage("현재 세팅 상태를 조회하고 있습니다…"); try { await showHallStateQuery(text); aiInput.value = ""; } catch (error) { console.error("hall state query failed", error); showMessage(error.message || "현재 세팅 상태를 조회하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && isHallStateConfirmationRequest(text)) {
       showTransientMessage("현재 세팅 상태를 확인하고 있습니다…");
       try { showHallStateProposal(await interpretHallState(text)); } catch (error) { console.error("hall state intake failed", error); showMessage(error.message || "현재 세팅 상태를 확인하지 못했습니다."); }
       return;
     }
-    if (!followupContext && !explicitNewAsset && !selectedAssetImageFile && isAssetQueryRequest(text)) {
+    if (!explicitNewAsset && route === "asset_query") {
       showTransientMessage("자산 정보를 조회하고 있습니다…");
       try { const result = await handleAssetQuery(text); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
       return;
     }
-    if (followupContext || explicitNewAsset || selectedAssetImageFile || isAssetIntakeRequest(text)) {
+    if (followupContext || explicitNewAsset || selectedAssetImageFile || route === "asset_intake") {
       showTransientMessage(followupContext ? "이전 자산 정보에 답변을 반영하고 있습니다…" : selectedAssetImageFile ? "사진을 업로드하고 자산 내용을 확인하고 있습니다…" : "자산 내용을 확인하고 있습니다…");
       try { const proposal = await interpretAsset(text, null, followupContext); proposal.userText = text; showAssetProposal(proposal, followupContext, text); aiInput.value = ""; }
       catch (error) { console.error("asset intake failed", { status: error.status, body: error.body, error }); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "자산 확인에 실패했습니다. 저장된 내용은 없습니다."); }
