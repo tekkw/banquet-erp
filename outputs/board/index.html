@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=board-group-tasks-v5">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=9-layout-recommendations">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=10-setting-advisor">
 </head>
 <body class="operation-board-page">
   <section id="boardLogin" class="board-login" hidden>
@@ -45,6 +45,7 @@
       <div id="boardAiResult" class="board-ai-result" aria-live="polite"></div>
       <div class="board-field-ai-controls">
         <button id="boardSpeechButton" class="board-field-ai-button" type="button" aria-label="현장 AI 음성 질문">🎙 현장 AI</button>
+        <button id="boardSettingAdvisorButton" class="board-setting-advisor-button" type="button">🛠 세팅 상담</button>
         <span id="boardSpeechStatus" class="board-speech-status" aria-live="polite"></span>
       </div>
       <form id="boardAiForm" class="board-ai-form">
@@ -61,6 +62,7 @@
   <script src="../src/operationBoard.js?v=board-group-tasks-v5"></script>
   <script src="../src/pushNotifications.js?v=web-push-v2"></script>
   <script src="../src/boardLayoutRecommendations.js?v=1"></script>
-  <script src="../src/operationBoardPage.js?v=20-layout-recommendations"></script>
+  <script src="../src/settingAdvisor.js?v=1"></script>
+  <script src="../src/operationBoardPage.js?v=21-setting-advisor"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@ assert(page.includes('queryType: "recommend_layouts"'));
 assert(page.includes('source: "manual_confirmed"'));
 assert(page.includes("data-layout-recommend-approve"), "현재 세팅 연결 전에 명시적 승인을 받는다");
 assert(html.includes("boardLayoutRecommendations.js?v=1"));
-assert(html.includes("operationBoardPage.js?v=20-layout-recommendations"));
+assert(html.includes("operationBoardPage.js?v=21-setting-advisor"));
 assert(page.includes('banquet-erp-events-cache-v6'));
 
 console.log("board layout recommendations v1 tests passed");

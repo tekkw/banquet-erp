@@ -1,6 +1,7 @@
 (function initializeOperationBoardPage() {
   const constants = window.BANQUET_ERP_CONSTANTS;
   const board = window.BANQUET_ERP_OPERATION_BOARD;
+  const settingAdvisor = window.BANQUET_ERP_SETTING_ADVISOR;
   const cacheKey = "banquet-erp-events-cache-v6";
   const layoutRecommendations = window.BANQUET_ERP_BOARD_LAYOUT_RECOMMENDATIONS;
   const correctionLogKey = "banquetErp.eventOrderCorrections.v1";
@@ -20,12 +21,14 @@
   const visualCaptureButton = document.getElementById("boardVisualCaptureButton");
   const visualCloseButton = document.getElementById("boardVisualCloseButton");
   const speechButton = document.getElementById("boardSpeechButton");
+  const settingAdvisorButton = document.getElementById("boardSettingAdvisorButton");
   const speechStatus = document.getElementById("boardSpeechStatus");
   const voiceReplyButton = document.getElementById("boardVoiceReplyButton");
   const voiceReplyStatus = document.getElementById("boardVoiceReplyStatus");
   const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voiceReplyStorageKey = "banquetBoard.voiceReplyEnabled";
   const activeEventContextKey = "banquetBoard.activeEventContext.v1";
+  const settingAdvisorContextKey = "banquetBoard.settingAdvisorContext.v1";
   const speechSynthesisApi = window.speechSynthesis;
   const SpeechSynthesisUtteranceApi = window.SpeechSynthesisUtterance;
   let events = [];
@@ -42,6 +45,8 @@
   let visualSession = null;
   let recentConversation = [];
   let activeEventContexts = loadActiveEventContexts();
+  let settingAdvisorContext = loadSettingAdvisorContext();
+  let settingAdvisorRows = [];
   let pendingEventQuery = null;
   let speechRecognition = null;
   let speechListening = false;
@@ -88,6 +93,12 @@
   function grouped(rows) { return rows.reduce((map, row) => { (map[row.event_order_id] ||= []).push(row); return map; }, {}); }
   function rememberConversation(user, answer) { recentConversation.push({ user, answer }); recentConversation = recentConversation.slice(-3); }
   function loadActiveEventContexts() { try { const value = JSON.parse(sessionStorage.getItem(activeEventContextKey) || "[]"); return Array.isArray(value) ? value.slice(0, 3) : []; } catch { return []; } }
+  function loadSettingAdvisorContext() { try { return JSON.parse(sessionStorage.getItem(settingAdvisorContextKey) || "null"); } catch { return null; } }
+  function rememberSettingAdvisor(row) {
+    settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent.id, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
+    try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
+    rememberActiveEvent(row.nextEvent);
+  }
   function rememberActiveEvent(event) {
     const context = { eventOrderId: event.id, eventName: event.eventName, venue: event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "", eventDate: eventDateKeys(event)[0] || "", storagePath: event.storagePath || "", originalFilename: event.originalFilename || "" };
     activeEventContexts = [context, ...activeEventContexts.filter((item) => item.eventOrderId !== context.eventOrderId)].slice(0, 3);
@@ -266,7 +277,12 @@
     const knownType = ["school", "round", "u_shape", "box_shape", "t_shape", "theater"].includes(parsed.layoutType);
     return knownType && /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(추천|레이아웃|배치|세팅|보여|알려)/i.test(text);
   }
+  function isSettingAdvisorRequest(text) {
+    if (/(다음\s*세팅|오늘.*끝나고.*세팅|끝나.*(?:세팅|준비)|밤에.*세팅|내일\s*행사\s*준비|뭐부터\s*(?:준비|세팅)|세팅\s*상담|지금\s*바꿔야|오늘.*해두는\s*게|오늘.*세팅.*(?:낫|좋)|오늘\s*뭐부터\s*세팅)/i.test(text)) return true;
+    return Boolean((settingAdvisorContext || settingAdvisorRows.length) && (/(컨벤션|부라노|카프리|페스타|포이어).*(?:부터\s*보자|상담)|다음\s*행사|몇\s*시\s*(?:시작|끝)|레이아웃\s*뭐|테이블.*(?:몇|였나)|현재\s*세팅.*(?:달라|차이)|의자\s*몇|원본.*(?:보여|열어)|밤에.*(?:해두|세팅)/i.test(text)));
+  }
   function boardAiRoute(text) {
+    if (isSettingAdvisorRequest(text)) return "setting_advisor";
     if (isEventQueryRequest(text)) return "event_query";
     if (isLayoutRecommendationRequest(text)) return "recommend_layouts";
     if (isHallStateQueryRequest(text)) return "hall_state_query";
@@ -274,6 +290,52 @@
     if (isBoardCommandRequest(text)) return "board_command";
     if (isAssetIntakeRequest(text)) return "asset_intake";
     return "board_command";
+  }
+  function settingLayoutLabel(layout) { return layout?.layoutType ? layoutRecommendations.layoutTypeLabel(layout.layoutType) : "미확인"; }
+  async function buildSettingAdvisorRows(text) {
+    const anchor = settingAdvisor.anchorDate(text, board.getSelectedDate(), seoulTodayKey());
+    const baseRows = settingAdvisor.buildCandidates(events, anchor, board.spacesOverlap);
+    const [spaces, states] = await Promise.all([request("venue_spaces?select=id,space_name,space_code&is_active=eq.true&order=space_name.asc"), request("hall_current_states?select=*&order=updated_at.desc")]);
+    const enriched = await Promise.all(baseRows.map(async (row) => {
+      const matchedSpaces = operationalHallMatches(spaces, row.space); const ids = new Set(matchedSpaces.flatMap((space) => space.memberSpaceIds || [space.id]));
+      const currentState = states.find((state) => ids.has(state.space_id) || normalizeHallName(state.venue_name) === normalizeHallName(row.space)) || null;
+      const saved = await savedEventLayout(row.nextEvent); const currentLayout = settingAdvisor.layoutFacts(currentState || {}); const eventLayout = settingAdvisor.layoutFacts(row.nextEvent); const savedLayout = settingAdvisor.layoutFacts(saved || {}); const nextLayout = { ...eventLayout, ...savedLayout, layoutType: savedLayout.layoutType || eventLayout.layoutType, tables: savedLayout.tables ?? eventLayout.tables, seats: savedLayout.seats ?? eventLayout.seats, sourceLayoutId: savedLayout.sourceLayoutId || eventLayout.sourceLayoutId }; const change = settingAdvisor.compare(currentLayout, nextLayout);
+      return { ...row, currentState, savedLayout: saved, currentLayout, nextLayout, change, advice: settingAdvisor.recommendation(row, change), taskSummary: settingAdvisor.taskSummary(currentLayout, nextLayout, change) };
+    }));
+    return settingAdvisor.prioritize(enriched);
+  }
+  function settingAdvisorCard(row, index) {
+    const currentText = `${settingLayoutLabel(row.currentLayout)}${row.currentLayout.seats != null ? ` ${row.currentLayout.seats}석` : ""}${row.currentLayout.tables != null ? ` / ${row.currentLayout.tables}T` : ""}`;
+    const nextText = `${settingLayoutLabel(row.nextLayout)}${row.nextLayout.seats != null ? ` ${row.nextLayout.seats}석` : row.nextEvent.guestCount !== "" ? ` ${row.nextEvent.guestCount}명` : ""}${row.nextLayout.tables != null ? ` / ${row.nextLayout.tables}T` : ""}`;
+    return `<article class="board-setting-advisor-card"><h3>${index + 1}. ${escapeHtml(row.space)}</h3><p class="board-setting-advisor-meta">현재 종료 ${escapeHtml(row.currentEnd)} · 다음 행사 ${escapeHtml(row.nextDate)} ${escapeHtml(row.nextStart)} · 간격 ${escapeHtml(Number(row.gapHours.toFixed(1)))}시간</p><p>현재 ${escapeHtml(currentText)}<br>다음 ${escapeHtml(nextText)}</p><p><strong>${escapeHtml(row.advice)}</strong> · ${escapeHtml(row.taskSummary)}</p><div class="board-ai-actions"><button type="button" data-setting-advisor-select="${index}">상담하기</button><button type="button" data-setting-advisor-event="${index}">다음 행사 보기</button>${row.savedLayout?.id ? `<a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(row.savedLayout.id)}">레이아웃 보기</a>` : ""}${row.nextEvent.storagePath ? `<button type="button" data-setting-advisor-original="${index}">원본 보기</button>` : ""}</div></article>`;
+  }
+  async function showSettingAdvisorList(text = "") {
+    settingAdvisorRows = await buildSettingAdvisorRows(text); settingAdvisorContext = null; try { sessionStorage.removeItem(settingAdvisorContextKey); } catch { /* session storage unavailable */ }
+    if (!settingAdvisorRows.length) { showMessage("선택 날짜 종료 후 30일 이내에 이어지는 세팅을 찾지 못했습니다."); return; }
+    aiResult.innerHTML = `<section><h3>🛠 세팅 상담</h3><p class="board-ai-status">${escapeHtml(settingAdvisorRows[0].anchorDate)} 종료 후 세팅 권장 ${settingAdvisorRows.length}건</p><div class="board-setting-advisor-list">${settingAdvisorRows.map(settingAdvisorCard).join("")}</div></section>`;
+    const urgent = settingAdvisorRows.filter((row) => /종료 후|종료 직후/.test(row.advice)).map((row) => row.space); const spoken = urgent.length ? `오늘 종료 후 바로 세팅이 필요한 공간은 ${urgent.slice(0, 2).join("와 ")}입니다. 자세한 내용은 화면을 확인해주세요.` : "오늘 종료 후 바로 세팅이 필요한 공간은 없습니다. 자세한 내용은 화면을 확인해주세요."; speakBoardReply(spoken); finishFieldAiAnswer();
+  }
+  function currentSettingAdvisorRow() { return settingAdvisorRows.find((row) => row.currentEvent.id === settingAdvisorContext?.currentEventOrderId && row.nextEvent.id === settingAdvisorContext?.nextEventOrderId) || null; }
+  function showSettingAdvisorDetail(row) {
+    rememberSettingAdvisor(row); const answer = `${row.space}은 ${row.currentEnd}에 종료되고 다음 행사가 ${row.nextDate} ${row.nextStart}에 시작합니다. ${row.advice}.`;
+    aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>${escapeHtml(row.space)} 세팅 상담</h3><p>${escapeHtml(answer)}</p><p>다음 행사: ${escapeHtml(row.nextEvent.eventName || "행사명 미등록")} · ${escapeHtml(row.nextEvent.guestCount !== "" ? `${row.nextEvent.guestCount}명` : "인원 미확인")}</p><p>${escapeHtml(row.taskSummary)}</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button>${row.nextEvent.storagePath ? '<button type="button" data-setting-advisor-current-original>원본 보기</button>' : ""}</div></article>`; rememberConversation("세팅 상담", answer); speakBoardReply(answer); finishFieldAiAnswer();
+  }
+  async function handleSettingAdvisor(text) {
+    if (!settingAdvisorRows.length || !settingAdvisorContext) settingAdvisorRows = await buildSettingAdvisorRows(text);
+    const named = settingAdvisorRows.find((row) => normalizedVenue(text).includes(normalizedVenue(row.space).replace(/센터/g, "")) || normalizedVenue(row.space).includes(venueTerm(text)));
+    if (named && /부터\s*보자|상담/.test(text)) { showSettingAdvisorDetail(named); return; }
+    const row = currentSettingAdvisorRow() || named;
+    if (!row) { await showSettingAdvisorList(text); return; }
+    if (/원본|엑셀/.test(text)) { if (row.nextEvent.storagePath) { rememberActiveEvent(row.nextEvent); window.openStoredExcel(row.nextEvent.storagePath); showMessage(`${row.nextEvent.eventName || "다음 행사"} 원본 엑셀을 열었습니다.`, true); } else showMessage("다음 행사에 등록된 원본 파일이 없습니다."); return; }
+    let answer = "";
+    if (/몇\s*명|인원/.test(text)) answer = row.nextEvent.guestCount !== "" ? `다음 행사 등록 인원은 ${row.nextEvent.guestCount}명입니다.` : "등록된 데이터에서 다음 행사 인원을 확인하지 못했습니다.";
+    else if (/몇\s*시.*시작/.test(text)) answer = `다음 행사는 ${row.nextDate} ${row.nextStart}에 시작합니다.`;
+    else if (/몇\s*시.*끝/.test(text)) answer = row.nextEnd ? `다음 행사는 ${row.nextEnd}에 끝납니다.` : "등록된 데이터에서 다음 행사 종료 시간을 확인하지 못했습니다.";
+    else if (/테이블|\d+\s*t/i.test(text)) { const claimed = text.match(/(\d+)\s*t/i); const tables = row.nextLayout.tables; answer = tables == null || (claimed && Number(claimed[1]) !== Number(tables)) ? "등록된 데이터에서 테이블 수를 확인하지 못했습니다." : `원본 이벤오더에는 등록 테이블 ${tables}T로 기재되어 있습니다.`; }
+    else if (/레이아웃/.test(text)) answer = row.nextLayout.layoutType ? `다음 행사 레이아웃은 ${settingLayoutLabel(row.nextLayout)}${row.nextLayout.tables != null ? ` ${row.nextLayout.tables}T` : ""}입니다.` : "등록된 데이터에서 다음 행사 레이아웃을 확인하지 못했습니다.";
+    else if (/현재\s*세팅|뭐가\s*달라|차이|의자\s*몇/.test(text)) answer = `${row.advice}. ${row.taskSummary}`;
+    else { showSettingAdvisorDetail(row); return; }
+    aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>${escapeHtml(row.space)} 세팅 상담</h3><p>${escapeHtml(answer)}</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button></div></article>`; rememberConversation(text, answer); speakBoardReply(answer); finishFieldAiAnswer();
   }
   function recommendationSpaceMatches(spaces, text) {
     const recommendationVenueName = (value) => normalizedVenue(value).replace(/센터/g, "");
@@ -779,6 +841,7 @@
   if (!speechSynthesisApi || !SpeechSynthesisUtteranceApi) { voiceReplyButton.disabled = true; voiceReplyButton.textContent = "🔇 음성 답변 미지원"; voiceReplyButton.title = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.textContent = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.hidden = false; }
   else { voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply); }
   visualCameraButton.addEventListener("click", async () => { try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
+  settingAdvisorButton?.addEventListener("click", async () => { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await showSettingAdvisorList(""); } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } });
   if (!SpeechRecognitionApi) { speechButton.disabled = true; speechButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다."; setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); }
   else speechButton.addEventListener("click", toggleSpeechRecognition);
   visualCloseButton.addEventListener("click", closeVisualCamera);
@@ -800,6 +863,7 @@
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
     const route = !followupContext && !selectedAssetImageFile ? boardAiRoute(text) : "asset_intake";
+    if (route === "setting_advisor") { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await handleSettingAdvisor(text); aiInput.value = ""; } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } return; }
     if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
     if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
@@ -834,6 +898,14 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    const settingSelect = event.target.closest("[data-setting-advisor-select]");
+    if (settingSelect) { const row = settingAdvisorRows[Number(settingSelect.dataset.settingAdvisorSelect)]; if (row) showSettingAdvisorDetail(row); return; }
+    const settingEvent = event.target.closest("[data-setting-advisor-event]");
+    if (settingEvent) { const row = settingAdvisorRows[Number(settingEvent.dataset.settingAdvisorEvent)]; if (row) await showEventAnswer(row.nextEvent, "find_events_by_period_space", "다음 행사 보기", { start: row.nextDate, end: row.nextDate }); return; }
+    const settingOriginal = event.target.closest("[data-setting-advisor-original]");
+    if (settingOriginal) { const row = settingAdvisorRows[Number(settingOriginal.dataset.settingAdvisorOriginal)]; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
+    if (event.target.closest("[data-setting-advisor-current-original]")) { const row = currentSettingAdvisorRow(); if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
+    if (event.target.closest("[data-setting-advisor-back]")) { await showSettingAdvisorList(settingAdvisorContext?.anchorDate || ""); return; }
     const layoutSelection = event.target.closest("[data-layout-recommend-select]");
     if (layoutSelection && pendingLayoutRecommendation) { const layout = pendingLayoutRecommendation.layouts.find((item) => String(item.id) === String(layoutSelection.dataset.layoutRecommendSelect)); if (layout) { try { pendingLayoutRecommendation.currentState = await currentHallState(pendingLayoutRecommendation.space); showLayoutSelectionProposal(layout); } catch (error) { console.error("layout current state lookup failed", error); showMessage("현재 세팅을 확인하지 못했습니다."); } } return; }
     if (event.target.closest("[data-layout-recommend-cancel]") && pendingLayoutRecommendation) { const result = { ...pendingLayoutRecommendation, selectedLayout: null }; renderLayoutRecommendations(result); return; }

@@ -31,8 +31,8 @@ assert(!page.includes("audio/transcription"));
 // Existing submit routing remains the single path for query, intake/decrease, and board commands.
 const submitStart = page.indexOf('aiForm.addEventListener("submit"');
 assert(submitStart > 0);
-assert(page.indexOf("isAssetQueryRequest(text)", submitStart) > submitStart);
-assert(page.indexOf("isAssetIntakeRequest(text)", submitStart) > submitStart);
+assert(page.indexOf('route === "asset_query"', submitStart) > submitStart);
+assert(page.indexOf('route === "asset_intake"', submitStart) > submitStart);
 assert(page.includes("(?:\\d+|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)"));
 
 assert(css.includes('.board-field-ai-button[data-state="listening"]'));

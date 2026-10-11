@@ -14,7 +14,7 @@ assert(edge.includes("if (!selection && choices.length > 1) needsClarification =
 // Usage statements route to intake while inventory questions remain queries.
 assert(page.includes("function isAssetDecreaseRequest"));
 assert(page.includes("썼|사용"));
-assert(page.indexOf("isAssetQueryRequest(text)", page.indexOf('aiForm.addEventListener("submit"')) < page.indexOf("isAssetIntakeRequest(text)", page.indexOf('aiForm.addEventListener("submit"')));
+assert(page.indexOf('route === "asset_query"', page.indexOf('aiForm.addEventListener("submit"')) < page.indexOf('route === "asset_intake"', page.indexOf('aiForm.addEventListener("submit"')));
 
 // Approval re-reads current stock, prevents negatives, and uses an optimistic quantity filter.
 const decreaseStart = page.indexOf('proposal.intent === "decrease_asset_quantity"');

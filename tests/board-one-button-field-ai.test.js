@@ -8,8 +8,8 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 assert(html.includes('id="boardSpeechButton" class="board-field-ai-button"'));
 assert(html.includes("🎙 현장 AI"));
 assert(html.includes("📦 자산 등록"));
-assert(html.includes("operationBoardPage.js?v=20-layout-recommendations"));
-assert(html.includes("operationBoardPage.css?v=9-layout-recommendations"));
+assert(html.includes("operationBoardPage.js?v=21-setting-advisor"));
+assert(html.includes("operationBoardPage.css?v=10-setting-advisor"));
 
 const recognition = page.slice(page.indexOf("function ensureSpeechRecognition"), page.indexOf("function captureVisualFrame"));
 assert(recognition.includes("fieldAiAutoSubmit = true"));
@@ -24,9 +24,10 @@ assert(page.includes("capturedImage: includeImage ? visualSession.imageDataUrl :
 assert(!page.includes("setInterval("));
 
 const submit = page.slice(page.indexOf('aiForm.addEventListener("submit"'), page.indexOf('aiInput.addEventListener("input"'));
-assert(submit.includes("isAssetQueryRequest(text)"));
-assert(submit.includes("isAssetIntakeRequest(text)"));
-assert(submit.includes("isHallStateQueryRequest(text)"));
+assert(submit.includes('route === "asset_query"'));
+assert(submit.includes('route === "asset_intake"'));
+assert(submit.includes('route === "hall_state_query"'));
+assert(submit.includes('route === "setting_advisor"'));
 assert(submit.includes("interpret(text)"));
 
 assert(page.includes("recentConversation.slice(-3)"));

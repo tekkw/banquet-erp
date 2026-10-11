@@ -29,6 +29,7 @@ vm.runInContext(`
   ${functionSource("isBoardCommandRequest")}
   ${functionSource("isHallStateQueryRequest")}
   ${functionSource("isLayoutRecommendationRequest")}
+  function isSettingAdvisorRequest() { return false; }
   ${functionSource("boardAiRoute")}
   this.route = boardAiRoute;
 `, context);
