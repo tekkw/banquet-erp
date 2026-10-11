@@ -15,6 +15,25 @@ assert.strictEqual(generated.filter((row) => row.objectType === "seminar_table")
 assert.strictEqual(generated.filter((row) => row.objectType === "chair").length, 42, "A: 42 chairs");
 assert(generated.every((row) => row.metadata.generatedBy === "layout_ai"));
 
+const bottomScreen = { objectType: "screen", x: 8000, y: 17700 };
+assert.strictEqual(api.frontDirection(room, [bottomScreen]), "bottom", "screen이 아래쪽이면 bottom을 front로 판단한다");
+const bottomGenerated = api.generateSchoolLayout(initial, { ...room, frontDirection: api.frontDirection(room, [bottomScreen]) }, masters, "bottom");
+const bottomTables = bottomGenerated.filter((row) => row.objectType === "seminar_table"); const bottomChairs = bottomGenerated.filter((row) => row.objectType === "chair");
+assert(bottomChairs.every((chair) => chair.rotation === 180), "screen bottom: 의자가 아래쪽을 바라본다");
+assert(bottomChairs.every((chair) => chair.y < bottomTables.find((table) => table.metadata.row === chair.metadata.row && table.metadata.column === chair.metadata.column).y), "screen bottom: 의자가 테이블 뒤에서 screen을 바라본다");
+assert(bottomTables.find((table) => table.metadata.row === 1).y > bottomTables.find((table) => table.metadata.row === 2).y, "screen bottom: 첫 줄이 screen에 가장 가깝다");
+
+const topScreen = { objectType: "screen", x: 8000, y: 100 };
+const topGenerated = api.generateSchoolLayout(initial, { ...room, frontDirection: api.frontDirection(room, [topScreen]) }, masters, "top");
+const topTables = topGenerated.filter((row) => row.objectType === "seminar_table"); const topChairs = topGenerated.filter((row) => row.objectType === "chair");
+assert(topChairs.every((chair) => chair.rotation === 0), "screen top: 의자가 위쪽을 바라본다");
+assert(topChairs.every((chair) => chair.y > topTables.find((table) => table.metadata.row === chair.metadata.row && table.metadata.column === chair.metadata.column).y), "screen top: 의자가 테이블 뒤에서 screen을 바라본다");
+assert(topTables.find((table) => table.metadata.row === 1).y < topTables.find((table) => table.metadata.row === 2).y, "screen top: 첫 줄이 screen에 가장 가깝다");
+
+assert.strictEqual(bottomTables.length, 21, "부라노3 3x7 2석: 21 tables");
+assert.strictEqual(bottomChairs.length, 42, "부라노3 3x7 2석: 42 chairs");
+assert(bottomChairs.every((chair) => chair.metadata.frontDirection === "bottom" && chair.rotation === api.chairFacingDirection("bottom")), "부라노3 3x7 2석: 모든 의자 방향이 screen 기준이다");
+
 const resized = api.parseLayoutAiCommand("4x6으로 바꿔", initial).plan;
 assert.strictEqual(resized.tableCount, 24, "B: 4x6은 24 tables");
 assert.strictEqual(resized.totalSeats, 48, "B: 기존 2석씩을 유지한다");

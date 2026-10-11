@@ -105,17 +105,37 @@
     return { plan, isModification: Boolean(currentPlan), understood: Boolean(plan.columns && plan.rows) };
   }
 
+  function frontDirection(room, objects = []) {
+    const candidates = (objects || []).filter((object) => object?.objectType === "screen");
+    const references = candidates.length ? candidates : (objects || []).filter((object) => object?.metadata?.frontReference === true || object?.objectType === "front_reference" || object?.objectType === "stage");
+    const reference = references[0];
+    if (!reference) return "top";
+    const x = Number(reference.x || 0); const y = Number(reference.y || 0); const width = Number(room?.widthMm || 0); const height = Number(room?.heightMm || 0);
+    const distances = { top: y, bottom: height - y, left: x, right: width - x };
+    return Object.keys(distances).reduce((closest, direction) => distances[direction] < distances[closest] ? direction : closest, "top");
+  }
+
+  function chairFacingDirection(direction) {
+    return ({ top: 0, right: 90, bottom: 180, left: 270 })[direction] ?? 0;
+  }
+
   function generateSchoolLayout(plan, room, masters, sessionId = "layout_ai") {
     const table = masters.table; const chair = masters.chair; const columns = Number(plan.columns); const rows = Number(plan.rows); const tableWidth = Number(table.widthMm); const tableHeight = Number(table.heightMm); const chairWidth = Number(chair.widthMm); const chairHeight = Number(chair.heightMm);
+    const direction = room.frontDirection || frontDirection(room, room.frontObjects || []); const horizontalFront = direction === "left" || direction === "right"; const awaySign = direction === "top" || direction === "left" ? 1 : -1;
     const groupWidth = columns * tableWidth + (columns - 1) * Number(plan.horizontalGapMm || 0) + Number(plan.aisle?.center || 0); const rowPitch = tableHeight + chairHeight + Number(plan.verticalGapMm || 0);
-    const left = Number(room.paddingMm || 800) + Number(plan.aisle?.left || 0); const right = room.widthMm - Number(room.paddingMm || 800) - Number(plan.aisle?.right || 0);
-    const startX = (left + right - groupWidth) / 2 + tableWidth / 2 + Number(plan.shift?.x || 0); const startY = Number(room.frontClearanceMm || 1200) + tableHeight / 2 + Number(plan.shift?.y || 0); const objects = []; let z = Number(room.baseZIndex || 0);
+    const transverseSize = horizontalFront ? room.heightMm : room.widthMm; const near = Number(room.paddingMm || 800) + Number(plan.aisle?.left || 0); const far = transverseSize - Number(room.paddingMm || 800) - Number(plan.aisle?.right || 0);
+    const startTransverse = (near + far - groupWidth) / 2 + tableWidth / 2; const clearance = Number(room.frontClearanceMm || 1200); const frontSize = horizontalFront ? room.widthMm : room.heightMm;
+    const startDepth = direction === "top" || direction === "left" ? clearance + tableHeight / 2 : frontSize - clearance - tableHeight / 2; const objects = []; let z = Number(room.baseZIndex || 0);
     let tableIndex = 0; for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
       if (tableIndex >= Number(plan.tableCount)) continue; tableIndex += 1;
-      const x = startX + column * (tableWidth + Number(plan.horizontalGapMm || 0)) + (plan.aisle?.center && column >= Math.ceil(columns / 2) ? Number(plan.aisle.center) : 0); const y = startY + row * rowPitch; const metadata = { generatedBy: "layout_ai", generationSessionId: sessionId, row: row + 1, column: column + 1 };
-      objects.push({ instanceId: `${sessionId}_table_${row}_${column}`, masterObjectId: table.id || "", objectType: "seminar_table", label: `세미나 테이블 ${row + 1}-${column + 1}`, displayShape: table.displayShape || "rect", x, y, widthM: tableWidth / 1000, heightM: tableHeight / 1000, rotation: 0, seatCount: 0, zIndex: ++z, locked: false, metadata });
+      const transverse = startTransverse + column * (tableWidth + Number(plan.horizontalGapMm || 0)) + (plan.aisle?.center && column >= Math.ceil(columns / 2) ? Number(plan.aisle.center) : 0); const depth = startDepth + awaySign * row * rowPitch;
+      const x = (horizontalFront ? depth : transverse) + Number(plan.shift?.x || 0); const y = (horizontalFront ? transverse : depth) + Number(plan.shift?.y || 0); const metadata = { generatedBy: "layout_ai", generationSessionId: sessionId, row: row + 1, column: column + 1, frontDirection: direction };
+      objects.push({ instanceId: `${sessionId}_table_${row}_${column}`, masterObjectId: table.id || "", objectType: "seminar_table", label: `세미나 테이블 ${row + 1}-${column + 1}`, displayShape: table.displayShape || "rect", x, y, widthM: tableWidth / 1000, heightM: tableHeight / 1000, rotation: horizontalFront ? 90 : 0, seatCount: 0, zIndex: ++z, locked: false, metadata });
       const count = Number(plan.seatsPerTable || 2); const gap = count > 1 ? Math.min(150, Math.max(40, (tableWidth - count * chairWidth) / (count - 1))) : 0; const width = count * chairWidth + (count - 1) * gap;
-      for (let seat = 0; seat < count; seat += 1) objects.push({ instanceId: `${sessionId}_chair_${row}_${column}_${seat}`, masterObjectId: chair.id || "", objectType: "chair", label: `의자 ${row + 1}-${column + 1}-${seat + 1}`, displayShape: chair.displayShape || "rect", x: x - width / 2 + chairWidth / 2 + seat * (chairWidth + gap), y: y + tableHeight / 2 + chairHeight / 2 + 120, widthM: chairWidth / 1000, heightM: chairHeight / 1000, rotation: 0, seatCount: 1, zIndex: ++z, locked: false, metadata: { ...metadata, seat: seat + 1 } });
+      for (let seat = 0; seat < count; seat += 1) {
+        const seatTransverse = transverse - width / 2 + chairWidth / 2 + seat * (chairWidth + gap); const seatDepth = depth + awaySign * (tableHeight / 2 + chairHeight / 2 + 120);
+        objects.push({ instanceId: `${sessionId}_chair_${row}_${column}_${seat}`, masterObjectId: chair.id || "", objectType: "chair", label: `의자 ${row + 1}-${column + 1}-${seat + 1}`, displayShape: chair.displayShape || "rect", x: (horizontalFront ? seatDepth : seatTransverse) + Number(plan.shift?.x || 0), y: (horizontalFront ? seatTransverse : seatDepth) + Number(plan.shift?.y || 0), widthM: chairWidth / 1000, heightM: chairHeight / 1000, rotation: chairFacingDirection(direction), seatCount: 1, zIndex: ++z, locked: false, metadata: { ...metadata, seat: seat + 1 } });
+      }
     }
     return objects;
   }
@@ -667,7 +687,7 @@
     function renderLayoutAiDraft(plan, answer) {
       if (!workspaceFloorplanRecord?.id) throw new Error("공간의 기본 도면을 먼저 선택해주세요.");
       pushWorkspaceHistory(); layoutAiPreviousPlan = layoutAiPlan ? JSON.parse(JSON.stringify(layoutAiPlan)) : null; layoutAiSessionId ||= `layout_ai_${Date.now()}`;
-      const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex() };
+      const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex(), frontDirection: frontDirection({ widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, fixed) };
       const generated = generateSchoolLayout(plan, room, layoutAiMasters(), layoutAiSessionId); layoutAiValidation = validateGeneratedLayout(generated, room, fixed, plan);
       workspaceObjects = [...fixed, ...generated]; workspaceActiveLayout = null; if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = ""; layoutAiPlan = plan;
       const spaceName = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value))?.space_name || "선택 공간"; plan.spaceId = workspaceSpaceSelect?.value || null; plan.spaceName = spaceName;
@@ -5067,6 +5087,8 @@
     layoutLibraryObjectGeometry,
     layoutLibraryViewBox,
     parseLayoutAiCommand,
+    frontDirection,
+    chairFacingDirection,
     generateSchoolLayout,
     validateGeneratedLayout,
   };
