@@ -4847,6 +4847,15 @@
       excelViewerFrame.removeAttribute("src");
     }
 
+    function openRequestedExcelPreview() {
+      const params = new URLSearchParams(window.location.search);
+      const storagePath = params.get("excelPreview");
+      if (!storagePath) return;
+      openStoredExcel(storagePath);
+      params.delete("excelPreview");
+      history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`);
+    }
+
     function downloadStoredExcel(storagePath, filename = "") {
       const link = document.createElement("a");
       link.href = buildPublicStorageUrl(storagePath);
@@ -5375,6 +5384,7 @@
       authController.updateCurrentUserBadge();
       applyAssetPermissionState();
       showErpPage("home");
+      openRequestedExcelPreview();
       if (appInitialized) {
         renderBanquetAssets();
         loadVenueLayoutImages();
