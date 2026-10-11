@@ -85,6 +85,50 @@
     return { x: minX - padding, y: minY - padding, width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 };
   }
 
+  function parseLayoutAiCommand(text, currentPlan = null) {
+    const value = String(text || "").trim();
+    if (/(라운드|round|u[- ]?shape|u자|ㅁ[- ]?shape|ㅁ자|t[- ]?shape|t자)/i.test(value) && !/(스쿨|세미나|class|school)/i.test(value)) return { unsupportedType: true };
+    const grid = value.match(/(\d+)\s*(?:x|×)\s*(\d+)|(\d+)\s*열\s*(\d+)\s*(?:줄|행)/i); const seats = value.match(/(\d+)\s*석\s*씩|테이블(?:당|마다)?\s*(\d+)\s*석/i);
+    const people = value.match(/(\d+)\s*명/i); const tables = value.match(/테이블\s*(\d+)\s*개/i); const hGap = value.match(/가로\s*간격\s*(\d+)\s*mm/i); const vGap = value.match(/(?:줄|세로)\s*간격\s*(\d+)\s*mm/i);
+    const aisle = value.match(/(왼쪽|오른쪽|중앙)\s*통로\s*(\d+)\s*mm/i); const shift = value.match(/전체(?:를)?\s*(뒤|앞|오른쪽|왼쪽)(?:으?로)?\s*(\d+)\s*mm\s*옮겨/i);
+    const plan = { ...(currentPlan || {}), layoutType: "school", orientation: "screen-facing", horizontalGapMm: currentPlan?.horizontalGapMm ?? 400, verticalGapMm: currentPlan?.verticalGapMm ?? 700, aisle: { center: 0, left: 0, right: 0, ...(currentPlan?.aisle || {}) } };
+    if (grid) { plan.columns = Number(grid[1] || grid[3]); plan.rows = Number(grid[2] || grid[4]); } if (seats) plan.seatsPerTable = Number(seats[1] || seats[2]);
+    if (people) plan.targetPeople = Number(people[1]); if (tables) plan.requestedTableCount = Number(tables[1]); if (hGap) plan.horizontalGapMm = Number(hGap[1]); if (vGap) plan.verticalGapMm = Number(vGap[1]);
+    if (aisle) plan.aisle[({ "왼쪽": "left", "오른쪽": "right", "중앙": "center" })[aisle[1]]] = Number(aisle[2]);
+    if (/앞(?:줄|행)\s*(?:하나|한\s*줄)?\s*빼/i.test(value)) plan.rows = Math.max(1, Number(plan.rows || 1) - 1);
+    if (/(?:마지막|맨\s*뒤)(?:줄|행)\s*(?:하나|한\s*줄)?\s*빼/i.test(value)) plan.rows = Math.max(1, Number(plan.rows || 1) - 1);
+    if (shift) plan.shift = { x: /오른쪽/.test(shift[1]) ? Number(shift[2]) : /왼쪽/.test(shift[1]) ? -Number(shift[2]) : 0, y: /뒤/.test(shift[1]) ? Number(shift[2]) : /앞/.test(shift[1]) ? -Number(shift[2]) : 0 };
+    if (/오른쪽\s*통로.*더\s*넓혀/i.test(value) && aisle) plan.shift = { x: -Number(aisle[2]), y: 0 };
+    plan.columns ||= currentPlan?.columns || (plan.targetPeople ? 3 : plan.requestedTableCount ? Math.ceil(Math.sqrt(plan.requestedTableCount)) : null); plan.seatsPerTable ||= currentPlan?.seatsPerTable || 2;
+    plan.rows ||= currentPlan?.rows || (plan.targetPeople ? Math.ceil(plan.targetPeople / (plan.columns * plan.seatsPerTable)) : plan.requestedTableCount ? Math.ceil(plan.requestedTableCount / plan.columns) : null);
+    plan.tableCount = plan.requestedTableCount || Number(plan.columns || 0) * Number(plan.rows || 0); plan.totalSeats = plan.tableCount * plan.seatsPerTable;
+    return { plan, isModification: Boolean(currentPlan), understood: Boolean(plan.columns && plan.rows) };
+  }
+
+  function generateSchoolLayout(plan, room, masters, sessionId = "layout_ai") {
+    const table = masters.table; const chair = masters.chair; const columns = Number(plan.columns); const rows = Number(plan.rows); const tableWidth = Number(table.widthMm); const tableHeight = Number(table.heightMm); const chairWidth = Number(chair.widthMm); const chairHeight = Number(chair.heightMm);
+    const groupWidth = columns * tableWidth + (columns - 1) * Number(plan.horizontalGapMm || 0) + Number(plan.aisle?.center || 0); const rowPitch = tableHeight + chairHeight + Number(plan.verticalGapMm || 0);
+    const left = Number(room.paddingMm || 800) + Number(plan.aisle?.left || 0); const right = room.widthMm - Number(room.paddingMm || 800) - Number(plan.aisle?.right || 0);
+    const startX = (left + right - groupWidth) / 2 + tableWidth / 2 + Number(plan.shift?.x || 0); const startY = Number(room.frontClearanceMm || 1200) + tableHeight / 2 + Number(plan.shift?.y || 0); const objects = []; let z = Number(room.baseZIndex || 0);
+    let tableIndex = 0; for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
+      if (tableIndex >= Number(plan.tableCount)) continue; tableIndex += 1;
+      const x = startX + column * (tableWidth + Number(plan.horizontalGapMm || 0)) + (plan.aisle?.center && column >= Math.ceil(columns / 2) ? Number(plan.aisle.center) : 0); const y = startY + row * rowPitch; const metadata = { generatedBy: "layout_ai", generationSessionId: sessionId, row: row + 1, column: column + 1 };
+      objects.push({ instanceId: `${sessionId}_table_${row}_${column}`, masterObjectId: table.id || "", objectType: "seminar_table", label: `세미나 테이블 ${row + 1}-${column + 1}`, displayShape: table.displayShape || "rect", x, y, widthM: tableWidth / 1000, heightM: tableHeight / 1000, rotation: 0, seatCount: 0, zIndex: ++z, locked: false, metadata });
+      const count = Number(plan.seatsPerTable || 2); const gap = count > 1 ? Math.min(150, Math.max(40, (tableWidth - count * chairWidth) / (count - 1))) : 0; const width = count * chairWidth + (count - 1) * gap;
+      for (let seat = 0; seat < count; seat += 1) objects.push({ instanceId: `${sessionId}_chair_${row}_${column}_${seat}`, masterObjectId: chair.id || "", objectType: "chair", label: `의자 ${row + 1}-${column + 1}-${seat + 1}`, displayShape: chair.displayShape || "rect", x: x - width / 2 + chairWidth / 2 + seat * (chairWidth + gap), y: y + tableHeight / 2 + chairHeight / 2 + 120, widthM: chairWidth / 1000, heightM: chairHeight / 1000, rotation: 0, seatCount: 1, zIndex: ++z, locked: false, metadata: { ...metadata, seat: seat + 1 } });
+    }
+    return objects;
+  }
+
+  function validateGeneratedLayout(objects, room, fixedObjects = [], plan = {}) {
+    const generated = objects.filter((object) => object.metadata?.generatedBy === "layout_ai"); const errors = []; const warnings = []; const box = (object) => ({ left: object.x - object.widthM * 500, right: object.x + object.widthM * 500, top: object.y - object.heightM * 500, bottom: object.y + object.heightM * 500 }); const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    generated.forEach((object) => { const bounds = box(object); if (bounds.left < 0 || bounds.top < 0 || bounds.right > room.widthMm || bounds.bottom > room.heightMm) errors.push(`${object.label}: room boundary 밖`); fixedObjects.forEach((fixed) => { if (overlaps(bounds, box(fixed))) (fixed.objectType === "door" ? warnings : errors).push(`${object.label}: ${fixed.label || fixed.objectType} 충돌`); }); });
+    const tables = generated.filter((object) => object.objectType === "seminar_table"); const chairs = generated.filter((object) => object.objectType === "chair"); for (let i = 0; i < tables.length; i += 1) for (let j = i + 1; j < tables.length; j += 1) if (overlaps(box(tables[i]), box(tables[j]))) errors.push("테이블 간 겹침");
+    chairs.forEach((chair) => tables.forEach((table) => { if ((chair.metadata?.row !== table.metadata?.row || chair.metadata?.column !== table.metadata?.column) && overlaps(box(chair), box(table))) errors.push(`${chair.label}: 다른 테이블과 비정상 겹침`); }));
+    if (tables.length !== Number(plan.tableCount)) errors.push("테이블 수 불일치"); if (chairs.length !== Number(plan.totalSeats)) errors.push("의자 수 불일치");
+    return { valid: errors.length === 0, warnings: [...new Set(warnings)], errors: [...new Set(errors)], counts: { tables: tables.length, chairs: chairs.length } };
+  }
+
   function createFloorplanEditor({ elements, deps }) {
     const {
       modal,
@@ -377,6 +421,12 @@
     let workspaceSpacePressed = false;
     let workspaceUndoStack = [];
     let workspaceRedoStack = [];
+    let layoutAiPanel = null;
+    let layoutAiPlan = null;
+    let layoutAiPreviousPlan = null;
+    let layoutAiSessionId = "";
+    let layoutAiConversation = [];
+    let layoutAiValidation = null;
     let workspaceReferenceOpacity = 0.4;
     let workspaceDimensionMode = "selected";
     let workspaceDimensionUnit = "m";
@@ -587,7 +637,62 @@
       });
     }
 
+    function initializeLayoutAiPanel() {
+      if (!workspaceStatusbar || document.getElementById("layoutAiPanel")) return;
+      const style = document.createElement("style"); style.textContent = `.layout-ai-panel{margin:12px 0;padding:14px;border:1px solid #c8b26a;border-radius:12px;background:#fffdf5}.layout-ai-panel h3{margin:0 0 8px}.layout-ai-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.layout-ai-form input{min-width:0}.layout-ai-result,.layout-ai-history{margin-top:8px;font-size:13px}.layout-ai-summary{display:flex;gap:8px;flex-wrap:wrap}.layout-ai-summary span{padding:3px 7px;border-radius:999px;background:#eef2f7}.layout-ai-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.layout-ai-errors{color:#b91c1c}.layout-ai-warnings{color:#92400e}`; document.head.append(style);
+      layoutAiPanel = document.createElement("section"); layoutAiPanel.id = "layoutAiPanel"; layoutAiPanel.className = "layout-ai-panel"; layoutAiPanel.innerHTML = `<h3>AI 레이아웃</h3><form class="layout-ai-form" data-layout-ai-form><input data-layout-ai-input placeholder="부라노1 스쿨식 3x7 2석씩 만들어줘" maxlength="200"><button type="submit">생성/수정</button></form><div class="layout-ai-result" data-layout-ai-result>스쿨식 생성 명령을 입력하세요.</div><div class="layout-ai-history" data-layout-ai-history></div><div class="layout-ai-actions"><button type="button" data-layout-ai-save disabled>저장</button><button type="button" data-layout-ai-regenerate disabled>다시 생성</button><button type="button" data-layout-ai-undo disabled>AI 수정 취소</button><button type="button" data-layout-ai-reset disabled>초기화</button></div>`;
+      workspaceStatusbar.parentElement?.insertBefore(layoutAiPanel, workspaceStatusbar);
+      layoutAiPanel.querySelector("[data-layout-ai-form]")?.addEventListener("submit", async (event) => { event.preventDefault(); const input = layoutAiPanel.querySelector("[data-layout-ai-input]"); const text = input.value.trim(); if (!text) return; await applyLayoutAiCommand(text); input.value = ""; });
+      layoutAiPanel.querySelector("[data-layout-ai-save]")?.addEventListener("click", () => { if (!layoutAiValidation?.valid) return; openLayoutInfoModal("save", !workspaceActiveLayout?.id); });
+      layoutAiPanel.querySelector("[data-layout-ai-regenerate]")?.addEventListener("click", () => layoutAiPlan && renderLayoutAiDraft(layoutAiPlan, "같은 조건으로 다시 생성했습니다."));
+      layoutAiPanel.querySelector("[data-layout-ai-undo]")?.addEventListener("click", () => { undoWorkspaceChange(); layoutAiPlan = layoutAiPreviousPlan; layoutAiPreviousPlan = null; layoutAiValidation = layoutAiPlan ? validateGeneratedLayout(workspaceObjects, { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, workspaceObjects.filter(isWorkspaceBaseObject), layoutAiPlan) : null; layoutAiConversation.push({ user: "AI 수정 취소", answer: "직전 상태를 복원했습니다." }); renderLayoutAiPanel(); });
+      layoutAiPanel.querySelector("[data-layout-ai-reset]")?.addEventListener("click", resetLayoutAiDraft);
+    }
+    function layoutAiRequestedSpace(text) { return String(text).replace(/\s+/g, "").match(/(?:부라노|카프리)[123]|컨벤션(?:AB|A|B)/i)?.[0] || ""; }
+    function normalizeLayoutAiSpace(value) { return String(value || "").toUpperCase().replace(/\s+|센터/g, ""); }
+    async function ensureLayoutAiSpace(text) {
+      const requested = layoutAiRequestedSpace(text); if (!requested) return;
+      const current = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value));
+      if (normalizeLayoutAiSpace(current?.space_name).endsWith(normalizeLayoutAiSpace(requested))) return;
+      const match = workspaceSpaces.find((space) => normalizeLayoutAiSpace(space.space_name).endsWith(normalizeLayoutAiSpace(requested)));
+      if (!match) throw new Error(`${requested} 공간을 현재 장소에서 찾지 못했습니다. 장소를 먼저 선택해주세요.`);
+      workspaceSpaceSelect.value = match.id; await handleWorkspaceSpaceChange();
+      if (workspaceFloorplanSelect?.options.length > 1) { workspaceFloorplanSelect.selectedIndex = 1; await handleWorkspaceFloorplanChange(); }
+    }
+    function layoutAiMasters() {
+      const table = layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "seminar_table") || defaultObjectTypes.find((item) => item.object_type === "seminar_table");
+      const chair = layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "chair") || defaultObjectTypes.find((item) => item.object_type === "chair");
+      return { table: { id: table?.id || "", widthMm: Number(table?.default_width_m || 1.8) * 1000, heightMm: Number(table?.default_height_m || .45) * 1000, displayShape: table?.display_shape || "rect" }, chair: { id: chair?.id || "", widthMm: Number(chair?.default_width_m || .45) * 1000, heightMm: Number(chair?.default_height_m || .45) * 1000, displayShape: chair?.display_shape || "rect" } };
+    }
+    function renderLayoutAiDraft(plan, answer) {
+      if (!workspaceFloorplanRecord?.id) throw new Error("공간의 기본 도면을 먼저 선택해주세요.");
+      pushWorkspaceHistory(); layoutAiPreviousPlan = layoutAiPlan ? JSON.parse(JSON.stringify(layoutAiPlan)) : null; layoutAiSessionId ||= `layout_ai_${Date.now()}`;
+      const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex() };
+      const generated = generateSchoolLayout(plan, room, layoutAiMasters(), layoutAiSessionId); layoutAiValidation = validateGeneratedLayout(generated, room, fixed, plan);
+      workspaceObjects = [...fixed, ...generated]; workspaceActiveLayout = null; if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = ""; layoutAiPlan = plan;
+      const spaceName = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value))?.space_name || "선택 공간"; plan.spaceId = workspaceSpaceSelect?.value || null; plan.spaceName = spaceName;
+      if (workspaceNameInput) workspaceNameInput.value = `${spaceName} 스쿨식 ${plan.columns}x${plan.rows} ${plan.totalSeats}석`;
+      pendingLayoutInfo = { layout_type: "school", layout_name: workspaceNameInput?.value || "AI 스쿨식", min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: "AI deterministic draft" };
+      workspaceSourceRow = { ...(workspaceSourceRow || {}), row_count: plan.rows, column_count: plan.columns, seats_per_table: plan.seatsPerTable, table_count: plan.tableCount, layout_type: "school" };
+      markWorkspaceDirty(); renderWorkspace(); layoutAiConversation.push({ user: answer, answer: `${plan.tableCount}T · ${plan.totalSeats}석` }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel();
+    }
+    async function applyLayoutAiCommand(text) {
+      try {
+        await ensureLayoutAiSpace(text); const parsed = parseLayoutAiCommand(text, layoutAiPlan || (workspaceActiveLayout ? { columns: workspaceActiveLayout.column_count, rows: workspaceActiveLayout.row_count, seatsPerTable: workspaceActiveLayout.seats_per_table || 2 } : null));
+        if (parsed.unsupportedType) { layoutAiConversation.push({ user: text, answer: "현재 자동 생성 V1은 스쿨식만 지원합니다." }); renderLayoutAiPanel(); return; }
+        if (!parsed.understood) throw new Error("열×행을 알려주세요. 예: 스쿨식 3x7 2석씩"); renderLayoutAiDraft(parsed.plan, text);
+      } catch (error) { layoutAiConversation.push({ user: text, answer: error.message || "명령을 적용하지 못했습니다." }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel(); }
+    }
+    function renderLayoutAiPanel() {
+      if (!layoutAiPanel) return; const result = layoutAiPanel.querySelector("[data-layout-ai-result]"); const history = layoutAiPanel.querySelector("[data-layout-ai-history]");
+      if (layoutAiPlan) result.innerHTML = `<div class="layout-ai-summary"><span>AI 생성안</span><span>${escapeHtml(layoutAiPlan.spaceName || "")}</span><span>스쿨식 ${layoutAiPlan.columns}×${layoutAiPlan.rows}</span><span>${layoutAiPlan.tableCount}T</span><span>${layoutAiPlan.totalSeats}석</span></div>${layoutAiValidation?.errors.length ? `<p class="layout-ai-errors">${escapeHtml(layoutAiValidation.errors.slice(0, 3).join(" · "))}</p>` : ""}${layoutAiValidation?.warnings.length ? `<p class="layout-ai-warnings">${escapeHtml(layoutAiValidation.warnings.slice(0, 3).join(" · "))}</p>` : `<p>${layoutAiValidation?.valid ? "검증 완료" : ""}</p>`}`;
+      history.innerHTML = layoutAiConversation.slice(-5).map((turn) => `<p><strong>${escapeHtml(turn.user)}</strong><br>${escapeHtml(turn.answer)}</p>`).join("");
+      layoutAiPanel.querySelector("[data-layout-ai-save]").disabled = !layoutAiValidation?.valid; layoutAiPanel.querySelector("[data-layout-ai-regenerate]").disabled = !layoutAiPlan; layoutAiPanel.querySelector("[data-layout-ai-undo]").disabled = !workspaceUndoStack.length; layoutAiPanel.querySelector("[data-layout-ai-reset]").disabled = !layoutAiPlan;
+    }
+    function resetLayoutAiDraft() { if (layoutAiPlan) { pushWorkspaceHistory(); workspaceObjects = workspaceObjects.filter((object) => object.metadata?.generatedBy !== "layout_ai"); } layoutAiPlan = null; layoutAiValidation = null; layoutAiSessionId = ""; pendingLayoutInfo = null; markWorkspaceDirty(); renderWorkspace(); renderLayoutAiPanel(); }
+
     function bindWorkspaceEvents() {
+      initializeLayoutAiPanel();
       workspaceVenueSelect?.addEventListener("change", handleWorkspaceVenueChange);
       workspaceSpaceSelect?.addEventListener("change", handleWorkspaceSpaceChange);
       workspaceFloorplanSelect?.addEventListener("change", handleWorkspaceFloorplanChange);
@@ -1571,6 +1676,10 @@
     }
 
     async function saveWorkspaceLayout(forceNew) {
+      if (layoutAiPlan && !layoutAiValidation?.valid) {
+        setStatus("AI 생성안 검증 오류를 해결한 뒤 저장해주세요.", "warn");
+        return;
+      }
       if (isAdminUser && !isAdminUser()) {
         setStatus("?꾨㈃ ?덉씠?꾩썐 ??μ? 愿由ъ옄留??ъ슜?????덉뒿?덈떎.", "warn");
         return;
@@ -4957,6 +5066,9 @@
     layoutLibraryGroupName,
     layoutLibraryObjectGeometry,
     layoutLibraryViewBox,
+    parseLayoutAiCommand,
+    generateSchoolLayout,
+    validateGeneratedLayout,
   };
 })();
 
