@@ -63,6 +63,7 @@
     getSettingExecutionPlan: ({ text }) => handleSettingExecutionPlan(text),
     getCurrentHallState: ({ text }) => showHallStateQuery(text),
     proposeCurrentSetupUpdate: ({ text }) => buildConfirmCurrentSetupProposal(text),
+    proposeFieldSetupObservation: ({ text }) => buildFieldSetupProposal(text),
     findAsset: ({ text, selection = null }) => handleAssetQuery(text, selection),
     getAssetQuantity: ({ text, selection = null }) => handleAssetQuery(text, selection),
     getAssetMovement: ({ text, selection = null }) => handleAssetQuery(text, selection),
@@ -217,8 +218,8 @@
     if (/^\d{4}-\d{2}-\d{2}$/.test(start) && start <= period.end && (end || start) >= period.start) return true;
     return (event.schedule || []).some((row) => row.date >= period.start && row.date <= period.end);
   }
-  function eventQueryType(text) { if (/(원본|엑셀|파일).*(띄워|열어|보여|보기)|(?:띄워|열어|보여).*(원본|엑셀)/i.test(text)) return "open_event_original"; if (/레이아웃|배치|스쿨식|극장식|라운드/i.test(text)) return "get_event_layout"; if (/인원|몇\s*명|guest/i.test(text)) return "get_event_guest_count"; if (/일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크/i.test(text)) return "get_event_schedule"; if (/메뉴|품목|아이템|식음|장비/i.test(text)) return "get_event_items"; return "find_events_by_period_space"; }
-  function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
+  function eventQueryType(text) { if (/(원본|엑셀|파일).*(띄워|열어|보여|보기)|(?:띄워|열어|보여).*(원본|엑셀)/i.test(text)) return "open_event_original"; if (/실제.*(?:세팅|배치)|현장.*(?:세팅|기록)/i.test(text)) return "get_field_setup_observation"; if (/레이아웃|배치|스쿨식|극장식|라운드/i.test(text)) return "get_event_layout"; if (/인원|몇\s*명|guest/i.test(text)) return "get_event_guest_count"; if (/일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크/i.test(text)) return "get_event_schedule"; if (/메뉴|품목|아이템|식음|장비/i.test(text)) return "get_event_items"; return "find_events_by_period_space"; }
+  function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|실제\s*세팅|현장\s*기록|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|실제\s*세팅|현장\s*기록|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
   function displayEventDate(event, period = null) { const keys = eventDateKeys(event); const key = (period ? keys.find((value) => value >= period.start && value <= period.end) : "") || keys[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
   function eventChoiceLabel(event, period = null) { return `${displayEventDate(event, period)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
@@ -244,6 +245,7 @@
     else if (queryType === "get_event_guest_count") answer = event.guestCount !== "" && event.guestCount != null ? `${event.eventName || "선택한 행사"}의 등록 인원은 ${event.guestCount}명입니다.` : "등록된 이벤오더에서 인원 정보를 찾지 못했습니다.";
     else if (queryType === "get_event_schedule") { const rows = (event.schedule || []).filter((row) => !/커피\s*브레이크|커피브레이크/i.test(userText) || /커피\s*브레이크|커피브레이크/i.test(row.content)); answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 일정입니다.` : "등록된 이벤오더에서 일정 정보를 찾지 못했습니다."; details = rows.map((row) => [row.date, row.time, row.content, row.venue].filter(Boolean).join(" · ")).join("\n"); }
     else if (queryType === "get_event_items") { const rows = event.items || []; answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 품목입니다.` : "등록된 이벤오더에서 품목 정보를 찾지 못했습니다."; details = rows.slice(0, 20).map((row) => [row.item_name, row.quantity, row.amount].filter((value) => value !== "" && value != null).join(" · ")).join("\n"); }
+    else if (queryType === "get_field_setup_observation") { const observations = (event.notes || []).filter((row) => String(row.content || "").startsWith("[field_setup_observation]")); answer = observations.length ? observations.at(-1).content.replace(/^\[field_setup_observation\]\s*/, "") : "이 행사에 등록된 실제 현장 세팅 기록이 없습니다."; sourceBadge = observations.length ? "현장 확인 기록" : ""; }
     else if (queryType === "get_event_layout") { const saved = await savedEventLayout(event); const extracted = extractedLayoutTexts(event); const fallback = fallbackLayoutTexts(event); if (saved) { sourceBadge = "저장 레이아웃"; answer = `${event.eventName || "선택한 행사"}의 저장 레이아웃은 ${saved.layout_name || saved.layout_type}입니다.`; details = [saved.layout_type, saved.table_type, saved.table_count != null ? `${saved.table_count}T` : "", saved.layout_notes].filter(Boolean).join(" · "); } else if (extracted.length) { sourceBadge = "원본 이벤오더 기준"; answer = `원본 이벤오더에는 ${extracted.join(", ")}으로 기재되어 있습니다.`; details = extracted.join("\n"); } else if (fallback.length) { sourceBadge = "등록 운영 데이터"; answer = `${event.eventName || "선택한 행사"}의 등록 데이터에서 레이아웃 정보를 찾았습니다.`; details = fallback.join("\n"); } else answer = "등록된 이벤오더에서 레이아웃 정보를 찾지 못했습니다."; }
     else answer = `${displayEventDate(event, period)} · ${eventVenue(event)}\n${event.eventName || "행사명 미등록"}${event.guestCount !== "" ? `\n${event.guestCount}명` : ""}`;
     const actions = `<div class="board-ai-actions">${event.storagePath ? '<button type="button" data-event-query-action="open_event_original">원본 엑셀 보기</button>' : ""}<button type="button" data-event-query-action="get_event_schedule">일정 보기</button><button type="button" data-event-query-action="get_event_layout">레이아웃 보기</button></div>`;
@@ -270,9 +272,16 @@
   function isBoardCommandRequest(text) { return /(일정|스케줄|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료)|인원|게스트|메모)/i.test(text) && /(추가|넣어|수정|변경|바꿔|등록|남겨|적어)/i.test(text); }
   function isVisualQueryRequest(text) { return /(이거|이것|사진|화면|보이|몇\s*개|자산에|등록돼|세팅|장면|다시.*(?:봐|보)|이상한|문제)/i.test(text); }
   function isDeicticVisualQuery(text) { return /(?:이거|이것|저거|저것|이\s*물건|지금\s*보이는|앞에\s*있는|이\s*세팅)/i.test(text); }
-  function isHallStateQueryRequest(text) { return /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(?:지금|현재).*(?:세팅|상태).*(?:보여|알려|뭐|어떻게)|(?:세팅|상태).*(?:보여|알려)/i.test(text); }
+  function isHallStateQueryRequest(text) { return /(부라노|컨벤션|카프리|페스타|포이어|foyer)/i.test(text) && /(?:지금|현재).*(?:(?:세팅|상태).*(?:보여|알려|뭐|어떻게)|어떻게\s*돼)|(?:세팅|상태).*(?:보여|알려)/i.test(text); }
   function isHallStateConfirmationRequest(text) { return /(스쿨식|라운드|극장식|u자|세팅|좌석|테이블|\d+\s*(?:석|t)|비어\s*있|철수)/i.test(text) && /(그대로|현재|지금|확인|세팅|상태|변경|바꿨|바꿨어|비어\s*있|철수)/i.test(text); }
   function hallStateLayout(text) { return /비어\s*있|철수|empty/i.test(text) ? "empty" : /스쿨|school/i.test(text) ? "스쿨식" : /라운드|round|원형/i.test(text) ? "라운드" : /극장|theater/i.test(text) ? "극장식" : /u\s*자|u[- ]?shape/i.test(text) ? "U자" : ""; }
+  function fieldSetupFacts(text) {
+    const value = String(text || ""); const correction = value.match(/(\d+)\s*(?:t|테이블|개)\s*아니고\s*(\d+)\s*(?:t|테이블|개)/i);
+    const tables = correction ? Number(correction[2]) : value.match(/(\d+)\s*(?:t|테이블)/i)?.[1] || (/라운드|테이블|세팅|들어가|들어가더라/.test(value) ? value.match(/(\d+)\s*개/i)?.[1] : null);
+    const seats = value.match(/(\d+)\s*석/i)?.[1]; const rows = value.match(/(\d+)\s*줄/i)?.[1]; const columns = value.match(/(\d+)\s*(?:열|컬럼|column)/i)?.[1]; const seatsPerTable = value.match(/(?:테이블당|한\s*테이블에)\s*(\d+)\s*석/i)?.[1];
+    return { layoutType: hallStateLayout(value) || null, tables: tables == null ? null : Number(tables), seats: seats == null ? null : Number(seats), rows: rows == null ? null : Number(rows), columns: columns == null ? null : Number(columns), seatsPerTable: seatsPerTable == null ? null : Number(seatsPerTable), isCorrection: Boolean(correction || /아니고|정정|수정/.test(value)) };
+  }
+  function fieldSetupObservationText(space, facts) { return `현장 확인: ${[space, facts.layoutType, facts.tables != null ? `${facts.tables}T` : "", facts.seats != null ? `${facts.seats}석` : "", facts.rows != null ? `${facts.rows}줄` : "", facts.columns != null ? `${facts.columns}열` : "", facts.seatsPerTable != null ? `테이블당 ${facts.seatsPerTable}석` : ""].filter(Boolean).join(" / ")}`; }
   function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
   function currentStateConventionUnit(value) { const text = normalizeHallName(value).replace(/센터/g, ""); if (/컨벤션(?:AB|전체|ALL)/i.test(text)) return "AB"; if (/컨벤션(?:A|1|2)(?:$|[^0-9])/i.test(text)) return "A"; if (/컨벤션(?:B|3)(?:$|[^0-9])/i.test(text)) return "B"; return ""; }
   function operationalHallMatches(spaces, text) {
@@ -304,18 +313,27 @@
     const state = await currentHallState(matches[0]);
     if (!state) { const answer = `${matches[0].space_name} 현재 세팅은 아직 확인되지 않았습니다.`; rememberConversation(text, answer); showMessage(answer); return; }
     const layouts = state.source_layout_id ? await request(`venue_layouts?select=id,layout_name&id=eq.${encodeURIComponent(state.source_layout_id)}&is_active=eq.true&limit=1`) : []; const layout = layouts?.[0];
-    const answer = `${matches[0].space_name}은 현재 ${[state.layout_type, state.tables != null ? `${state.tables}T` : "", state.seats != null ? `${state.seats}석` : ""].filter(Boolean).join(" · ")}으로 확인되어 있습니다.`;
+    const answer = `${matches[0].space_name}은 현재 ${[state.layout_type, state.tables != null ? `${state.tables}T` : "", state.seats != null ? `${state.seats}석` : "", String(state.note || "").match(/(\d+줄)/)?.[1] || ""].filter(Boolean).join(" · ")}으로 확인되어 있습니다.`;
     aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${escapeHtml(matches[0].space_name)} 현재 세팅</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">${state.source_layout_id ? layout ? `현재 도면: ${escapeHtml(layout.layout_name)}` : "연결된 도면을 찾을 수 없습니다." : "연결된 도면 없음"}</p>${layout ? `<div class="board-ai-actions"><a class="secondary-button" href="../index.html?layoutPreview=${encodeURIComponent(layout.id)}">현재 도면 보기</a></div>` : ""}</div>`; rememberConversation(text, answer); speakBoardReply(answer); finishFieldAiAnswer();
   }
   function showHallStateProposal(proposal) {
     pendingHallStateProposal = proposal; pendingProposal = null;
-    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${proposal.intent === "confirm_current_setup" ? "현재 세팅으로 반영" : "현재 세팅 확인"}</h3><p><strong>${escapeHtml(proposal.space.space_name)}</strong></p><p>${escapeHtml([proposal.layoutType, proposal.seats != null ? `${proposal.seats}석` : "", proposal.tables != null ? `${proposal.tables}T` : ""].filter(Boolean).join(" · ") || "세팅 상세 미입력")}</p><p class="board-ai-status">승인하면 사용자가 확인한 현재 상태로 저장합니다. 행사 종료 후에도 유지됩니다.</p><div class="board-ai-actions"><button type="button" class="primary-button" data-hall-state-approve>${proposal.intent === "confirm_current_setup" ? "현재 세팅으로 반영" : "현재 상태 확인"}</button><button type="button" class="secondary-button" data-hall-state-edit>수정</button><button type="button" class="secondary-button" data-hall-state-cancel>취소</button></div></div>`;
+    const field = proposal.intent === "record_field_setup";
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>${field ? "현장 세팅 기록" : proposal.intent === "confirm_current_setup" ? "현재 세팅으로 반영" : "현재 세팅 확인"}</h3><p><strong>${escapeHtml(proposal.space.space_name)}</strong></p><p>${escapeHtml([proposal.layoutType, proposal.tables != null ? `${proposal.tables}T` : "", proposal.seats != null ? `${proposal.seats}석` : "", proposal.rows != null ? `${proposal.rows}줄` : "", proposal.columns != null ? `${proposal.columns}열` : ""].filter(Boolean).join(" · ") || "세팅 상세 미입력")}</p><p class="board-ai-status">승인하면 현재 상태${proposal.sourceEventOrderId ? "와 해당 행사 운영 기록" : ""}에 저장합니다.</p><div class="board-ai-actions"><button type="button" class="primary-button" data-hall-state-approve>${field ? "반영" : proposal.intent === "confirm_current_setup" ? "현재 세팅으로 반영" : "현재 상태 확인"}</button><button type="button" class="secondary-button" data-hall-state-edit>수정</button><button type="button" class="secondary-button" data-hall-state-cancel>취소</button></div></div>`;
     speakBoardReply(`${proposal.space.space_name} 현재 세팅 내용을 확인해주세요.`); finishFieldAiAnswer();
   }
   async function applyHallStateProposal(proposal) {
-    const user = storedUser(); const payload = { space_id: proposal.space.id, space_key: proposal.space.space_code || null, venue_name: proposal.space.space_name, layout_type: proposal.layoutType, seats: proposal.seats, tables: proposal.tables, equipment: proposal.previous?.equipment || {}, note: proposal.previous?.note || null, source: "manual_confirmed", source_event_order_id: proposal.sourceEventOrderId || null, source_layout_id: proposal.sourceLayoutId || null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
+    const user = storedUser(); const payload = { space_id: proposal.space.id, space_key: proposal.space.space_code || null, venue_name: proposal.space.space_name, layout_type: proposal.layoutType, seats: proposal.seats, tables: proposal.tables, equipment: proposal.equipment || proposal.previous?.equipment || {}, note: proposal.observation || proposal.previous?.note || null, source: "manual_confirmed", source_event_order_id: proposal.sourceEventOrderId || null, source_layout_id: proposal.sourceLayoutId || null, confidence: 1, confirmed_at: new Date().toISOString(), confirmed_by: user?.label || user?.id || "ERP 사용자", updated_at: new Date().toISOString() };
     const rows = await request("hall_current_states?on_conflict=space_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=representation" }, body: JSON.stringify(payload) });
     if (!rows?.[0]?.id) throw new Error("현재 세팅 저장 결과가 없습니다.");
+    let observationNoteId = proposal.observationNoteId || null;
+    if (proposal.intent === "record_field_setup" && proposal.sourceEventOrderId && proposal.observation) {
+      const notePayload = { event_order_id: proposal.sourceEventOrderId, note_type: "others", content: `[field_setup_observation] ${proposal.observation}. 사용자 현장 확인.`, updated_at: new Date().toISOString() };
+      const savedNotes = observationNoteId ? await request(`event_notes?id=eq.${encodeURIComponent(observationNoteId)}`, { method: "PATCH", headers: { Prefer: "return=representation" }, body: JSON.stringify(notePayload) }) : await request("event_notes", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify(notePayload) });
+      observationNoteId = savedNotes?.[0]?.id || observationNoteId;
+      const event = events.find((item) => String(item.id) === String(proposal.sourceEventOrderId)); if (event && savedNotes?.[0]) event.notes = [...(event.notes || []).filter((note) => String(note.id) !== String(observationNoteId)), savedNotes[0]];
+    }
+    if (proposal.intent === "record_field_setup") rememberDomainContext("setting", { ...(conversationContext.setting || {}), fieldSetup: { ...proposal, observationNoteId } });
     pendingHallStateProposal = null; aiInput.value = ""; showMessage(`${proposal.space.space_name} 현재 세팅을 확인 상태로 저장했습니다.`, true);
   }
   function isLayoutRecommendationRequest(text) {
@@ -330,7 +348,11 @@
   }
   function isSettingExecutionPlanRequest(text) { return /(어떻게\s*준비|뭐\s*바꿔야|뭐\s*해야|세팅하려면.*(?:필요|해야)|작업\s*뭐|준비할\s*거|테이블\s*몇\s*개.*필요|의자\s*몇\s*개?|레이아웃.*(?:많이\s*)?달라|왜\s*오늘\s*해야)/i.test(text); }
   function isConfirmCurrentSetupRequest(text) { return /(?:세팅|셋팅)(?:을|은|이)?\s*(?:했어|완료했어|끝냈어|완료)|이대로\s*(?:세팅\s*)?완료/i.test(text); }
+  function isRecordFieldSetupRequest(text) { const facts = fieldSetupFacts(text); return Boolean(((facts.layoutType || facts.tables != null || facts.rows != null || facts.columns != null || facts.seatsPerTable != null) && /세팅|해놨|해보니|해보니까|들어가|들어가더라|실제로|완료|아니고|정정/i.test(text)) || (conversationContext.setting && /이렇게.*(?:되네|됐어)|이\s*상태로.*완료/i.test(text))); }
+  function isFieldSetupHistoryQuery(text) { return /예전|이전|과거|해봤|실제\s*사례/.test(text) && /세팅|라운드|스쿨|테이블|몇\s*개/.test(text); }
   function boardAiRoute(text) {
+    if (isRecordFieldSetupRequest(text)) return "record_field_setup";
+    if (isFieldSetupHistoryQuery(text)) return "field_setup_history";
     if (isConfirmCurrentSetupRequest(text)) return "confirm_current_setup";
     if (isAssetIntakeRequest(text)) return "asset_intake";
     if (isLayoutRecommendationRequest(text)) return "recommend_layouts";
@@ -431,6 +453,20 @@
     if (matched.length !== 1 || (!row && !explicitLayout && !seatMatch && !tableMatch)) return null;
     const previous = await currentHallState(matched[0]);
     return { intent: "confirm_current_setup", space: matched[0], previous, layoutType: explicitLayout || (row?.nextLayout.layoutType ? settingLayoutLabel(row.nextLayout) : previous?.layout_type || null), seats: seatMatch ? Number(seatMatch[1]) : row?.nextLayout.seats ?? previous?.seats ?? null, tables: tableMatch ? Number(tableMatch[1]) : row?.nextLayout.tables ?? previous?.tables ?? null, sourceLayoutId: row?.nextLayout.sourceLayoutId || row?.savedLayout?.id || null, sourceEventOrderId: row?.nextEvent.id || null, userText: text };
+  }
+  async function buildFieldSetupProposal(text) {
+    if (!settingAdvisorRows.length && settingAdvisorContext) settingAdvisorRows = await buildSettingAdvisorRows(settingAdvisorContext.anchorDate || text);
+    const explicitVenue = venueTerm(text); const row = explicitSettingAdvisorRow(text) || (!explicitVenue ? currentSettingAdvisorRow() : null); const prior = pendingHallStateProposal?.intent === "record_field_setup" ? pendingHallStateProposal : conversationContext.setting?.fieldSetup || null; const facts = fieldSetupFacts(text);
+    const spaces = await request("venue_spaces?select=id,space_name,space_code&is_active=eq.true&order=space_name.asc"); const venueText = row?.space || explicitVenue || prior?.space?.space_name || conversationContext.venue?.name || ""; const matched = operationalHallMatches(spaces, venueText);
+    if (matched.length !== 1) return null;
+    const previous = await currentHallState(matched[0]); const layoutType = facts.layoutType || prior?.layoutType || (row?.nextLayout.layoutType ? settingLayoutLabel(row.nextLayout) : previous?.layout_type || null);
+    const merged = { layoutType, tables: facts.tables ?? prior?.tables ?? row?.nextLayout.tables ?? previous?.tables ?? null, seats: facts.seats ?? prior?.seats ?? row?.nextLayout.seats ?? previous?.seats ?? null, rows: facts.rows ?? prior?.rows ?? null, columns: facts.columns ?? prior?.columns ?? null, seatsPerTable: facts.seatsPerTable ?? prior?.seatsPerTable ?? null };
+    const contextEventId = prior?.sourceEventOrderId || settingAdvisorContext?.nextEventOrderId || activeEventContexts[0]?.eventOrderId || null; const contextEvent = events.find((event) => String(event.id) === String(contextEventId)); const sourceEventOrderId = row?.nextEvent.id || (contextEvent && eventVenueMatches(contextEvent, matched[0].space_name) ? contextEvent.id : null);
+    return { intent: "record_field_setup", space: matched[0], previous, ...merged, observation: fieldSetupObservationText(matched[0].space_name, merged), sourceLayoutId: row?.nextLayout.sourceLayoutId || prior?.sourceLayoutId || null, sourceEventOrderId, observationNoteId: facts.isCorrection ? prior?.observationNoteId || null : null, userText: text };
+  }
+  function showFieldSetupHistory(text) {
+    const venue = venueTerm(text); const layout = hallStateLayout(text); const observations = events.flatMap((event) => (event.notes || []).filter((note) => String(note.content || "").startsWith("[field_setup_observation]")).map((note) => ({ event, note }))).filter(({ note }) => (!venue || normalizeHallName(note.content).includes(normalizeHallName(venue))) && (!layout || String(note.content).includes(layout))).sort((left, right) => String(right.note.updated_at || right.note.created_at || "").localeCompare(String(left.note.updated_at || left.note.created_at || "")));
+    const answer = observations.length ? observations[0].note.content.replace(/^\[field_setup_observation\]\s*/, "") : "등록된 현장 세팅 기록에서는 확인되지 않습니다."; showMessage(answer, true); speakBoardReply(answer);
   }
   function showSettingTaskProposal() {
     const pending = pendingSettingExecutionPlan; if (!pending) return; const { row, plan } = pending;
@@ -980,6 +1016,12 @@
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
     const agentPlan = conversationAgent.plan(text, fastRoute); const route = agentPlan.route;
+    if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
+    if (route === "record_field_setup") {
+      showTransientMessage("현장에서 확인한 세팅을 정리하고 있습니다…");
+      try { const proposal = await erpTools.run("proposeFieldSetupObservation", { text: agentPlan.text }); if (!proposal) showMessage("어느 행사장 세팅인지 알려주세요."); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("field setup proposal failed", error); showMessage(error.message || "현장 세팅 기록을 확인하지 못했습니다."); }
+      return;
+    }
     if (route === "confirm_current_setup") {
       showTransientMessage("완료한 세팅 내용을 확인하고 있습니다…");
       try { const proposal = await erpTools.run("proposeCurrentSetupUpdate", { text: agentPlan.text }); if (!proposal) showMessage("어느 행사장 세팅을 완료하셨나요?"); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("current setup proposal failed", error); showMessage(error.message || "완료한 세팅을 확인하지 못했습니다."); }

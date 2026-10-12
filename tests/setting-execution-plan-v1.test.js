@@ -29,6 +29,6 @@ assert(board.includes("async addManualTasks(tasks)") && board.includes('source: 
 assert(page.includes('data-setting-plan-layout') && page.includes("layoutPreview="), "G: existing layout preview is reused");
 assert(page.includes('data-setting-plan-original') && page.includes("window.openStoredExcel(row.nextEvent.storagePath)"), "H: existing Excel preview is reused");
 assert(page.includes("plan.tableDelta") && page.includes("currentSettingAdvisorRow()"), "I: follow-up uses the selected event context");
-assert(html.includes("settingAdvisor.js?v=3") && html.includes("operationBoardPage.js?v=26-conversation-agent-core"));
+assert(html.includes("settingAdvisor.js?v=3") && html.includes("operationBoardPage.js?v=27-field-setup-observation"));
 assert(html.includes("operationBoard.js?v=setting-execution-v1") && html.includes("operationBoardPage.css?v=12-setting-execution"));
 console.log("setting execution plan V1 tests passed");

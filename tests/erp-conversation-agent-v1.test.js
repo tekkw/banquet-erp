@@ -14,6 +14,6 @@ assert(page.includes('source: "manual_confirmed"'));
 assert(page.includes('showMessage("어느 행사장 세팅을 완료하셨나요?")'));
 assert(page.includes('conversationContext.lastDomain === "asset"'), "asset follow-up must use only asset context");
 assert(html.includes("erpConversationAgent.js?v=1"));
-assert(html.includes("operationBoardPage.js?v=26-conversation-agent-core"));
+assert(html.includes("operationBoardPage.js?v=27-field-setup-observation"));
 
 console.log("ERP conversation agent V1 tests passed");

@@ -43,5 +43,5 @@ assert(page.includes("const currentState = states.find"), "preparation E: curren
 assert(page.includes("row.nextEvent.guestCount"), "D: 다음 행사 인원은 저장 데이터에서 답한다");
 assert(page.includes("window.openStoredExcel(row.nextEvent.storagePath)"), "F: 기존 Excel preview를 재사용한다");
 assert(!html.includes('id="boardSettingAdvisorButton"') && html.includes("settingAdvisor.js?v=3"));
-assert(html.includes("operationBoardPage.js?v=26-conversation-agent-core"));
+assert(html.includes("operationBoardPage.js?v=27-field-setup-observation"));
 console.log("setting advisor V1 tests passed");

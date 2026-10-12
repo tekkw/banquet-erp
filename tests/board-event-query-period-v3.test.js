@@ -37,6 +37,6 @@ assert(page.includes('if (!period && venue && !allowAll) period = queryPeriod("ì
 assert(page.includes("hasRelativePeriod && !period"));
 assert(page.includes('console.debug("event query debug"'));
 assert(page.includes("matches.sort"));
-assert(html.includes("operationBoardPage.js?v=26-conversation-agent-core"));
+assert(html.includes("operationBoardPage.js?v=27-field-setup-observation"));
 
 console.log("board event query period V3 tests passed");
