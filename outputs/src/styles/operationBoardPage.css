@@ -36,6 +36,13 @@ body.operation-board-page { min-width: 0; margin: 0; background: #081a2b; color:
 .board-setting-advisor-list .board-setting-advisor-card { display: grid; grid-template-columns: 92px minmax(88px,.6fr) minmax(0,1fr); gap: 8px; align-items: center; font: inherit; }
 .board-setting-advisor-card time { color: #fde68a; font-size: 12px; font-weight: 800; }
 .board-setting-advisor-card span { overflow: hidden; color: #dbeafe; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.board-setting-execution dl { display: grid; gap: 5px; margin: 10px 0; }
+.board-setting-execution dl div { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 8px; }
+.board-setting-execution dt { color: #96a9ba; }
+.board-setting-execution dd { margin: 0; }
+.board-setting-execution ul { margin: 7px 0; padding-left: 20px; }
+.board-setting-execution label { display: grid; gap: 5px; margin-top: 10px; color: #bfdbfe; font-size: 12px; }
+.board-setting-execution input { min-height: 38px; padding: 6px 9px; border: 1px solid rgba(150,180,205,.3); border-radius: 8px; background: #081a2b; color: #f4f7fa; font: inherit; }
 .board-setting-advisor-card h3 { color: #fde68a; }
 .board-setting-advisor-meta { color: #bfdbfe; font-size: 12px; }
 .board-field-ai-button[data-state="listening"] { border-color: #fb7185; background: #7f1d1d; }

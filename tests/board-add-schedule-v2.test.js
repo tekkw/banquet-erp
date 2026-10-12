@@ -54,7 +54,7 @@ assert(edge.includes("add_field_note/manual work"));
 // G: refresh happens after the insert and board blocks are sorted by time.
 assert(page.indexOf("await (refresh)();", insertAt) > insertAt);
 assert(board.includes("String(a.time).localeCompare(String(b.time))"));
-assert(html.includes("operationBoardPage.js?v=22-unified-ai"));
+assert(html.includes("operationBoardPage.js?v=23-setting-execution"));
 
 // Date boundaries are client-computed in Asia/Seoul or use the selected board date.
 assert(page.includes('timeZone: "Asia/Seoul"'));

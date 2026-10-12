@@ -8,8 +8,8 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 assert(html.includes('id="boardSpeechButton" class="board-field-ai-button"'));
 assert(html.includes('placeholder="현장 AI에게 물어보기..."'));
 assert(html.includes('id="boardAiPlusButton"'));
-assert(html.includes("operationBoardPage.js?v=22-unified-ai"));
-assert(html.includes("operationBoardPage.css?v=11-unified-ai"));
+assert(html.includes("operationBoardPage.js?v=23-setting-execution"));
+assert(html.includes("operationBoardPage.css?v=12-setting-execution"));
 
 const recognition = page.slice(page.indexOf("function ensureSpeechRecognition"), page.indexOf("function captureVisualFrame"));
 assert(recognition.includes("fieldAiAutoSubmit = true"));

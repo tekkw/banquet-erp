@@ -30,11 +30,13 @@ vm.runInContext(`
   ${functionSource("isHallStateQueryRequest")}
   ${functionSource("isLayoutRecommendationRequest")}
   ${functionSource("isSettingAdvisorRequest")}
+  ${functionSource("isSettingExecutionPlanRequest")}
   ${functionSource("boardAiRoute")}
   this.route = boardAiRoute;
 `, context);
 
 assert.equal(context.route("13일날 뭘 세팅해야돼?"), "setting_advisor");
+assert.equal(context.route("이 행사 세팅하려면 뭐 필요해?"), "setting_execution_plan");
 assert.equal(context.route("오늘 행사 뭐 있어?"), "event_query");
 assert.equal(context.route("부라노1 현재 세팅 뭐야?"), "hall_state_query");
 assert.equal(context.route("부라노1 스쿨식 40명 추천해줘"), "recommend_layouts");

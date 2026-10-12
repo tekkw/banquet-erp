@@ -43,6 +43,6 @@ assert(page.includes("window.openStoredExcel(event.storagePath)"), "original act
 assert(page.includes("등록된 원본 파일이 없습니다."));
 assert(page.includes("등록된 이벤오더에서 조건에 맞는 행사를 찾지 못했습니다."));
 assert(page.includes("등록된 이벤오더에서 레이아웃 정보를 찾지 못했습니다."));
-assert(boardHtml.includes("operationBoardPage.js?v=22-unified-ai"), "board cache version must be bumped");
+assert(boardHtml.includes("operationBoardPage.js?v=23-setting-execution"), "board cache version must be bumped");
 
 console.log("board event query V1 tests passed");

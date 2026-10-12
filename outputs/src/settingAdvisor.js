@@ -48,6 +48,7 @@
     if (Number(current.seats) === Number(next.seats) && Number(current.tables) === Number(next.tables)) return "same";
     return "minor_change";
   }
+  function layoutLabel(value) { return ({ school: "스쿨식", round: "라운드", theater: "극장식", u_shape: "U자" })[value] || value || "미확인"; }
   function recommendation(candidate, change) {
     if (change === "same") return "큰 변경 없음";
     if (change === "major_change") return "종료 후 바로 변경 권장";
@@ -60,7 +61,16 @@
     if (change === "unknown") return "등록된 데이터로 변경량을 확인하지 못했습니다.";
     const parts = []; if (current.tables != null && next.tables != null && next.tables !== current.tables) parts.push(`테이블 ${next.tables - current.tables > 0 ? "+" : ""}${next.tables - current.tables}T`); if (current.seats != null && next.seats != null && next.seats !== current.seats) parts.push(`의자 ${next.seats - current.seats > 0 ? "+" : ""}${next.seats - current.seats}`); return parts.join(" · ") || "추가 수량 변경 없음";
   }
+  function executionPlan(current = {}, next = {}) {
+    const currentKnown = Boolean(current.layoutType || current.seats != null || current.tables != null); const nextKnown = Boolean(next.layoutType || next.seats != null || next.tables != null);
+    const tableDelta = current.tables != null && next.tables != null ? Number(next.tables) - Number(current.tables) : null; const seatDelta = current.seats != null && next.seats != null ? Number(next.seats) - Number(current.seats) : null;
+    const layoutChanged = Boolean(current.layoutType && next.layoutType && current.layoutType !== next.layoutType); const tasks = [];
+    if (layoutChanged) tasks.push({ kind: "layout", delta: null, title: `레이아웃 변경: ${layoutLabel(current.layoutType)} → ${layoutLabel(next.layoutType)}` });
+    if (tableDelta) tasks.push({ kind: "table", delta: tableDelta, title: `세미나 테이블 ${Math.abs(tableDelta)}개 ${tableDelta > 0 ? "추가" : "철수"}` });
+    if (seatDelta) tasks.push({ kind: "chair", delta: seatDelta, title: `의자 ${Math.abs(seatDelta)}개 ${seatDelta > 0 ? "추가" : "철수"}` });
+    return { currentKnown, nextKnown, tableDelta, seatDelta, layoutChanged, tasks, exact: currentKnown && nextKnown && (tableDelta != null || seatDelta != null || layoutChanged) };
+  }
   function prioritize(rows) { const rank = { major_change: 0, minor_change: 1, unknown: 2, same: 3 }; return rows.slice().sort((a, b) => `${a.nextDate}T${a.nextStart}`.localeCompare(`${b.nextDate}T${b.nextStart}`) || a.gapHours - b.gapHours || rank[a.change] - rank[b.change] || Number(b.nextLayout?.seats || b.nextEvent?.guestCount || 0) - Number(a.nextLayout?.seats || a.nextEvent?.guestCount || 0)); }
   function tableClaim(event, expected = null) { const facts = layoutFacts(event); if (facts.tables == null) return null; return expected == null || Number(expected) === Number(facts.tables) ? facts.tables : null; }
-  return { anchorDate, schedulePoints, buildCandidates, layoutFacts, compare, recommendation, taskSummary, prioritize, tableClaim, shiftDate };
+  return { anchorDate, schedulePoints, buildCandidates, layoutFacts, compare, recommendation, taskSummary, executionPlan, prioritize, tableClaim, shiftDate };
 });

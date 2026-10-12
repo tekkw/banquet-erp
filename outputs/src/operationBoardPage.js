@@ -51,6 +51,7 @@
   let settingAdvisorContext = loadSettingAdvisorContext();
   let settingAdvisorRows = [];
   let pendingEventQuery = null;
+  let pendingSettingExecutionPlan = null;
   let speechRecognition = null;
   let speechListening = false;
   let speechBaseText = "";
@@ -297,7 +298,9 @@
     if (/(다음\s*(?:세팅|행사)|오늘.*끝나고.*세팅|끝나.*(?:세팅|준비)|밤에.*세팅|내일\s*행사\s*준비|(?:뭐부터|뭘)\s*(?:준비|세팅)|세팅\s*상담|지금\s*바꿔야|오늘.*해두는\s*게|오늘.*세팅.*(?:낫|좋)|오늘\s*뭐부터\s*세팅)/i.test(text)) return true;
     return Boolean((settingAdvisorContext || settingAdvisorRows.length) && (/(컨벤션|부라노|카프리|페스타|포이어).*(?:부터\s*보자|상담)|다음\s*행사|인원|몇\s*명|몇\s*시\s*(?:시작|끝)|레이아웃\s*뭐|테이블.*(?:몇|였나)|현재\s*세팅|의자\s*몇|원본.*(?:보여|열어)|오늘\s*바로|오늘.*해야|밤에.*(?:해두|세팅)/i.test(text)));
   }
+  function isSettingExecutionPlanRequest(text) { return /(어떻게\s*준비|뭐\s*바꿔야|뭐\s*해야|세팅하려면.*(?:필요|해야)|작업\s*뭐|준비할\s*거|테이블\s*몇\s*개.*필요|의자\s*몇\s*개?|레이아웃.*(?:많이\s*)?달라|왜\s*오늘\s*해야)/i.test(text); }
   function boardAiRoute(text) {
+    if (isSettingExecutionPlanRequest(text)) return "setting_execution_plan";
     if (isSettingAdvisorRequest(text)) return "setting_advisor";
     if (isEventQueryRequest(text)) return "event_query";
     if (isLayoutRecommendationRequest(text)) return "recommend_layouts";
@@ -353,6 +356,42 @@
     else if (/오늘\s*바로|오늘.*해야|밤에.*(?:해두|세팅)/.test(text)) answer = `${row.advice}. ${row.taskSummary}`;
     else { showSettingAdvisorDetail(row); return; }
     aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>${escapeHtml(row.space)} 세팅 상담</h3><p>${escapeHtml(answer)}</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button></div></article>`; rememberConversation(text, answer); speakBoardReply(answer); finishFieldAiAnswer();
+  }
+  function addMinutes(time, minutes) { const match = String(time || "").match(/^(\d{2}):(\d{2})$/); if (!match) return ""; const total = Number(match[1]) * 60 + Number(match[2]) + minutes; return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`; }
+  function executionLayoutText(layout) { return [settingLayoutLabel(layout), layout?.seats != null ? `${layout.seats}석` : "", layout?.tables != null ? `${layout.tables}T` : ""].filter(Boolean).join(" · "); }
+  function renderSettingExecutionPlan(row, plan) {
+    pendingSettingExecutionPlan = { row, plan, suggestedTime: addMinutes(row.currentEnd, 10) };
+    const tasks = plan.tasks.length ? plan.tasks.map((task) => `<li>${escapeHtml(task.title)}</li>`).join("") : `<li>${!plan.currentKnown ? "현재 세팅 정보가 없어 정확한 변경량을 계산할 수 없습니다." : !plan.nextKnown ? "다음 행사 세팅 정보가 없어 정확한 변경량을 계산할 수 없습니다." : "수량 변경 작업 없음"}</li>`;
+    aiResult.innerHTML = `<article class="board-setting-execution"><h3>${escapeHtml(row.space)} · ${escapeHtml(row.nextDate.slice(5).replace("-", "/"))} ${escapeHtml(row.nextStart)}</h3><strong>${escapeHtml(row.nextEvent.eventName || "행사명 미등록")}</strong><dl><div><dt>현재</dt><dd>${escapeHtml(plan.currentKnown ? executionLayoutText(row.currentLayout) : "미확인")}</dd></div><div><dt>다음</dt><dd>${escapeHtml(plan.nextKnown ? executionLayoutText(row.nextLayout) : "미확인")}</dd></div></dl><h3>필요 작업</h3><ul>${tasks}</ul><div class="board-ai-actions">${plan.tasks.length ? '<button type="button" data-setting-plan-propose>작업으로 추가</button>' : ""}${row.savedLayout?.id ? '<button type="button" data-setting-plan-layout>레이아웃 보기</button>' : ""}${row.nextEvent.storagePath ? '<button type="button" data-setting-plan-original>원본 보기</button>' : ""}</div></article>`;
+    const spokenParts = [plan.layoutChanged ? "레이아웃 타입 변경" : "", plan.tableDelta ? `테이블 ${Math.abs(plan.tableDelta)}개 ${plan.tableDelta > 0 ? "추가" : "철수"}` : "", plan.seatDelta ? `의자 ${Math.abs(plan.seatDelta)}석 ${plan.seatDelta > 0 ? "추가" : "철수"}` : ""].filter(Boolean); const spoken = !plan.currentKnown ? "현재 세팅 정보가 없어 정확한 변경량은 계산하지 못했습니다." : !plan.nextKnown ? "다음 행사 세팅 정보가 없어 정확한 변경량은 계산하지 못했습니다." : spokenParts.length ? `${row.space}는 ${spokenParts.join("와 ")}가 필요합니다.` : `${row.space}는 큰 수량 변경이 없습니다.`; speakBoardReply(spoken); finishFieldAiAnswer();
+  }
+  async function handleSettingExecutionPlan(text) {
+    if (!settingAdvisorContext && !activeEventContexts.length) { showMessage("먼저 준비할 행사를 선택해주세요."); return; }
+    if (!settingAdvisorRows.length) settingAdvisorRows = await buildSettingAdvisorRows(settingAdvisorContext?.anchorDate || "");
+    let row = currentSettingAdvisorRow() || settingAdvisorRows.find((item) => item.nextEvent.id === activeEventContexts[0]?.eventOrderId);
+    if (!row && activeEventContexts[0]) {
+      const nextEvent = events.find((item) => item.id === activeEventContexts[0].eventOrderId); if (nextEvent) {
+        const space = activeEventContexts[0].venue || nextEvent.venue; const [spaces, states] = await Promise.all([request("venue_spaces?select=id,space_name,space_code&is_active=eq.true&order=space_name.asc"), request("hall_current_states?select=*&order=updated_at.desc")]); const matchedSpaces = operationalHallMatches(spaces, space); const ids = new Set(matchedSpaces.flatMap((item) => item.memberSpaceIds || [item.id])); const currentState = states.find((state) => ids.has(state.space_id) || normalizeHallName(state.venue_name) === normalizeHallName(space)) || null; const saved = await savedEventLayout(nextEvent); const currentLayout = settingAdvisor.layoutFacts(currentState || {}); const eventLayout = settingAdvisor.layoutFacts(nextEvent); const savedLayout = settingAdvisor.layoutFacts(saved || {}); const nextLayout = { ...eventLayout, ...savedLayout, layoutType: savedLayout.layoutType || eventLayout.layoutType, tables: savedLayout.tables ?? eventLayout.tables, seats: savedLayout.seats ?? eventLayout.seats, sourceLayoutId: savedLayout.sourceLayoutId || eventLayout.sourceLayoutId }; const point = settingAdvisor.schedulePoints(nextEvent).sort((left, right) => left.startAt - right.startAt)[0]; row = { space, anchorDate: board.getSelectedDate(), currentEnd: "", nextDate: point?.date || eventDateKeys(nextEvent)[0] || "", nextStart: point?.start || "", nextEvent, currentLayout, nextLayout, savedLayout: saved, change: settingAdvisor.compare(currentLayout, nextLayout), gapHours: null, advice: "" };
+      }
+    }
+    if (!row) { showMessage("먼저 준비할 행사를 선택해주세요."); return; }
+    const plan = settingAdvisor.executionPlan(row.currentLayout, row.nextLayout);
+    if (/테이블\s*몇/.test(text)) { const answer = plan.tableDelta == null ? "등록된 데이터로 테이블 변경량을 계산하지 못했습니다." : `테이블 ${Math.abs(plan.tableDelta)}개 ${plan.tableDelta > 0 ? "추가" : plan.tableDelta < 0 ? "철수" : "변경 없음"}가 필요합니다.`; showMessage(answer, true); speakBoardReply(answer); return; }
+    if (/의자\s*몇/.test(text)) { const answer = plan.seatDelta == null ? "등록된 데이터로 의자 변경량을 계산하지 못했습니다." : `의자 ${Math.abs(plan.seatDelta)}석 ${plan.seatDelta > 0 ? "추가" : plan.seatDelta < 0 ? "철수" : "변경 없음"}가 필요합니다.`; showMessage(answer, true); speakBoardReply(answer); return; }
+    if (/레이아웃.*달라/.test(text)) { const answer = row.change === "major_change" ? "레이아웃 타입 변경이 필요합니다." : row.change === "minor_change" ? "같은 타입에서 좌석·테이블 수의 부분 변경이 필요합니다." : row.change === "same" ? "현재 세팅과 동일합니다." : "등록된 데이터로 레이아웃 차이를 확인하지 못했습니다."; showMessage(answer, true); speakBoardReply(answer); return; }
+    if (/왜\s*오늘/.test(text)) { const answer = row.gapHours == null ? "등록된 데이터에서 현재 행사 종료와 다음 행사 시작 간격을 확인하지 못했습니다." : `${row.currentEnd} 종료 후 다음 행사가 ${row.nextDate} ${row.nextStart}에 시작해 간격은 ${Number(row.gapHours.toFixed(1))}시간입니다. ${row.advice}.`; showMessage(answer, true); speakBoardReply(answer); return; }
+    renderSettingExecutionPlan(row, plan);
+  }
+  function showSettingTaskProposal() {
+    const pending = pendingSettingExecutionPlan; if (!pending) return; const { row, plan } = pending;
+    aiResult.innerHTML = `<article class="board-setting-execution"><h3>${escapeHtml(row.space)} 세팅 작업 ${plan.tasks.length}건을 추가할까요?</h3><ul>${plan.tasks.map((task) => `<li>${escapeHtml(task.title)}</li>`).join("")}</ul><label>제안 시간 <input type="time" data-setting-plan-time value="${escapeHtml(pending.suggestedTime)}"></label><div class="board-ai-actions"><button type="button" data-setting-plan-approve>추가</button><button type="button" data-setting-plan-cancel>취소</button></div></article>`;
+  }
+  async function approveSettingTasks() {
+    const pending = pendingSettingExecutionPlan; if (!pending) return; const { row, plan } = pending; const time = aiResult.querySelector("[data-setting-plan-time]")?.value || "";
+    const existing = await request(`operation_board_items?select=title,venue_name,is_completed,metadata&board_date=eq.${encodeURIComponent(row.anchorDate)}&item_kind=eq.manual`); const duplicates = new Set((existing || []).filter((item) => !item.is_completed && item.metadata?.source === "setting_execution_plan" && String(item.metadata?.next_event_order_id) === String(row.nextEvent.id) && normalizeHallName(item.venue_name) === normalizeHallName(row.space)).map((item) => item.title));
+    const tasks = plan.tasks.filter((task) => !duplicates.has(task.title)).map((task) => ({ date: row.anchorDate, time, venue: row.space, eventOrderId: row.nextEvent.id, title: task.title, memo: `${row.nextDate} ${row.nextStart} ${row.nextEvent.eventName || "다음 행사"}`, metadata: { source: "setting_execution_plan", taskSource: "manual_board_task", event_order_id: row.nextEvent.id, venue: row.space, next_event_order_id: row.nextEvent.id } }));
+    if (!tasks.length) { showMessage("같은 미완료 세팅 작업이 이미 등록되어 있습니다."); return; }
+    await board.addManualTasks(tasks); pendingSettingExecutionPlan = null; showMessage(`${row.space} 세팅 작업 ${tasks.length}건을 추가했습니다.`, true);
   }
   function recommendationSpaceMatches(spaces, text) {
     const recommendationVenueName = (value) => normalizedVenue(value).replace(/센터/g, "");
@@ -889,6 +928,7 @@
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const route = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
+    if (route === "setting_execution_plan") { showTransientMessage("현재 세팅과 다음 행사 세팅을 비교하고 있습니다…"); try { await handleSettingExecutionPlan(text); aiInput.value = ""; } catch (error) { console.error("setting execution plan failed", error); showMessage(error.message || "세팅 실행 계획을 만들지 못했습니다."); } return; }
     if (route === "setting_advisor") { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await handleSettingAdvisor(text); aiInput.value = ""; } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } return; }
     if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
     if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
@@ -925,6 +965,11 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-setting-plan-propose]")) { showSettingTaskProposal(); return; }
+    if (event.target.closest("[data-setting-plan-cancel]")) { pendingSettingExecutionPlan = null; showMessage("세팅 작업 추가를 취소했습니다."); return; }
+    if (event.target.closest("[data-setting-plan-approve]")) { showTransientMessage("세팅 작업을 추가하고 있습니다…"); try { await approveSettingTasks(); } catch (error) { console.error("setting tasks add failed", error); showMessage(error.message || "세팅 작업을 추가하지 못했습니다."); } return; }
+    if (event.target.closest("[data-setting-plan-layout]")) { const row = pendingSettingExecutionPlan?.row; if (row?.savedLayout?.id) window.open(`../index.html?layoutPreview=${encodeURIComponent(row.savedLayout.id)}`, "_blank", "noopener"); else showMessage("연결된 저장 레이아웃이 없습니다."); return; }
+    if (event.target.closest("[data-setting-plan-original]")) { const row = pendingSettingExecutionPlan?.row; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
     const settingSelect = event.target.closest("[data-setting-advisor-select]");
     if (settingSelect) { const row = settingAdvisorRows[Number(settingSelect.dataset.settingAdvisorSelect)]; if (row) showSettingAdvisorDetail(row); return; }
     const settingEvent = event.target.closest("[data-setting-advisor-event]");
