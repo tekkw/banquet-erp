@@ -526,6 +526,27 @@ select {
   gap: 8px;
 }
 
+/* Upload review cards use a light surface inside the otherwise dark ERP. */
+#uploadPage #resultWrap .event-order-ai-review {
+  color: #1B2A3A;
+}
+
+#uploadPage #resultWrap .event-order-ai-review h3,
+#uploadPage #resultWrap .event-order-ai-question-list strong {
+  color: #102A40;
+}
+
+#uploadPage #resultWrap .event-order-ai-review p,
+#uploadPage #resultWrap .event-order-ai-question-list li {
+  color: #1B2A3A;
+}
+
+#uploadPage #resultWrap .event-order-ai-question-list span,
+#uploadPage #resultWrap .event-order-ai-review :where(small, .subtle, .helper-text),
+#uploadPage #resultWrap .event-order-ai-review-actions > :not(button) {
+  color: #526579;
+}
+
 .ai-direct-teach-form {
   gap: 14px;
 }
