@@ -51,6 +51,27 @@
   let activeEventContexts = loadActiveEventContexts();
   let settingAdvisorContext = loadSettingAdvisorContext();
   let conversationContext = loadConversationContext();
+  const conversationAgent = window.erpConversationAgent.create({ storage: sessionStorage, storageKey: conversationContextKey, maxSteps: 4 });
+  const erpTools = window.erpConversationAgent.createToolRegistry({
+    findEvents: ({ text, event = null, queryType = "" }) => handleEventQuery(text, event, queryType),
+    getEventDetail: ({ text, event, queryType = "" }) => handleEventQuery(text, event, queryType),
+    getNextEvent: ({ text }) => handleSettingAdvisor(text),
+    getEventSchedule: ({ text, event }) => handleEventQuery(text, event, "get_event_schedule"),
+    getEventLayout: ({ text, event }) => handleEventQuery(text, event, "get_event_layout"),
+    openEventOriginal: ({ text, event }) => handleEventQuery(text, event, "open_event_original"),
+    getSettingCandidates: ({ text }) => handleSettingAdvisor(text),
+    getSettingExecutionPlan: ({ text }) => handleSettingExecutionPlan(text),
+    getCurrentHallState: ({ text }) => showHallStateQuery(text),
+    proposeCurrentSetupUpdate: ({ text }) => buildConfirmCurrentSetupProposal(text),
+    findAsset: ({ text, selection = null }) => handleAssetQuery(text, selection),
+    getAssetQuantity: ({ text, selection = null }) => handleAssetQuery(text, selection),
+    getAssetMovement: ({ text, selection = null }) => handleAssetQuery(text, selection),
+    recommendLayouts: ({ text }) => handleLayoutRecommendation(text),
+    proposeScheduleChange: ({ text }) => interpret(text),
+    proposeGuestCountChange: ({ text }) => interpret(text),
+    proposeManualTask: ({ text }) => interpret(text),
+    proposeAssetChange: ({ text, selection = null, context = null }) => interpretAsset(text, selection, context),
+  });
   let settingAdvisorRows = [];
   let pendingEventQuery = null;
   let pendingSettingExecutionPlan = null;
@@ -100,8 +121,9 @@
   function rememberConversation(user, answer) { recentConversation.push({ user, answer }); recentConversation = recentConversation.slice(-3); }
   function loadActiveEventContexts() { try { const value = JSON.parse(sessionStorage.getItem(activeEventContextKey) || "[]"); return Array.isArray(value) ? value.slice(0, 3) : []; } catch { return []; } }
   function loadSettingAdvisorContext() { try { return JSON.parse(sessionStorage.getItem(settingAdvisorContextKey) || "null"); } catch { return null; } }
-  function loadConversationContext() { try { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", ...JSON.parse(sessionStorage.getItem(conversationContextKey) || "{}") }; } catch { return { event: null, setting: null, asset: null, venue: null, lastDomain: "" }; } }
-  function rememberDomainContext(domain, value) { conversationContext = { ...conversationContext, [domain]: value, lastDomain: domain }; try { sessionStorage.setItem(conversationContextKey, JSON.stringify(conversationContext)); } catch { /* session storage unavailable */ } }
+  function loadConversationContext() { try { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [], ...JSON.parse(sessionStorage.getItem(conversationContextKey) || "{}") }; } catch { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [] }; } }
+  function saveConversationContext(next) { conversationContext = conversationAgent.save(next); }
+  function rememberDomainContext(domain, value) { saveConversationContext({ ...conversationContext, [domain]: value, lastDomain: domain }); }
   function rememberSettingAdvisor(row) {
     settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
     try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
@@ -125,7 +147,7 @@
     const context = { eventOrderId: event.id, eventName: event.eventName, venue: event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "", eventDate: eventDateKeys(event)[0] || "", storagePath: event.storagePath || "", originalFilename: event.originalFilename || "" };
     activeEventContexts = [context, ...activeEventContexts.filter((item) => item.eventOrderId !== context.eventOrderId)].slice(0, 3);
     try { sessionStorage.setItem(activeEventContextKey, JSON.stringify(activeEventContexts)); } catch { /* session storage unavailable */ }
-    rememberDomainContext("event", context);
+    rememberDomainContext("event", { ...conversationContext.event, ...context });
     renderAiContext();
   }
   async function refresh() {
@@ -212,6 +234,7 @@
   }
   function showEventChoices(result, userText) {
     pendingEventQuery = { result, userText }; const label = [result.period?.label, result.venue, "행사"].filter(Boolean).join(" "); const answer = `${label || "조건에 맞는 행사"}는 ${result.events.length}건입니다.`;
+    saveConversationContext({ ...conversationContext, event: { ...(conversationContext.event || {}), period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period) })) });
     aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(label || "등록 행사 검색")}</h3><p>${escapeHtml(answer)} 하나를 선택해주세요.</p><div class="board-ai-choices">${result.events.map((event, index) => `<button class="board-ai-choice" type="button" data-event-query-choice="${index}">${escapeHtml(eventChoiceLabel(event, result.period))}</button>`).join("")}</div></div>`;
     rememberConversation(userText, answer); speakBoardReply(`${answer} 화면에서 하나를 선택해주세요.`); finishFieldAiAnswer();
   }
@@ -318,7 +341,7 @@
     if (isSettingAdvisorRequest(text)) return "setting_advisor";
     if (isHallStateQueryRequest(text)) return "hall_state_query";
     if (isBoardCommandRequest(text)) return "board_command";
-    return "board_command";
+    return "conversation_agent";
   }
   function settingLayoutLabel(layout) { return layout?.layoutType ? layoutRecommendations.layoutTypeLabel(layout.layoutType) : "미확인"; }
   async function buildSettingAdvisorRows(text) {
@@ -390,6 +413,7 @@
       }
     }
     if (!row) { showMessage("먼저 준비할 행사를 선택해주세요."); return; }
+    rememberSettingAdvisor(row);
     const plan = settingAdvisor.executionPlan(row.currentLayout, row.nextLayout);
     if (/테이블\s*몇/.test(text)) { const answer = plan.tableDelta == null ? "등록된 데이터로 테이블 변경량을 계산하지 못했습니다." : `테이블 ${Math.abs(plan.tableDelta)}개 ${plan.tableDelta > 0 ? "추가" : plan.tableDelta < 0 ? "철수" : "변경 없음"}가 필요합니다.`; showMessage(answer, true); speakBoardReply(answer); return; }
     if (/의자\s*몇/.test(text)) { const answer = plan.seatDelta == null ? "등록된 데이터로 의자 변경량을 계산하지 못했습니다." : `의자 ${Math.abs(plan.seatDelta)}석 ${plan.seatDelta > 0 ? "추가" : plan.seatDelta < 0 ? "철수" : "변경 없음"}가 필요합니다.`; showMessage(answer, true); speakBoardReply(answer); return; }
@@ -954,15 +978,16 @@
     let explicitNewAsset = false;
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
-    const route = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
+    const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
+    const agentPlan = conversationAgent.plan(text, fastRoute); const route = agentPlan.route;
     if (route === "confirm_current_setup") {
       showTransientMessage("완료한 세팅 내용을 확인하고 있습니다…");
-      try { const proposal = await buildConfirmCurrentSetupProposal(text); if (!proposal) showMessage("어느 행사장 세팅을 완료하셨나요?"); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("current setup proposal failed", error); showMessage(error.message || "완료한 세팅을 확인하지 못했습니다."); }
+      try { const proposal = await erpTools.run("proposeCurrentSetupUpdate", { text: agentPlan.text }); if (!proposal) showMessage("어느 행사장 세팅을 완료하셨나요?"); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("current setup proposal failed", error); showMessage(error.message || "완료한 세팅을 확인하지 못했습니다."); }
       return;
     }
     if (route === "setting_execution_plan") { showTransientMessage("현재 세팅과 다음 행사 세팅을 비교하고 있습니다…"); try { await handleSettingExecutionPlan(text); aiInput.value = ""; } catch (error) { console.error("setting execution plan failed", error); showMessage(error.message || "세팅 실행 계획을 만들지 못했습니다."); } return; }
     if (route === "setting_advisor") { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await handleSettingAdvisor(text); aiInput.value = ""; } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } return; }
-    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { await handleEventQuery(text); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
+    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { const selected = agentPlan.selectedResultId ? events.find((item) => String(item.id) === String(agentPlan.selectedResultId)) : null; const queryType = agentPlan.tool === "openEventOriginal" ? "open_event_original" : ""; await erpTools.run(agentPlan.tool && erpTools.has(agentPlan.tool) ? agentPlan.tool : "findEvents", { text: agentPlan.text, event: selected, queryType }); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
     if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (route === "visual_query" && selectedAssetImageFile) { showTransientMessage("선택한 사진을 확인하고 있습니다…"); try { await useSelectedImageForVisualQuery(text); } catch (error) { console.error("selected image query failed", error); showMessage(error.message || "사진을 확인하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
@@ -984,7 +1009,7 @@
     }
     if (!explicitNewAsset && route === "asset_query") {
       showTransientMessage("자산 정보를 조회하고 있습니다…");
-      try { const result = await handleAssetQuery(text); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
+      try { const selection = agentPlan.assetId ? { assetId: agentPlan.assetId } : null; const tool = agentPlan.tool && erpTools.has(agentPlan.tool) ? agentPlan.tool : "findAsset"; const result = await erpTools.run(tool, { text: agentPlan.text, selection }); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
       return;
     }
     if (followupContext || explicitNewAsset || selectedAssetImageFile || route === "asset_intake") {
