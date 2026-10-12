@@ -24,5 +24,5 @@ assert(page.includes('note_type: "others"') && page.includes("[field_setup_obser
 assert(page.includes('source: "manual_confirmed"') && page.includes("confidence: 1"));
 assert(!page.includes('request("event_orders"') && !page.includes('approvedKnowledge'));
 assert(page.includes('String(state.note || "").match(/(\\d+줄)/)'));
-assert(html.includes("operationBoardPage.js?v=27-field-setup-observation"));
+assert(html.includes("operationBoardPage.js?v=28-action-registry"));
 console.log("field setup observation V1 tests passed");

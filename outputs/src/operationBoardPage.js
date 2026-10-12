@@ -73,6 +73,13 @@
     proposeManualTask: ({ text }) => interpret(text),
     proposeAssetChange: ({ text, selection = null, context = null }) => interpretAsset(text, selection, context),
   });
+  const actionRegistry = window.erpActionRegistry.create({
+    search_events: (args) => erpTools.run("findEvents", args), get_event_detail: (args) => erpTools.run("getEventDetail", args), get_event_guest_count: (args) => erpTools.run("getEventDetail", { ...args, queryType: "get_event_guest_count" }), get_event_schedule: (args) => erpTools.run("getEventSchedule", args), get_event_layout: (args) => erpTools.run("getEventLayout", args), open_event_original: (args) => erpTools.run("openEventOriginal", args),
+    search_assets: (args) => erpTools.run("findAsset", args), get_asset_quantity: (args) => erpTools.run("getAssetQuantity", args), get_asset_location: (args) => erpTools.run("findAsset", args), get_asset_movement: (args) => erpTools.run("getAssetMovement", args), create_asset: (args) => erpTools.run("proposeAssetChange", args), increase_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), decrease_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), update_asset_location: (args) => erpTools.run("proposeAssetChange", args),
+    get_current_setup: (args) => erpTools.run("getCurrentHallState", args), confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args),
+    add_schedule: (args) => erpTools.run("proposeScheduleChange", args), update_schedule_time: (args) => erpTools.run("proposeScheduleChange", args), add_manual_task: (args) => erpTools.run("proposeManualTask", args),
+  });
+  function actionResultValue(result) { if (!result?.ok) throw new Error(result?.message || "ERP 작업을 실행하지 못했습니다."); return result.requiresApproval ? result.proposal : result.data; }
   let settingAdvisorRows = [];
   let pendingEventQuery = null;
   let pendingSettingExecutionPlan = null;
@@ -1019,18 +1026,18 @@
     if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
     if (route === "record_field_setup") {
       showTransientMessage("현장에서 확인한 세팅을 정리하고 있습니다…");
-      try { const proposal = await erpTools.run("proposeFieldSetupObservation", { text: agentPlan.text }); if (!proposal) showMessage("어느 행사장 세팅인지 알려주세요."); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("field setup proposal failed", error); showMessage(error.message || "현장 세팅 기록을 확인하지 못했습니다."); }
+      try { const proposal = actionResultValue(await actionRegistry.executeAction("record_field_setup", { text: agentPlan.text })); if (!proposal) showMessage("어느 행사장 세팅인지 알려주세요."); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("field setup proposal failed", error); showMessage(error.message || "현장 세팅 기록을 확인하지 못했습니다."); }
       return;
     }
     if (route === "confirm_current_setup") {
       showTransientMessage("완료한 세팅 내용을 확인하고 있습니다…");
-      try { const proposal = await erpTools.run("proposeCurrentSetupUpdate", { text: agentPlan.text }); if (!proposal) showMessage("어느 행사장 세팅을 완료하셨나요?"); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("current setup proposal failed", error); showMessage(error.message || "완료한 세팅을 확인하지 못했습니다."); }
+      try { const proposal = actionResultValue(await actionRegistry.executeAction("confirm_current_setup", { text: agentPlan.text })); if (!proposal) showMessage("어느 행사장 세팅을 완료하셨나요?"); else showHallStateProposal(proposal); aiInput.value = ""; } catch (error) { console.error("current setup proposal failed", error); showMessage(error.message || "완료한 세팅을 확인하지 못했습니다."); }
       return;
     }
     if (route === "setting_execution_plan") { showTransientMessage("현재 세팅과 다음 행사 세팅을 비교하고 있습니다…"); try { await handleSettingExecutionPlan(text); aiInput.value = ""; } catch (error) { console.error("setting execution plan failed", error); showMessage(error.message || "세팅 실행 계획을 만들지 못했습니다."); } return; }
     if (route === "setting_advisor") { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await handleSettingAdvisor(text); aiInput.value = ""; } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } return; }
-    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { const selected = agentPlan.selectedResultId ? events.find((item) => String(item.id) === String(agentPlan.selectedResultId)) : null; const queryType = agentPlan.tool === "openEventOriginal" ? "open_event_original" : ""; await erpTools.run(agentPlan.tool && erpTools.has(agentPlan.tool) ? agentPlan.tool : "findEvents", { text: agentPlan.text, event: selected, queryType }); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
-    if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { await handleLayoutRecommendation(text); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
+    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { const selected = agentPlan.selectedResultId ? events.find((item) => String(item.id) === String(agentPlan.selectedResultId)) : null; const actionId = agentPlan.tool === "openEventOriginal" ? "open_event_original" : agentPlan.tool === "getEventSchedule" ? "get_event_schedule" : agentPlan.tool === "getEventLayout" ? "get_event_layout" : agentPlan.tool === "getEventDetail" ? "get_event_detail" : "search_events"; actionResultValue(await actionRegistry.executeAction(actionId, { text: agentPlan.text, event: selected })); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
+    if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { actionResultValue(await actionRegistry.executeAction("recommend_layouts", { text })); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (route === "visual_query" && selectedAssetImageFile) { showTransientMessage("선택한 사진을 확인하고 있습니다…"); try { await useSelectedImageForVisualQuery(text); } catch (error) { console.error("selected image query failed", error); showMessage(error.message || "사진을 확인하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
       showTransientMessage("현재 화면에서 한 프레임을 확인하고 있습니다…");
@@ -1043,7 +1050,7 @@
       try { const result = await requestVisualQuery(text, includeImage); showVisualResult(result); aiInput.value = ""; } catch (error) { console.error("visual follow-up failed", error); showMessage(error.message || "시각 질문에 답하지 못했습니다."); }
       return;
     }
-    if (route === "hall_state_query") { showTransientMessage("현재 세팅 상태를 조회하고 있습니다…"); try { await showHallStateQuery(text); aiInput.value = ""; } catch (error) { console.error("hall state query failed", error); showMessage(error.message || "현재 세팅 상태를 조회하지 못했습니다."); } return; }
+    if (route === "hall_state_query") { showTransientMessage("현재 세팅 상태를 조회하고 있습니다…"); try { actionResultValue(await actionRegistry.executeAction("get_current_setup", { text })); aiInput.value = ""; } catch (error) { console.error("hall state query failed", error); showMessage(error.message || "현재 세팅 상태를 조회하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && isHallStateConfirmationRequest(text)) {
       showTransientMessage("현재 세팅 상태를 확인하고 있습니다…");
       try { showHallStateProposal(await interpretHallState(text)); } catch (error) { console.error("hall state intake failed", error); showMessage(error.message || "현재 세팅 상태를 확인하지 못했습니다."); }
@@ -1051,12 +1058,12 @@
     }
     if (!explicitNewAsset && route === "asset_query") {
       showTransientMessage("자산 정보를 조회하고 있습니다…");
-      try { const selection = agentPlan.assetId ? { assetId: agentPlan.assetId } : null; const tool = agentPlan.tool && erpTools.has(agentPlan.tool) ? agentPlan.tool : "findAsset"; const result = await erpTools.run(tool, { text: agentPlan.text, selection }); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
+      try { const selection = agentPlan.assetId ? { assetId: agentPlan.assetId } : null; const actionId = agentPlan.tool === "getAssetQuantity" ? "get_asset_quantity" : agentPlan.tool === "getAssetMovement" ? "get_asset_movement" : "search_assets"; const result = actionResultValue(await actionRegistry.executeAction(actionId, { text: agentPlan.text, selection })); showAssetQueryResult(result, text); aiInput.value = ""; } catch (error) { console.error("asset query failed", error); showMessage(error.message || "자산 조회에 실패했습니다."); }
       return;
     }
     if (followupContext || explicitNewAsset || selectedAssetImageFile || route === "asset_intake") {
       showTransientMessage(followupContext ? "이전 자산 정보에 답변을 반영하고 있습니다…" : selectedAssetImageFile ? "사진을 업로드하고 자산 내용을 확인하고 있습니다…" : "자산 내용을 확인하고 있습니다…");
-      try { const assetSelection = !followupContext && conversationContext.lastDomain === "asset" && conversationContext.asset?.assetId ? { assetId: conversationContext.asset.assetId } : null; const proposal = await interpretAsset(text, assetSelection, followupContext); proposal.userText = text; showAssetProposal(proposal, followupContext, text); aiInput.value = ""; }
+      try { const assetSelection = !followupContext && conversationContext.lastDomain === "asset" && conversationContext.asset?.assetId ? { assetId: conversationContext.asset.assetId } : null; const actionId = isAssetDecreaseRequest(text) ? "decrease_asset_quantity" : isAssetMoveRequest(text) ? "update_asset_location" : /추가|입고/.test(text) ? "increase_asset_quantity" : "create_asset"; const proposal = actionResultValue(await actionRegistry.executeAction(actionId, { text, selection: assetSelection, context: followupContext })); proposal.userText = text; showAssetProposal(proposal, followupContext, text); aiInput.value = ""; }
       catch (error) { console.error("asset intake failed", { status: error.status, body: error.body, error }); await deleteUnlinkedAssetImage(); resetAssetImage(); showMessage(error.message || "자산 확인에 실패했습니다. 저장된 내용은 없습니다."); }
       return;
     }
