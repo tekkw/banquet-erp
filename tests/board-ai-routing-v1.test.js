@@ -31,6 +31,7 @@ vm.runInContext(`
   ${functionSource("isLayoutRecommendationRequest")}
   ${functionSource("isSettingAdvisorRequest")}
   ${functionSource("isSettingExecutionPlanRequest")}
+  ${functionSource("isConfirmCurrentSetupRequest")}
   ${functionSource("boardAiRoute")}
   this.route = boardAiRoute;
 `, context);
@@ -44,6 +45,10 @@ assert.equal(context.route("멀티탭 어디 있어?"), "asset_query");
 assert.equal(context.route("A3 용지 몇 장 있어?"), "asset_query");
 assert.equal(context.route("멀티탭 2개 사용했어"), "asset_intake");
 assert.equal(context.route("13시 커피브레이크 추가해"), "board_command");
+assert.equal(context.route("세팅했어"), "confirm_current_setup");
+assert.equal(context.route("컨벤션A 스쿨식 60석 세팅했어"), "confirm_current_setup");
+assert.equal(context.route("부라노1은 뭐 해야돼?"), "setting_advisor");
+assert.equal(context.route("오늘 뭐 세팅해야 돼?"), "setting_advisor");
 
 const submitStart = page.indexOf('aiForm.addEventListener("submit"');
 assert(page.indexOf('route === "event_query"', submitStart) < page.indexOf('route === "recommend_layouts"', submitStart));
