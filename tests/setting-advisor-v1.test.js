@@ -25,6 +25,6 @@ assert(page.includes('return "setting_advisor"'), "setting_advisor intent가 존
 assert(page.includes("settingAdvisorContextKey") && page.includes("sessionStorage.setItem(settingAdvisorContextKey"), "H: 상담 context를 sessionStorage에 유지한다");
 assert(page.includes("row.nextEvent.guestCount"), "D: 다음 행사 인원은 저장 데이터에서 답한다");
 assert(page.includes("window.openStoredExcel(row.nextEvent.storagePath)"), "F: 기존 Excel preview를 재사용한다");
-assert(html.includes('id="boardSettingAdvisorButton"') && html.includes("settingAdvisor.js?v=1"));
-assert(html.includes("operationBoardPage.js?v=21-setting-advisor"));
+assert(!html.includes('id="boardSettingAdvisorButton"') && html.includes("settingAdvisor.js?v=1"));
+assert(html.includes("operationBoardPage.js?v=22-unified-ai"));
 console.log("setting advisor V1 tests passed");

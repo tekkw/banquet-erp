@@ -7,7 +7,8 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 const edge = fs.readFileSync("supabase/functions/event-order-ai-chat/index.ts", "utf8");
 
 // A: mobile capture uploads to the existing public asset-images bucket.
-assert(html.includes('accept="image/*" capture="environment"'));
+assert(html.includes('accept="image/*"'));
+assert(html.includes('id="boardVisualCameraButton"'), "camera capture remains available from the unified plus menu");
 assert(page.includes("/storage/v1/object/asset-images/"));
 assert(page.includes("사진 업로드 실패"));
 

@@ -6,10 +6,10 @@ const page = fs.readFileSync("outputs/src/operationBoardPage.js", "utf8");
 const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8");
 
 assert(html.includes('id="boardSpeechButton" class="board-field-ai-button"'));
-assert(html.includes("🎙 현장 AI"));
-assert(html.includes("📦 자산 등록"));
-assert(html.includes("operationBoardPage.js?v=21-setting-advisor"));
-assert(html.includes("operationBoardPage.css?v=10-setting-advisor"));
+assert(html.includes('placeholder="현장 AI에게 물어보기..."'));
+assert(html.includes('id="boardAiPlusButton"'));
+assert(html.includes("operationBoardPage.js?v=22-unified-ai"));
+assert(html.includes("operationBoardPage.css?v=11-unified-ai"));
 
 const recognition = page.slice(page.indexOf("function ensureSpeechRecognition"), page.indexOf("function captureVisualFrame"));
 assert(recognition.includes("fieldAiAutoSubmit = true"));
