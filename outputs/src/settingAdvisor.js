@@ -31,10 +31,16 @@
           .filter(({ event, point }) => point.date >= anchor && point.date <= limit && overlaps(currentEvent, event, currentEndPoint.row, point.row) && point.startAt > currentEndPoint.endAt)
           .sort((a, b) => a.point.startAt - b.point.startAt)[0];
         if (!future) return;
-        candidates.push({ space, anchorDate: anchor, currentEvent, nextEvent: future.event, currentEnd: currentEndPoint.end, nextStart: future.point.start, nextEnd: schedulePoints(future.event).filter((point) => point.date === future.point.date && point.venue === future.point.venue).sort((a, b) => b.endAt - a.endAt)[0]?.end || future.point.end, nextDate: future.point.date, gapHours: (future.point.startAt - currentEndPoint.endAt) / 3600000 });
+        candidates.push({ candidateType: "transition", space, anchorDate: anchor, currentEvent, nextEvent: future.event, currentEnd: currentEndPoint.end, nextStart: future.point.start, nextEnd: schedulePoints(future.event).filter((point) => point.date === future.point.date && point.venue === future.point.venue).sort((a, b) => b.endAt - a.endAt)[0]?.end || future.point.end, nextDate: future.point.date, gapHours: (future.point.startAt - currentEndPoint.endAt) / 3600000 });
       });
     });
-    return candidates;
+    const tomorrow = shiftDate(anchor, 1); const anchorPoints = (events || []).flatMap((event) => schedulePoints(event).filter((point) => point.date === anchor).map((point) => ({ event, point })));
+    const preparation = (events || []).flatMap((event) => schedulePoints(event).filter((point) => point.date === tomorrow).map((point) => ({ event, point })))
+      .filter(({ event, point }) => !anchorPoints.some(({ event: currentEvent, point: currentPoint }) => overlaps(currentEvent, event, currentPoint.row, point.row)))
+      .sort((left, right) => left.point.startAt - right.point.startAt)
+      .map(({ event, point }) => ({ candidateType: "preparation", space: point.venue, anchorDate: anchor, currentEvent: null, nextEvent: event, currentEnd: "", nextStart: point.start, nextEnd: schedulePoints(event).filter((item) => item.date === point.date && item.venue === point.venue).sort((a, b) => b.endAt - a.endAt)[0]?.end || point.end, nextDate: point.date, gapHours: null }));
+    const deduped = new Map(); [...candidates, ...preparation].forEach((candidate) => { const key = `${candidate.nextEvent.id}\u0000${String(candidate.space).replace(/\s+/g, "").toLowerCase()}`; if (!deduped.has(key)) deduped.set(key, candidate); });
+    return [...deduped.values()];
   }
   function layoutFacts(source = {}) {
     const text = [source.layout_name, source.layout_type, source.layoutText, source.layout_notes, ...(source.notes || []).map((row) => row.content), ...(source.items || []).map((row) => `${row.item_name || ""} ${row.quantity || ""}`)].filter(Boolean).join(" ");
@@ -50,7 +56,8 @@
   }
   function layoutLabel(value) { return ({ school: "스쿨식", round: "라운드", theater: "극장식", u_shape: "U자" })[value] || value || "미확인"; }
   function recommendation(candidate, change) {
-    if (change === "same") return "큰 변경 없음";
+    if (change === "same") return candidate.candidateType === "preparation" ? "현재 세팅 유지 가능" : "큰 변경 없음";
+    if (candidate.candidateType === "preparation") return `${Number(candidate.nextStart?.slice(0, 2)) < 12 ? "내일 오전 행사" : "내일 행사"} · 오늘 미리 세팅 권장`;
     if (change === "major_change") return "종료 후 바로 변경 권장";
     if (candidate.gapHours <= 12) return "종료 직후 세팅 권장";
     if (candidate.gapHours <= 18 || (/^\d\d:/.test(candidate.nextStart) && Number(candidate.nextStart.slice(0, 2)) < 12 && candidate.nextDate === shiftDate(candidate.anchorDate, 1))) return "오늘 종료 후 세팅 권장";

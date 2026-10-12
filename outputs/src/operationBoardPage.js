@@ -99,7 +99,7 @@
   function loadActiveEventContexts() { try { const value = JSON.parse(sessionStorage.getItem(activeEventContextKey) || "[]"); return Array.isArray(value) ? value.slice(0, 3) : []; } catch { return []; } }
   function loadSettingAdvisorContext() { try { return JSON.parse(sessionStorage.getItem(settingAdvisorContextKey) || "null"); } catch { return null; } }
   function rememberSettingAdvisor(row) {
-    settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent.id, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
+    settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
     try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
     rememberActiveEvent(row.nextEvent);
     renderAiContext();
@@ -333,7 +333,7 @@
     aiResult.innerHTML = `<section><h3>다음 행사 준비</h3><p class="board-ai-status">${escapeHtml(settingAdvisorRows[0].anchorDate)} 종료 후 준비할 다음 행사 ${settingAdvisorRows.length}건</p><div class="board-setting-advisor-list">${settingAdvisorRows.map(settingAdvisorCard).join("")}</div></section>`;
     speakBoardReply(`${Number(settingAdvisorRows[0].anchorDate.slice(8))}일 종료 후 준비할 다음 행사는 ${settingAdvisorRows.length}건입니다. 화면을 확인해주세요.`); finishFieldAiAnswer();
   }
-  function currentSettingAdvisorRow() { return settingAdvisorRows.find((row) => row.currentEvent.id === settingAdvisorContext?.currentEventOrderId && row.nextEvent.id === settingAdvisorContext?.nextEventOrderId) || null; }
+  function currentSettingAdvisorRow() { return settingAdvisorRows.find((row) => (row.currentEvent?.id || null) === (settingAdvisorContext?.currentEventOrderId || null) && row.nextEvent.id === settingAdvisorContext?.nextEventOrderId) || null; }
   function showSettingAdvisorDetail(row) {
     rememberSettingAdvisor(row); const answer = `${row.nextDate.slice(5).replace("-", "/")} ${row.nextStart} ${row.space} ${row.nextEvent.eventName || "행사명 미등록"}을 선택했습니다.`;
     aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>행사 선택됨</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">인원, 레이아웃, 종료 시각, 현재 세팅 차이 또는 원본을 물어보세요.</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button></div></article>`; rememberConversation("행사 선택", answer); speakBoardReply(answer); finishFieldAiAnswer();
