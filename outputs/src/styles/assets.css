@@ -862,7 +862,11 @@ table {
   background: #fff;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
 }
+
+.layout-editor-canvas-shell,
+.layout-editor-canvas-shell * { user-select: none; -webkit-user-select: none; }
 
 .layout-editor-canvas-svg.is-panning-ready,
 .layout-editor-canvas-svg.is-panning {

@@ -55,6 +55,24 @@
     }));
   }
 
+  const STRUCTURAL_OBJECT_TYPES = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
+
+  function isFloorplanStructuralObject(object) {
+    return STRUCTURAL_OBJECT_TYPES.has(object?.objectType || object?.object_type);
+  }
+
+  function cloneFloorplanObjectsForLayout(objects) {
+    return (objects || []).map((source) => {
+      const object = JSON.parse(JSON.stringify(source));
+      const structural = isFloorplanStructuralObject(object);
+      object.locked = structural;
+      object.metadata = { ...(object.metadata || {}) };
+      if (structural) object.metadata.baseFloorplanObject = true;
+      else { delete object.metadata.baseFloorplanObject; object.metadata.layoutDraftFromBase = true; }
+      return object;
+    });
+  }
+
   const LAYOUT_LIBRARY_GROUPS = ["컨벤션", "페스타", "부라노", "올리비아", "카프리", "기타"];
 
   function layoutLibraryGroupName(spaceName, venueName = "") {
@@ -358,7 +376,7 @@
     const WORKSPACE_MIN_SCALE = 0.02;
     const WORKSPACE_MAX_SCALE = 8;
     const WORKSPACE_PAN_SPEED = 1;
-    const fixedObjectTypes = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
+    const fixedObjectTypes = STRUCTURAL_OBJECT_TYPES;
     const layoutTypeOptions = [
       ["all", "전체"], ["school", "스쿨식"], ["round", "라운드식"], ["buffet", "뷔페식"], ["t_shape", "T-Shape"],
       ["u_shape", "U-Shape"], ["hollow_square", "ㅁ-Shape"], ["custom", "기타"],
@@ -409,6 +427,7 @@
     let workspaceFloorplans = [];
     let workspaceLayouts = [];
     let workspaceObjects = [];
+    let workspaceBaseObjects = [];
     let workspaceSelectedId = "";
     let workspaceSelectedIds = new Set();
     let workspaceSourceRow = null;
@@ -439,6 +458,7 @@
     let workspaceSuppressCanvasClick = false;
     let workspaceLastMoveLogAt = 0;
     let workspaceSpacePressed = false;
+    let workspaceFitTimer = null;
     let workspaceUndoStack = [];
     let workspaceRedoStack = [];
     let layoutAiPanel = null;
@@ -659,7 +679,7 @@
 
     function initializeLayoutAiPanel() {
       if (!workspaceStatusbar || document.getElementById("layoutAiPanel")) return;
-      const style = document.createElement("style"); style.textContent = `.layout-ai-panel{margin:12px 0;padding:14px;border:1px solid #c8b26a;border-radius:12px;background:#fffdf5}.layout-ai-panel h3{margin:0 0 8px}.layout-ai-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.layout-ai-form input{min-width:0}.layout-ai-result,.layout-ai-history{margin-top:8px;font-size:13px}.layout-ai-summary{display:flex;gap:8px;flex-wrap:wrap}.layout-ai-summary span{padding:3px 7px;border-radius:999px;background:#eef2f7}.layout-ai-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.layout-ai-errors{color:#b91c1c}.layout-ai-warnings{color:#92400e}`; document.head.append(style);
+      const style = document.createElement("style"); style.textContent = `.layout-ai-panel{margin:12px 0;padding:14px;border:1px solid #c8b26a;border-radius:12px;background:#fffdf5;color:#1B2A3A}.layout-ai-panel h3{margin:0 0 8px;color:#102A40}.layout-ai-panel .layout-ai-result{color:#1B2A3A}.layout-ai-panel .layout-ai-history{color:#526579}.layout-ai-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.layout-ai-form input{min-width:0}.layout-ai-result,.layout-ai-history{margin-top:8px;font-size:13px}.layout-ai-summary{display:flex;gap:8px;flex-wrap:wrap}.layout-ai-summary span{padding:3px 7px;border-radius:999px;background:#eef2f7;color:#102A40}.layout-ai-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.layout-ai-errors{color:#b91c1c}.layout-ai-warnings{color:#92400e}`; document.head.append(style);
       layoutAiPanel = document.createElement("section"); layoutAiPanel.id = "layoutAiPanel"; layoutAiPanel.className = "layout-ai-panel"; layoutAiPanel.innerHTML = `<h3>AI 레이아웃</h3><form class="layout-ai-form" data-layout-ai-form><input data-layout-ai-input placeholder="부라노1 스쿨식 3x7 2석씩 만들어줘" maxlength="200"><button type="submit">생성/수정</button></form><div class="layout-ai-result" data-layout-ai-result>스쿨식 생성 명령을 입력하세요.</div><div class="layout-ai-history" data-layout-ai-history></div><div class="layout-ai-actions"><button type="button" data-layout-ai-save disabled>저장</button><button type="button" data-layout-ai-regenerate disabled>다시 생성</button><button type="button" data-layout-ai-undo disabled>AI 수정 취소</button><button type="button" data-layout-ai-reset disabled>초기화</button></div>`;
       workspaceStatusbar.parentElement?.insertBefore(layoutAiPanel, workspaceStatusbar);
       layoutAiPanel.querySelector("[data-layout-ai-form]")?.addEventListener("submit", async (event) => { event.preventDefault(); const input = layoutAiPanel.querySelector("[data-layout-ai-input]"); const text = input.value.trim(); if (!text) return; await applyLayoutAiCommand(text); input.value = ""; });
@@ -1304,7 +1324,9 @@
       renderLayoutLibrary();
       await loadAllLibraryLayouts();
     }
-    function showLayoutEditor() { floorplanV2EventPanel?.classList.remove("library-mode"); floorplanV2EventPanel?.classList.add("editor-mode"); setTimeout(fitWorkspaceToScreen, 0); }
+    function scheduleWorkspaceFit() { clearTimeout(workspaceFitTimer); workspaceFitTimer = setTimeout(() => { workspaceFitTimer = null; fitWorkspaceToScreen(); }, 0); }
+    function cancelWorkspaceFit() { clearTimeout(workspaceFitTimer); workspaceFitTimer = null; }
+    function showLayoutEditor(preserveViewport = false) { floorplanV2EventPanel?.classList.remove("library-mode"); floorplanV2EventPanel?.classList.add("editor-mode"); if (preserveViewport) cancelWorkspaceFit(); else scheduleWorkspaceFit(); }
     async function selectWorkspaceContext(venueId, spaceId, floorplanId) {
       if (venueId) { workspaceVenueSelect.value = venueId; await handleWorkspaceVenueChange(); }
       if (spaceId) { workspaceSpaceSelect.value = spaceId; await handleWorkspaceSpaceChange(); }
@@ -1312,7 +1334,8 @@
     }
     function startNewLibraryLayout() {
       if (!workspaceFloorplanRecord?.id) { setStatus("새 레이아웃을 만들 기본 도면을 선택해 주세요.", "warn"); return; }
-      workspaceObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+      cancelWorkspaceFit();
+      workspaceObjects = cloneFloorplanObjectsForLayout(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject));
       workspaceSelectedId = "";
       workspaceActiveLayout = null;
       workspaceDirty = false;
@@ -1320,7 +1343,7 @@
       setWorkspaceEditMode("layout");
       if (workspaceNameInput) workspaceNameInput.value = "";
       updateWorkspaceStatus("저장되지 않음");
-      showLayoutEditor();
+      showLayoutEditor(true);
     }
     function typeLabel(type) { return layoutTypeOptions.find(([value]) => value === type)?.[1] || "기타"; }
     async function loadLibraryObjects(layouts = allLibraryLayouts) {
@@ -1428,7 +1451,7 @@
       const floorplanButton = event.target.closest("button[data-floorplan-action]");
       if (floorplanButton) {
         if (floorplanButton.dataset.floorplanAction === "open-base") {
-          workspaceObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+          workspaceObjects = JSON.parse(JSON.stringify(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject)));
           workspaceActiveLayout = null;
           setWorkspaceEditMode("base");
           showLayoutEditor();
@@ -1518,7 +1541,7 @@
       await loadWorkspaceFloorplanState();
       await loadWorkspaceSavedLayouts();
       updateWorkspaceStatus("저장되지 않음");
-      setTimeout(fitWorkspaceToScreen, 0);
+      scheduleWorkspaceFit();
     }
 
     function renderWorkspaceBackground(row) {
@@ -1557,7 +1580,7 @@
       image.dataset.referenceFloorplan = "true";
       workspaceBackgroundLayer.append(image);
       renderWorkspace();
-      setTimeout(fitWorkspaceToScreen, 0);
+      scheduleWorkspaceFit();
     }
 
     function applyWorkspaceHallOutline(outline) {
@@ -1630,6 +1653,7 @@
       applyWorkspaceFloorplanSettings(workspaceFloorplanRecord || workspaceSourceRow);
 
       if (!workspaceFloorplanRecord?.id) {
+        workspaceBaseObjects = [];
         workspaceObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
         renderWorkspace();
         return;
@@ -1645,6 +1669,7 @@
         .filter((row) => row.object_type !== "hall_outline")
         .map(dbObjectToWorkspaceObject)
         .map((object) => ({ ...object, locked: true, metadata: { ...(object.metadata || {}), baseFloorplanObject: true } }));
+      workspaceBaseObjects = JSON.parse(JSON.stringify(fixedObjects));
       workspaceCalibration = null;
       fixedObjects.filter((object) => object.objectType === "calibration").forEach(applyWorkspaceCalibrationFromObject);
       workspaceObjects = [
@@ -1672,9 +1697,9 @@
     async function loadWorkspaceLayoutById(layoutId) {
       workspaceActiveLayout = workspaceLayouts.find((layout) => String(layout.id) === String(layoutId || "")) || null;
       if (workspaceNameInput) workspaceNameInput.value = workspaceActiveLayout?.layout_name || "";
-      const fixedObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+      const baseObjects = JSON.parse(JSON.stringify(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject)));
       if (!workspaceActiveLayout?.id) {
-        workspaceObjects = fixedObjects;
+        workspaceObjects = baseObjects;
         workspaceSelectedId = "";
         workspaceDirty = false;
         updateWorkspaceStatus("??λ릺吏 ?딆쓬");
@@ -1686,7 +1711,7 @@
         `venue_layout_objects?select=*&layout_id=eq.${encodeURIComponent(workspaceActiveLayout.id)}&is_active=eq.true&order=sort_order.asc`
       ).catch(() => []);
       workspaceObjects = [
-        ...fixedObjects,
+        ...baseObjects.filter(isFloorplanStructuralObject),
         ...(layoutRows || []).map(dbObjectToWorkspaceObject),
       ];
       workspaceSelectedId = "";
@@ -2523,9 +2548,9 @@
         marquee.setAttribute("y", String(box.y));
         marquee.setAttribute("width", String(box.width));
         marquee.setAttribute("height", String(box.height));
-        marquee.setAttribute("fill", "rgba(37, 99, 235, .12)");
+        marquee.setAttribute("fill", "none");
         marquee.setAttribute("stroke", "#2563eb");
-        marquee.setAttribute("stroke-width", String(2 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
+        marquee.setAttribute("stroke-width", String(1 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
         marquee.setAttribute("stroke-dasharray", `${7 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)} ${5 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)}`);
         marquee.setAttribute("pointer-events", "none");
         workspaceGuideLayer.append(marquee);
@@ -3350,7 +3375,7 @@
     function canWorkspaceEditObject(object) {
       if (!object) return false;
       if (workspaceEditMode === "base") return isWorkspaceBaseObject(object) && !workspaceFloorplanRecord?.is_locked;
-      return !object.locked && !isWorkspaceBaseObject(object);
+      return !object.locked && !isFloorplanStructuralObject(object);
     }
 
     function renderWorkspaceProperties() {
@@ -3610,6 +3635,7 @@
 
     function resetWorkspaceLayout() {
       workspaceObjects = [];
+      workspaceBaseObjects = [];
       workspaceSelectedId = "";
       workspaceActiveLayout = null;
       workspaceDirty = false;
@@ -3660,13 +3686,15 @@
     }
 
     async function createWorkspaceNewLayout(layoutName, useCurrentFloorplan, floorplanId) {
+      const preserveViewport = !floorplanId || String(workspaceFloorplanSelect?.value || "") === String(floorplanId);
+      const previousView = { ...view };
       if (floorplanId && String(workspaceFloorplanSelect?.value || "") !== String(floorplanId)) {
         workspaceFloorplanSelect.value = floorplanId;
         await handleWorkspaceFloorplanChange();
       }
       pushWorkspaceHistory();
       workspaceObjects = useCurrentFloorplan
-        ? workspaceObjects.filter(isWorkspaceBaseObject)
+        ? cloneFloorplanObjectsForLayout(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject))
         : [];
       workspaceShowFloorplan = useCurrentFloorplan;
       workspaceGrid = !useCurrentFloorplan;
@@ -3676,6 +3704,8 @@
       workspaceActiveLayout = layoutName ? { layout_name: layoutName.trim() || "???덉씠?꾩썐" } : null;
       if (workspaceNameInput) workspaceNameInput.value = workspaceActiveLayout?.layout_name || "";
       if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = "";
+      setWorkspaceEditMode("layout");
+      if (preserveViewport) Object.assign(view, previousView);
       workspaceDirty = false;
       updateWorkspaceStatus("??λ릺吏 ?딆쓬");
       renderWorkspace();
@@ -5083,6 +5113,8 @@
     floorplanOutlineMetrics,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
+    isFloorplanStructuralObject,
+    cloneFloorplanObjectsForLayout,
     layoutLibraryGroupName,
     layoutLibraryObjectGeometry,
     layoutLibraryViewBox,

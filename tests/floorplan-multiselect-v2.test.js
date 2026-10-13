@@ -33,10 +33,11 @@ const marquee = { x: 800, y: 1700, width: 1400, height: 700 };
 assert.strictEqual(tables.filter((item) => api.floorplanObjectIntersectsBox(item, marquee)).length, 5);
 assert(editor.includes('workspaceDragState.mode === "marquee"'));
 
-// D/E. base 객체는 label을 강제 표시하고 layout 모드 편집 대상에서 제외한다.
+// D/E. base label은 유지하고 layout 모드에서는 구조물만 편집 대상에서 제외한다.
 assert(editor.includes("isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames)"));
-assert(editor.includes('return !object.locked && !isWorkspaceBaseObject(object);'));
+assert(editor.includes('return !object.locked && !isFloorplanStructuralObject(object);'));
 assert(assets.includes(".layout-workspace-base-label"));
+assert(editor.includes('marquee.setAttribute("fill", "none")'));
 
 // F. 다크 패널의 제목/본문/보조/입력/placeholder 색을 명시한다.
 ["#F4F7FA", "#C9D5DE", "#96A9BA", "#70879A"].forEach((color) => assert(dark.includes(color), `${color} dark editor color missing`));
