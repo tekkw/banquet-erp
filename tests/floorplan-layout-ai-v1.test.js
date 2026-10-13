@@ -48,7 +48,7 @@ const fixed = { objectType: "pillar", label: "기둥", x: generated[0].x, y: gen
 const invalid = api.validateGeneratedLayout(generated, room, [fixed], initial);
 assert.strictEqual(invalid.valid, false, "F: 기둥 충돌은 저장 불가 오류");
 assert(invalid.errors.some((message) => message.includes("기둥 충돌")));
-assert.strictEqual(api.parseLayoutAiCommand("라운드 7테이블 만들어줘").unsupportedType, true);
+assert.strictEqual(api.parseLayoutAiCommand("라운드 7테이블 만들어줘").understood, false, "라운드는 열×행 없이 추측 생성하지 않는다");
 const exactTables = api.parseLayoutAiCommand("스쿨식 테이블 20개 2석씩").plan;
 assert.strictEqual(api.generateSchoolLayout(exactTables, room, masters, "twenty").filter((row) => row.objectType === "seminar_table").length, 20);
 
@@ -60,6 +60,6 @@ assert(source.includes('openLayoutInfoModal("save", !workspaceActiveLayout?.id)'
 assert(source.includes("layoutAiPlan && !layoutAiValidation?.valid"), "치명적 검증 오류는 기존 저장 버튼에서도 차단한다");
 assert(source.includes("workspaceActiveLayout = null"), "I: 기존 레이아웃 AI 수정은 새 draft로 분리한다");
 assert(!source.includes('mode: "layout_ai"'), "명확한 V1 명령은 Edge/LLM 호출 없이 처리한다");
-assert(html.includes("floorplanEditor.js?v=layout-origin-v1"));
+assert(html.includes("floorplanEditor.js?v=layout-ai-v2"));
 
 console.log("floorplan layout AI V1 tests passed");

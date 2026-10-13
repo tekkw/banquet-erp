@@ -90,6 +90,22 @@
     return LAYOUT_LIBRARY_GROUPS.find((group) => group !== "기타" && name.includes(group.toLowerCase())) || "기타";
   }
 
+  function normalizeLayoutAiContextName(value) {
+    return String(value || "").toUpperCase().replace(/\s+|센터/g, "");
+  }
+
+  function layoutAiContextMatches(requested, currentNames = []) {
+    const target = normalizeLayoutAiContextName(requested);
+    return !target || currentNames.some((name) => {
+      const current = normalizeLayoutAiContextName(name);
+      return current && (current === target || current.endsWith(target) || target.endsWith(current));
+    });
+  }
+
+  function venueFamilyName(value) {
+    return normalizeLayoutAiContextName(value).replace(/[0-9+]+$/g, "");
+  }
+
   function layoutLibraryObjectGeometry(row, width, height) {
     const metadata = row?.metadata || {};
     const objectWidth = Math.max(1, Number(metadata.widthMm) || Number(row?.width) * width || 1);
@@ -115,18 +131,31 @@
 
   function parseLayoutAiCommand(text, currentPlan = null) {
     const value = String(text || "").trim();
-    if (/(라운드|round|u[- ]?shape|u자|ㅁ[- ]?shape|ㅁ자|t[- ]?shape|t자)/i.test(value) && !/(스쿨|세미나|class|school)/i.test(value)) return { unsupportedType: true };
+    const roundRequested = /(라운드|round)/i.test(value); const schoolRequested = /(스쿨|세미나|class|school)/i.test(value);
+    if (/(u[- ]?shape|u자|ㅁ[- ]?shape|ㅁ자|t[- ]?shape|t자)/i.test(value) && !schoolRequested) return { unsupportedType: true };
     const grid = value.match(/(\d+)\s*(?:x|×)\s*(\d+)|(\d+)\s*열\s*(\d+)\s*(?:줄|행)/i); const seats = value.match(/(\d+)\s*석\s*씩|테이블(?:당|마다)?\s*(\d+)\s*석/i);
-    const people = value.match(/(\d+)\s*명/i); const tables = value.match(/테이블\s*(\d+)\s*개/i); const hGap = value.match(/가로\s*간격\s*(\d+)\s*mm/i); const vGap = value.match(/(?:줄|세로)\s*간격\s*(\d+)\s*mm/i);
+    const people = value.match(/(\d+)\s*명/i); const tables = value.match(/(?:테이블\s*)?(\d+)\s*(?:개|T\b)|테이블\s*(\d+)/i); const hGap = value.match(/가로\s*간격\s*(\d+)\s*mm/i); const vGap = value.match(/(?:줄|세로)\s*간격\s*(\d+)\s*mm/i);
+    const tableSpec = value.match(/(?:세미나\s*테이블|테이블)?\s*(1600|1800)(?:\s*mm)?/i);
     const aisle = value.match(/(왼쪽|오른쪽|중앙)\s*통로\s*(\d+)\s*mm/i); const shift = value.match(/전체(?:를)?\s*(뒤|앞|오른쪽|왼쪽)(?:으?로)?\s*(\d+)\s*mm\s*옮겨/i);
-    const plan = { ...(currentPlan || {}), layoutType: "school", orientation: "screen-facing", horizontalGapMm: currentPlan?.horizontalGapMm ?? 400, verticalGapMm: currentPlan?.verticalGapMm ?? 700, aisle: { center: 0, left: 0, right: 0, ...(currentPlan?.aisle || {}) } };
-    if (grid) { plan.columns = Number(grid[1] || grid[3]); plan.rows = Number(grid[2] || grid[4]); } if (seats) plan.seatsPerTable = Number(seats[1] || seats[2]);
-    if (people) plan.targetPeople = Number(people[1]); if (tables) plan.requestedTableCount = Number(tables[1]); if (hGap) plan.horizontalGapMm = Number(hGap[1]); if (vGap) plan.verticalGapMm = Number(vGap[1]);
+    const layoutType = roundRequested ? "round" : schoolRequested ? "school" : currentPlan?.layoutType || "school";
+    const plan = { ...(currentPlan || {}), layoutType, orientation: "screen-facing", aisle: { center: 0, left: 0, right: 0, ...(currentPlan?.aisle || {}) } };
+    if (grid) { plan.columns = Number(grid[1] || grid[3]); plan.rows = Number(grid[2] || grid[4]); } if (seats) { plan.seatsPerTable = Number(seats[1] || seats[2]); plan.explicitSeats = true; }
+    if (people) plan.targetPeople = Number(people[1]); if (tables) plan.requestedTableCount = Number(tables[1] || tables[2]);
+    if (tableSpec) plan.tableWidthMm = Number(tableSpec[1]);
+    if (hGap) { plan.horizontalGapMm = Number(hGap[1]); plan.explicitHorizontalGap = true; } if (vGap) { plan.verticalGapMm = Number(vGap[1]); plan.explicitVerticalGap = true; }
     if (aisle) plan.aisle[({ "왼쪽": "left", "오른쪽": "right", "중앙": "center" })[aisle[1]]] = Number(aisle[2]);
     if (/앞(?:줄|행)\s*(?:하나|한\s*줄)?\s*빼/i.test(value)) plan.rows = Math.max(1, Number(plan.rows || 1) - 1);
     if (/(?:마지막|맨\s*뒤)(?:줄|행)\s*(?:하나|한\s*줄)?\s*빼/i.test(value)) plan.rows = Math.max(1, Number(plan.rows || 1) - 1);
     if (shift) plan.shift = { x: /오른쪽/.test(shift[1]) ? Number(shift[2]) : /왼쪽/.test(shift[1]) ? -Number(shift[2]) : 0, y: /뒤/.test(shift[1]) ? Number(shift[2]) : /앞/.test(shift[1]) ? -Number(shift[2]) : 0 };
     if (/오른쪽\s*통로.*더\s*넓혀/i.test(value) && aisle) plan.shift = { x: -Number(aisle[2]), y: 0 };
+    if (layoutType === "round") {
+      plan.seatsPerTable ||= currentPlan?.seatsPerTable || (/(뷔페|연회)/.test(value) ? 10 : 8);
+      const gridCount = Number(plan.columns || 0) * Number(plan.rows || 0);
+      if (plan.requestedTableCount && gridCount && plan.requestedTableCount !== gridCount) return { plan, needsConfirmation: true, confirmationMessage: `${plan.requestedTableCount}T와 ${plan.columns}x${plan.rows} 조건이 일치하지 않습니다.` };
+      plan.roundTables = plan.requestedTableCount || gridCount; plan.tableCount = plan.roundTables; plan.totalSeats = plan.tableCount * plan.seatsPerTable;
+      return { plan, isModification: Boolean(currentPlan), understood: Boolean(plan.columns && plan.rows && plan.tableCount) };
+    }
+    plan.horizontalGapMm ??= 400; plan.verticalGapMm ??= 700;
     plan.columns ||= currentPlan?.columns || (plan.targetPeople ? 3 : plan.requestedTableCount ? Math.ceil(Math.sqrt(plan.requestedTableCount)) : null); plan.seatsPerTable ||= currentPlan?.seatsPerTable || 2;
     plan.rows ||= currentPlan?.rows || (plan.targetPeople ? Math.ceil(plan.targetPeople / (plan.columns * plan.seatsPerTable)) : plan.requestedTableCount ? Math.ceil(plan.requestedTableCount / plan.columns) : null);
     plan.tableCount = plan.requestedTableCount || Number(plan.columns || 0) * Number(plan.rows || 0); plan.totalSeats = plan.tableCount * plan.seatsPerTable;
@@ -147,12 +176,31 @@
     return ({ top: 0, right: 90, bottom: 180, left: 270 })[direction] ?? 0;
   }
 
+  const ADJUSTABLE_ROUND_SEAT_TEMPLATES = Object.freeze({
+    5: [90, 135, 180, 225, 270],
+    6: [45, 90, 135, 225, 270, 315],
+    7: [45, 90, 135, 180, 225, 270, 315],
+  });
+  const ROUND_SEAT_TEMPLATES = Object.freeze({
+    ...ADJUSTABLE_ROUND_SEAT_TEMPLATES,
+    8: [30, 60, 120, 150, 210, 240, 300, 330],
+    9: [30, 60, 120, 150, 180, 210, 240, 300, 330],
+    10: [0, 30, 60, 120, 150, 180, 210, 240, 300, 330],
+  });
+
+  function getRoundSeatAngles(seatCount, front = "top") {
+    const template = ROUND_SEAT_TEMPLATES[Number(seatCount)];
+    if (!template) return [];
+    const rotation = chairFacingDirection(front);
+    return template.map((angle) => (angle + rotation) % 360);
+  }
+
   function generateSchoolLayout(plan, room, masters, sessionId = "layout_ai") {
     const table = masters.table; const chair = masters.chair; const columns = Number(plan.columns); const rows = Number(plan.rows); const tableWidth = Number(table.widthMm); const tableHeight = Number(table.heightMm); const chairWidth = Number(chair.widthMm); const chairHeight = Number(chair.heightMm);
     const direction = room.frontDirection || frontDirection(room, room.frontObjects || []); const horizontalFront = direction === "left" || direction === "right"; const awaySign = direction === "top" || direction === "left" ? 1 : -1;
-    const groupWidth = columns * tableWidth + (columns - 1) * Number(plan.horizontalGapMm || 0) + Number(plan.aisle?.center || 0); const rowPitch = tableHeight + chairHeight + Number(plan.verticalGapMm || 0);
-    const transverseSize = horizontalFront ? room.heightMm : room.widthMm; const near = Number(room.paddingMm || 800) + Number(plan.aisle?.left || 0); const far = transverseSize - Number(room.paddingMm || 800) - Number(plan.aisle?.right || 0);
-    const startTransverse = (near + far - groupWidth) / 2 + tableWidth / 2; const clearance = Number(room.frontClearanceMm || 1200); const frontSize = horizontalFront ? room.widthMm : room.heightMm;
+    const groupWidth = columns * tableWidth + (columns - 1) * Number(plan.horizontalGapMm || 0) + Number(plan.aisle?.center || 0); const rowPitch = tableHeight + Number(plan.verticalGapMm || 0);
+    const transverseSize = horizontalFront ? room.heightMm : room.widthMm; const near = Number(plan.leftMarginMm ?? room.paddingMm ?? 800) + Number(plan.aisle?.left || 0); const far = transverseSize - Number(plan.rightMarginMm ?? room.paddingMm ?? 800) - Number(plan.aisle?.right || 0);
+    const startTransverse = (near + far - groupWidth) / 2 + tableWidth / 2; const clearance = Number(plan.frontOffsetMm ?? room.frontClearanceMm ?? 1200); const frontSize = horizontalFront ? room.widthMm : room.heightMm;
     const startDepth = direction === "top" || direction === "left" ? clearance + tableHeight / 2 : frontSize - clearance - tableHeight / 2; const objects = []; let z = Number(room.baseZIndex || 0);
     let tableIndex = 0; for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
       if (tableIndex >= Number(plan.tableCount)) continue; tableIndex += 1;
@@ -168,10 +216,93 @@
     return objects;
   }
 
+  function generateRoundLayout(plan, room, masters, sessionId = "layout_ai") {
+    const table = masters.roundTable; const chair = masters.chair;
+    const columns = Number(plan.columns); const rows = Number(plan.rows); const tableCount = Number(plan.roundTables || plan.tableCount);
+    const tableWidth = Number(table.widthMm); const tableHeight = Number(table.heightMm); const chairWidth = Number(chair.widthMm); const chairHeight = Number(chair.heightMm);
+    const direction = room.frontDirection || frontDirection(room, room.frontObjects || []); const angles = getRoundSeatAngles(plan.seatsPerTable, direction);
+    const horizontalGap = Number(plan.horizontalGapMm ?? 1200); const verticalGap = Number(plan.verticalGapMm ?? 1200);
+    const groupWidth = columns * tableWidth + Math.max(0, columns - 1) * horizontalGap; const groupHeight = rows * tableHeight + Math.max(0, rows - 1) * verticalGap;
+    const area = room.usableArea || { left: Number(room.paddingMm || 800), top: Number(room.paddingMm || 800), right: room.widthMm - Number(room.paddingMm || 800), bottom: room.heightMm - Number(room.paddingMm || 800) };
+    const startX = (area.left + area.right - groupWidth) / 2 + tableWidth / 2; const startY = (area.top + area.bottom - groupHeight) / 2 + tableHeight / 2;
+    const radiusX = tableWidth / 2 + chairWidth / 2 + 150; const radiusY = tableHeight / 2 + chairHeight / 2 + 150; const objects = []; let z = Number(room.baseZIndex || 0); let tableIndex = 0;
+    for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
+      if (tableIndex >= tableCount) continue; tableIndex += 1;
+      const x = startX + column * (tableWidth + horizontalGap); const y = startY + row * (tableHeight + verticalGap);
+      const metadata = { generatedBy: "layout_ai", generationSessionId: sessionId, row: row + 1, column: column + 1, frontDirection: direction };
+      objects.push({ instanceId: `${sessionId}_round_${row}_${column}`, masterObjectId: table.id || "", objectType: "round_table", label: `라운드 테이블 ${row + 1}-${column + 1}`, displayShape: table.displayShape || "circle", x, y, widthM: tableWidth / 1000, heightM: tableHeight / 1000, rotation: 0, seatCount: 0, zIndex: ++z, locked: false, metadata });
+      angles.forEach((angle, seat) => {
+        const radians = angle * Math.PI / 180;
+        objects.push({ instanceId: `${sessionId}_chair_${row}_${column}_${seat}`, masterObjectId: chair.id || "", objectType: "chair", label: `의자 ${row + 1}-${column + 1}-${seat + 1}`, displayShape: chair.displayShape || "rect", x: x + Math.sin(radians) * radiusX, y: y - Math.cos(radians) * radiusY, widthM: chairWidth / 1000, heightM: chairHeight / 1000, rotation: (angle + 180) % 360, seatCount: 1, zIndex: ++z, locked: false, metadata: { ...metadata, seat: seat + 1, seatAngle: angle } });
+      });
+    }
+    return objects;
+  }
+
+  function median(values) {
+    const sorted = (values || []).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!sorted.length) return null;
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+
+  function schoolSpacingObjectGeometry(object, room = {}) {
+    const metadata = object?.metadata || {}; const widthMm = Number(metadata.widthMm) || Number(object?.widthM) * 1000 || Number(object?.width) * Number(room.widthMm || 0); const heightMm = Number(metadata.heightMm) || Number(object?.heightM) * 1000 || Number(object?.height) * Number(room.heightMm || 0);
+    const workspaceObject = object?.objectType !== undefined;
+    const normalizedRow = !workspaceObject && Number(object?.width) <= 1 && Number(room.widthMm) > 0;
+    const x = workspaceObject ? Number(object.x) : normalizedRow ? Number(object.x || 0) * room.widthMm + widthMm / 2 : Number(metadata.xMm);
+    const y = workspaceObject ? Number(object.y) : normalizedRow ? Number(object.y || 0) * room.heightMm + heightMm / 2 : Number(metadata.yMm);
+    return { x, y, widthMm, heightMm };
+  }
+
+  function clusterByAxis(items, axis, tolerance) {
+    const groups = [];
+    [...items].sort((a, b) => a[axis] - b[axis]).forEach((item) => {
+      const group = groups.find((candidate) => Math.abs(median(candidate.map((row) => row[axis])) - item[axis]) <= tolerance);
+      if (group) group.push(item); else groups.push([item]);
+    });
+    return groups;
+  }
+
+  function calculateSchoolSpacingProfile(objects, room = {}, options = {}) {
+    const allObjects = objects || []; const tableRows = allObjects.filter((object) => (object.objectType || object.object_type) === "seminar_table");
+    const allGeometries = tableRows.map((object) => ({ object, ...schoolSpacingObjectGeometry(object, room) })).filter((item) => [item.x, item.y, item.widthMm, item.heightMm].every(Number.isFinite));
+    const matchingSpec = allGeometries.filter((item) => (!options.tableWidthMm || Math.abs(item.widthMm - options.tableWidthMm) <= 50) && (!options.tableDepthMm || Math.abs(item.heightMm - options.tableDepthMm) <= 50));
+    const geometries = matchingSpec.length ? matchingSpec : allGeometries;
+    if (!geometries.length) return null;
+    const tableWidthMm = median(geometries.map((item) => item.widthMm)); const tableDepthMm = median(geometries.map((item) => item.heightMm)); const tolerance = Number(options.toleranceMm || Math.max(180, Math.min(tableWidthMm, tableDepthMm) * 0.6));
+    const rowGroups = clusterByAxis(geometries, "y", tolerance); const columnGroups = clusterByAxis(geometries, "x", tolerance);
+    const columnPitches = rowGroups.flatMap((group) => group.sort((a, b) => a.x - b.x).slice(1).map((item, index) => item.x - group[index].x));
+    const rowPitches = columnGroups.flatMap((group) => group.sort((a, b) => a.y - b.y).slice(1).map((item, index) => item.y - group[index].y));
+    const columnPitch = median(columnPitches); const rowPitch = median(rowPitches); const left = Math.min(...geometries.map((item) => item.x - item.widthMm / 2)); const right = Math.max(...geometries.map((item) => item.x + item.widthMm / 2)); const top = Math.min(...geometries.map((item) => item.y - item.heightMm / 2)); const bottom = Math.max(...geometries.map((item) => item.y + item.heightMm / 2));
+    const direction = room.frontDirection || "top"; const frontOffset = ({ top, bottom: Number(room.heightMm || 0) - bottom, left, right: Number(room.widthMm || 0) - right })[direction];
+    const chairCounts = new Map(); allObjects.filter((object) => (object.objectType || object.object_type) === "chair").forEach((chair) => { const key = `${chair.metadata?.row || ""}:${chair.metadata?.column || ""}`; chairCounts.set(key, (chairCounts.get(key) || 0) + 1); });
+    return { tableWidthMm, tableDepthMm, columnPitch, horizontalGapMm: columnPitch == null ? null : columnPitch - tableWidthMm, rowPitch, verticalGapMm: rowPitch == null ? null : rowPitch - tableDepthMm, frontOffsetMm: Number.isFinite(frontOffset) ? frontOffset : null, leftMarginMm: left, rightMarginMm: Number(room.widthMm || 0) ? room.widthMm - right : null, seatsPerTable: Number(options.seatsPerTable) || median([...chairCounts.values()]) };
+  }
+
+  function mergeSchoolSpacingProfiles(profiles) {
+    const rows = (profiles || []).filter(Boolean); if (!rows.length) return null;
+    const keys = ["tableWidthMm", "tableDepthMm", "columnPitch", "horizontalGapMm", "rowPitch", "verticalGapMm", "frontOffsetMm", "leftMarginMm", "rightMarginMm", "seatsPerTable"];
+    return Object.fromEntries(keys.map((key) => [key, median(rows.map((row) => row[key]))]));
+  }
+
+  function applySchoolSpacingProfile(plan, profile) {
+    if (!profile) return plan;
+    const next = { ...plan, spacingProfile: profile };
+    if (!plan.explicitHorizontalGap && profile.horizontalGapMm != null) next.horizontalGapMm = profile.horizontalGapMm;
+    if (!plan.explicitVerticalGap && profile.verticalGapMm != null) next.verticalGapMm = profile.verticalGapMm;
+    if (!plan.explicitSeats && profile.seatsPerTable) next.seatsPerTable = profile.seatsPerTable;
+    if (profile.frontOffsetMm != null) next.frontOffsetMm = profile.frontOffsetMm;
+    if (profile.leftMarginMm != null) next.leftMarginMm = profile.leftMarginMm;
+    if (profile.rightMarginMm != null) next.rightMarginMm = profile.rightMarginMm;
+    next.totalSeats = Number(next.tableCount || 0) * Number(next.seatsPerTable || 0);
+    return next;
+  }
+
   function validateGeneratedLayout(objects, room, fixedObjects = [], plan = {}) {
     const generated = objects.filter((object) => object.metadata?.generatedBy === "layout_ai"); const errors = []; const warnings = []; const box = (object) => ({ left: object.x - object.widthM * 500, right: object.x + object.widthM * 500, top: object.y - object.heightM * 500, bottom: object.y + object.heightM * 500 }); const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     generated.forEach((object) => { const bounds = box(object); if (bounds.left < 0 || bounds.top < 0 || bounds.right > room.widthMm || bounds.bottom > room.heightMm) errors.push(`${object.label}: room boundary 밖`); fixedObjects.forEach((fixed) => { if (overlaps(bounds, box(fixed))) (fixed.objectType === "door" ? warnings : errors).push(`${object.label}: ${fixed.label || fixed.objectType} 충돌`); }); });
-    const tables = generated.filter((object) => object.objectType === "seminar_table"); const chairs = generated.filter((object) => object.objectType === "chair"); for (let i = 0; i < tables.length; i += 1) for (let j = i + 1; j < tables.length; j += 1) if (overlaps(box(tables[i]), box(tables[j]))) errors.push("테이블 간 겹침");
+    const tables = generated.filter((object) => ["seminar_table", "round_table"].includes(object.objectType)); const chairs = generated.filter((object) => object.objectType === "chair"); for (let i = 0; i < tables.length; i += 1) for (let j = i + 1; j < tables.length; j += 1) if (overlaps(box(tables[i]), box(tables[j]))) errors.push("테이블 간 겹침");
     chairs.forEach((chair) => tables.forEach((table) => { if ((chair.metadata?.row !== table.metadata?.row || chair.metadata?.column !== table.metadata?.column) && overlaps(box(chair), box(table))) errors.push(`${chair.label}: 다른 테이블과 비정상 겹침`); }));
     if (tables.length !== Number(plan.tableCount)) errors.push("테이블 수 불일치"); if (chairs.length !== Number(plan.totalSeats)) errors.push("의자 수 불일치");
     return { valid: errors.length === 0, warnings: [...new Set(warnings)], errors: [...new Set(errors)], counts: { tables: tables.length, chairs: chairs.length } };
@@ -694,48 +825,82 @@
       workspaceStatusbar.parentElement?.insertBefore(layoutAiPanel, workspaceStatusbar);
       layoutAiPanel.querySelector("[data-layout-ai-form]")?.addEventListener("submit", async (event) => { event.preventDefault(); const input = layoutAiPanel.querySelector("[data-layout-ai-input]"); const text = input.value.trim(); if (!text) return; await applyLayoutAiCommand(text); input.value = ""; });
       layoutAiPanel.querySelector("[data-layout-ai-save]")?.addEventListener("click", () => { if (!layoutAiValidation?.valid) return; openLayoutInfoModal("save", !workspaceActiveLayout?.id); });
-      layoutAiPanel.querySelector("[data-layout-ai-regenerate]")?.addEventListener("click", () => layoutAiPlan && renderLayoutAiDraft(layoutAiPlan, "같은 조건으로 다시 생성했습니다."));
+      layoutAiPanel.querySelector("[data-layout-ai-regenerate]")?.addEventListener("click", async () => { if (layoutAiPlan) await renderLayoutAiDraft(layoutAiPlan, "같은 조건으로 다시 생성했습니다."); });
       layoutAiPanel.querySelector("[data-layout-ai-undo]")?.addEventListener("click", () => { undoWorkspaceChange(); layoutAiPlan = layoutAiPreviousPlan; layoutAiPreviousPlan = null; layoutAiValidation = layoutAiPlan ? validateGeneratedLayout(workspaceObjects, { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, workspaceObjects.filter(isWorkspaceBaseObject), layoutAiPlan) : null; layoutAiConversation.push({ user: "AI 수정 취소", answer: "직전 상태를 복원했습니다." }); renderLayoutAiPanel(); });
       layoutAiPanel.querySelector("[data-layout-ai-reset]")?.addEventListener("click", resetLayoutAiDraft);
     }
     function layoutAiRequestedSpace(text) { return String(text).replace(/\s+/g, "").match(/(?:부라노|카프리)[123]|컨벤션(?:AB|A|B)/i)?.[0] || ""; }
-    function normalizeLayoutAiSpace(value) { return String(value || "").toUpperCase().replace(/\s+|센터/g, ""); }
     async function ensureLayoutAiSpace(text) {
       const requested = layoutAiRequestedSpace(text); if (!requested) return;
       const current = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value));
-      if (normalizeLayoutAiSpace(current?.space_name).endsWith(normalizeLayoutAiSpace(requested))) return;
-      const match = workspaceSpaces.find((space) => normalizeLayoutAiSpace(space.space_name).endsWith(normalizeLayoutAiSpace(requested)));
+      const currentVenue = workspaceVenues.find((venue) => String(venue.id) === String(workspaceVenueSelect?.value));
+      const currentFloorplan = workspaceFloorplans.find((floorplan) => String(floorplan.id) === String(workspaceFloorplanSelect?.value));
+      const currentNames = [currentVenue?.venue_name, current?.space_name, currentFloorplan?.floorplan_name];
+      if (workspaceFloorplanRecord?.id) {
+        if (!layoutAiContextMatches(requested, currentNames)) throw new Error(`현재 편집 공간(${currentNames.filter(Boolean).join(" / ")})과 요청 공간(${requested})이 다릅니다. 공간 전환을 확인해주세요.`);
+        return;
+      }
+      if (layoutAiContextMatches(requested, currentNames)) return;
+      const match = workspaceSpaces.find((space) => layoutAiContextMatches(requested, [space.space_name]));
       if (!match) throw new Error(`${requested} 공간을 현재 장소에서 찾지 못했습니다. 장소를 먼저 선택해주세요.`);
       workspaceSpaceSelect.value = match.id; await handleWorkspaceSpaceChange();
       if (workspaceFloorplanSelect?.options.length > 1) { workspaceFloorplanSelect.selectedIndex = 1; await handleWorkspaceFloorplanChange(); }
     }
-    function layoutAiMasters() {
-      const table = layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "seminar_table") || defaultObjectTypes.find((item) => item.object_type === "seminar_table");
-      const chair = layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "chair") || defaultObjectTypes.find((item) => item.object_type === "chair");
-      return { table: { id: table?.id || "", widthMm: Number(table?.default_width_m || 1.8) * 1000, heightMm: Number(table?.default_height_m || .45) * 1000, displayShape: table?.display_shape || "rect" }, chair: { id: chair?.id || "", widthMm: Number(chair?.default_width_m || .45) * 1000, heightMm: Number(chair?.default_height_m || .45) * 1000, displayShape: chair?.display_shape || "rect" } };
+    function layoutAiMasters(plan) {
+      const requestedTableWidth = Number(plan?.tableWidthMm || 0);
+      const currentSpace = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value)); const currentVenueId = workspaceVenueSelect?.value || "";
+      const scopedMasters = (type) => layoutObjectTypes.filter((item) => item.is_active !== false && item.object_type === type).filter((item) => (!item.space_id || String(item.space_id) === String(currentSpace?.id)) && (!item.venue_id || String(item.venue_id) === String(currentVenueId)) && (!item.floor || String(item.floor) === String(currentSpace?.floor))).sort((a, b) => Number(Boolean(b.space_id)) + Number(Boolean(b.venue_id)) + Number(Boolean(b.floor)) - Number(Boolean(a.space_id)) - Number(Boolean(a.venue_id)) - Number(Boolean(a.floor)));
+      const seminarTables = scopedMasters("seminar_table");
+      const table = seminarTables.find((item) => requestedTableWidth && Math.abs(Number(item.default_width_m || 0) * 1000 - requestedTableWidth) <= 10) || seminarTables[0] || defaultObjectTypes.find((item) => item.object_type === "seminar_table");
+      const roundTable = scopedMasters("round_table")[0] || defaultObjectTypes.find((item) => item.object_type === "round_table");
+      const chair = scopedMasters("chair")[0] || defaultObjectTypes.find((item) => item.object_type === "chair");
+      return { table: { id: table?.id || "", widthMm: Number(table?.default_width_m || 1.8) * 1000, heightMm: Number(table?.default_height_m || .45) * 1000, displayShape: table?.display_shape || "rect" }, roundTable: { id: roundTable?.id || "", widthMm: Number(roundTable?.default_width_m || 1.8) * 1000, heightMm: Number(roundTable?.default_height_m || 1.8) * 1000, displayShape: roundTable?.display_shape || "circle" }, chair: { id: chair?.id || "", widthMm: Number(chair?.default_width_m || .45) * 1000, heightMm: Number(chair?.default_height_m || .45) * 1000, displayShape: chair?.display_shape || "rect" } };
     }
-    function renderLayoutAiDraft(plan, answer) {
+    function layoutAiUsableArea(fixed, room) {
+      const allowed = fixed.find((object) => object.objectType === "allowed_area");
+      if (!allowed) return null;
+      return { left: Math.max(0, allowed.x - allowed.widthM * 500), top: Math.max(0, allowed.y - allowed.heightM * 500), right: Math.min(room.widthMm, allowed.x + allowed.widthM * 500), bottom: Math.min(room.heightMm, allowed.y + allowed.heightM * 500) };
+    }
+    async function layoutAiSchoolSpacingProfile(plan, room, masters) {
+      if (!allLibraryLayouts.length) await loadAllLibraryLayouts();
+      const currentSpaceId = workspaceSpaceSelect?.value || ""; const currentVenueId = workspaceVenueSelect?.value || "";
+      const currentVenueName = workspaceVenues.find((venue) => String(venue.id) === String(currentVenueId))?.venue_name || ""; const currentFamily = venueFamilyName(currentVenueName);
+      const candidates = (allLibraryLayouts.length ? allLibraryLayouts : workspaceLayouts).filter((layout) => /school|스쿨|세미나/i.test(String(layout.layout_type || layout.layout_name || ""))).map((layout) => {
+        const floorplan = allLibraryFloorplans.get(String(layout.floorplan_id || "")); const candidateRoom = { widthMm: Number(floorplan?.metadata?.widthMm) || Number(floorplan?.actual_width) * 1000 || room.widthMm, heightMm: Number(floorplan?.metadata?.heightMm) || Number(floorplan?.actual_height) * 1000 || room.heightMm, frontDirection: "top" };
+        const screenRow = (libraryFloorplanObjects.get(String(layout.floorplan_id || "")) || []).find((object) => object.object_type === "screen");
+        if (screenRow) { const screen = schoolSpacingObjectGeometry(screenRow, candidateRoom); candidateRoom.frontDirection = frontDirection(candidateRoom, [{ objectType: "screen", x: screen.x, y: screen.y }]); }
+        const profile = calculateSchoolSpacingProfile(libraryObjectsByLayout.get(layout.id) || [], candidateRoom, { seatsPerTable: layout.seats_per_table, tableWidthMm: masters.table.widthMm, tableDepthMm: masters.table.heightMm }); if (!profile) return null;
+        const sameSpace = String(layout.space_id || "") === String(currentSpaceId); const sameSpec = Math.abs(Number(profile.tableWidthMm || 0) - Number(masters.table.widthMm || 0)) <= 50 && Math.abs(Number(profile.tableDepthMm || 0) - Number(masters.table.heightMm || 0)) <= 50;
+        const venueName = allLibraryVenues.get(String(layout.venue_id || ""))?.venue_name || ""; const sameFamily = currentFamily && venueFamilyName(venueName) === currentFamily;
+        return { profile, priority: sameSpace && sameSpec ? 1 : sameSpace ? 2 : sameFamily ? 3 : 4 };
+      }).filter((candidate) => candidate && candidate.priority < 4);
+      const priority = Math.min(...candidates.map((candidate) => candidate.priority));
+      return Number.isFinite(priority) ? mergeSchoolSpacingProfiles(candidates.filter((candidate) => candidate.priority === priority).map((candidate) => candidate.profile)) : null;
+    }
+    async function renderLayoutAiDraft(plan, answer) {
       if (!workspaceFloorplanRecord?.id) throw new Error("공간의 기본 도면을 먼저 선택해주세요.");
       pushWorkspaceHistory(); layoutAiPreviousPlan = layoutAiPlan ? JSON.parse(JSON.stringify(layoutAiPlan)) : null; layoutAiSessionId ||= `layout_ai_${Date.now()}`;
-      const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex(), frontDirection: frontDirection({ widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, fixed) };
-      const generated = generateSchoolLayout(plan, room, layoutAiMasters(), layoutAiSessionId); layoutAiValidation = validateGeneratedLayout(generated, room, fixed, plan);
+      const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex(), frontDirection: frontDirection({ widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, fixed) }; room.usableArea = layoutAiUsableArea(fixed, room);
+      const masters = layoutAiMasters(plan); if (plan.layoutType === "school") plan = applySchoolSpacingProfile(plan, await layoutAiSchoolSpacingProfile(plan, room, masters));
+      const generated = plan.layoutType === "round" ? generateRoundLayout(plan, room, masters, layoutAiSessionId) : generateSchoolLayout(plan, room, masters, layoutAiSessionId); layoutAiValidation = validateGeneratedLayout(generated, room, fixed, plan);
       workspaceObjects = [...fixed, ...generated]; workspaceActiveLayout = null; if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = ""; layoutAiPlan = plan;
       const spaceName = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value))?.space_name || "선택 공간"; plan.spaceId = workspaceSpaceSelect?.value || null; plan.spaceName = spaceName;
-      if (workspaceNameInput) workspaceNameInput.value = `${spaceName} 스쿨식 ${plan.columns}x${plan.rows} ${plan.totalSeats}석`;
-      pendingLayoutInfo = { layout_type: "school", layout_name: workspaceNameInput?.value || "AI 스쿨식", min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: "AI deterministic draft" };
-      workspaceSourceRow = { ...(workspaceSourceRow || {}), row_count: plan.rows, column_count: plan.columns, seats_per_table: plan.seatsPerTable, table_count: plan.tableCount, layout_type: "school" };
+      const typeLabel = plan.layoutType === "round" ? "라운드" : "스쿨식"; if (workspaceNameInput) workspaceNameInput.value = `${spaceName} ${typeLabel} ${plan.columns}x${plan.rows} ${plan.totalSeats}석`;
+      pendingLayoutInfo = { layout_type: plan.layoutType, layout_name: workspaceNameInput?.value || `AI ${typeLabel}`, min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: "AI deterministic draft" };
+      workspaceSourceRow = { ...(workspaceSourceRow || {}), row_count: plan.rows, column_count: plan.columns, seats_per_table: plan.seatsPerTable, table_count: plan.tableCount, layout_type: plan.layoutType };
       markWorkspaceDirty(); renderWorkspace(); layoutAiConversation.push({ user: answer, answer: `${plan.tableCount}T · ${plan.totalSeats}석` }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel();
     }
     async function applyLayoutAiCommand(text) {
       try {
         await ensureLayoutAiSpace(text); const parsed = parseLayoutAiCommand(text, layoutAiPlan || (workspaceActiveLayout ? { columns: workspaceActiveLayout.column_count, rows: workspaceActiveLayout.row_count, seatsPerTable: workspaceActiveLayout.seats_per_table || 2 } : null));
-        if (parsed.unsupportedType) { layoutAiConversation.push({ user: text, answer: "현재 자동 생성 V1은 스쿨식만 지원합니다." }); renderLayoutAiPanel(); return; }
-        if (!parsed.understood) throw new Error("열×행을 알려주세요. 예: 스쿨식 3x7 2석씩"); renderLayoutAiDraft(parsed.plan, text);
+        if (parsed.unsupportedType) { layoutAiConversation.push({ user: text, answer: "현재 자동 생성 V2는 스쿨식과 라운드식을 지원합니다." }); renderLayoutAiPanel(); return; }
+        if (parsed.needsConfirmation) throw new Error(parsed.confirmationMessage);
+        if (!parsed.understood) throw new Error("열×행을 알려주세요. 예: 스쿨식 3x7 또는 라운드 2x3 6T"); await renderLayoutAiDraft(parsed.plan, text);
       } catch (error) { layoutAiConversation.push({ user: text, answer: error.message || "명령을 적용하지 못했습니다." }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel(); }
     }
     function renderLayoutAiPanel() {
       if (!layoutAiPanel) return; const result = layoutAiPanel.querySelector("[data-layout-ai-result]"); const history = layoutAiPanel.querySelector("[data-layout-ai-history]");
-      if (layoutAiPlan) result.innerHTML = `<div class="layout-ai-summary"><span>AI 생성안</span><span>${escapeHtml(layoutAiPlan.spaceName || "")}</span><span>스쿨식 ${layoutAiPlan.columns}×${layoutAiPlan.rows}</span><span>${layoutAiPlan.tableCount}T</span><span>${layoutAiPlan.totalSeats}석</span></div>${layoutAiValidation?.errors.length ? `<p class="layout-ai-errors">${escapeHtml(layoutAiValidation.errors.slice(0, 3).join(" · "))}</p>` : ""}${layoutAiValidation?.warnings.length ? `<p class="layout-ai-warnings">${escapeHtml(layoutAiValidation.warnings.slice(0, 3).join(" · "))}</p>` : `<p>${layoutAiValidation?.valid ? "검증 완료" : ""}</p>`}`;
+      if (layoutAiPlan) result.innerHTML = `<div class="layout-ai-summary"><span>AI 생성안</span><span>${escapeHtml(layoutAiPlan.spaceName || "")}</span><span>${layoutAiPlan.layoutType === "round" ? "라운드" : "스쿨식"} ${layoutAiPlan.columns}×${layoutAiPlan.rows}</span><span>${layoutAiPlan.tableCount}T</span><span>${layoutAiPlan.totalSeats}석</span></div>${layoutAiValidation?.errors.length ? `<p class="layout-ai-errors">${escapeHtml(layoutAiValidation.errors.slice(0, 3).join(" · "))}</p>` : ""}${layoutAiValidation?.warnings.length ? `<p class="layout-ai-warnings">${escapeHtml(layoutAiValidation.warnings.slice(0, 3).join(" · "))}</p>` : `<p>${layoutAiValidation?.valid ? "검증 완료" : ""}</p>`}`;
       history.innerHTML = layoutAiConversation.slice(-5).map((turn) => `<p><strong>${escapeHtml(turn.user)}</strong><br>${escapeHtml(turn.answer)}</p>`).join("");
       layoutAiPanel.querySelector("[data-layout-ai-save]").disabled = !layoutAiValidation?.valid; layoutAiPanel.querySelector("[data-layout-ai-regenerate]").disabled = !layoutAiPlan; layoutAiPanel.querySelector("[data-layout-ai-undo]").disabled = !workspaceUndoStack.length; layoutAiPanel.querySelector("[data-layout-ai-reset]").disabled = !layoutAiPlan;
     }
@@ -5144,12 +5309,20 @@
     isFloorplanStructuralObject,
     cloneFloorplanObjectsForLayout,
     layoutLibraryGroupName,
+    normalizeLayoutAiContextName,
+    layoutAiContextMatches,
+    venueFamilyName,
     layoutLibraryObjectGeometry,
     layoutLibraryViewBox,
     parseLayoutAiCommand,
     frontDirection,
     chairFacingDirection,
+    getRoundSeatAngles,
     generateSchoolLayout,
+    generateRoundLayout,
+    calculateSchoolSpacingProfile,
+    mergeSchoolSpacingProfiles,
+    applySchoolSpacingProfile,
     validateGeneratedLayout,
   };
 })();
