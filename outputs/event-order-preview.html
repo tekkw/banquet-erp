@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=correction-learning-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=global-ai-drawer-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -163,26 +163,6 @@
         <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
         <section id="weeklySetupWidget" class="operation-board weekly-setup-widget" aria-label="다음 세팅 할 일"></section>
 
-        <aside class="ai-chat-panel dashboard-ai-widget" aria-label="연회장 AI 비서">
-          <div class="ai-chat-header">
-            <div>
-              <h2>연회장 AI 비서</h2>
-              <p><strong>(Banquet AI Assistant)</strong></p>
-              <p>여수 베네치아 호텔 연회팀 전용 AI 비서입니다.<br>저장된 이벤오더 데이터와 연회장 운영 정보를 기반으로 답변합니다.</p>
-            </div>
-          </div>
-          <div id="chatMessages" class="chat-messages" aria-live="polite">
-            <div class="chat-message assistant">
-              <div class="chat-bubble">저장된 이벤트오더, 연회장 운영 정보, 체크리스트를 물어보세요.</div>
-            </div>
-          </div>
-          <form id="chatForm" class="chat-form">
-            <textarea id="chatInput" rows="3" placeholder="예: 6월 26일 행사 스케줄 알려줘"></textarea>
-            <button id="chatSendButton" class="primary-button" type="submit">질문</button>
-          </form>
-          <button class="secondary-button dashboard-ai-full-button" type="button" data-ai-fullscreen>AI 비서 전체 화면</button>
-          <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰"></section>
-        </aside>
         <dialog id="dailyBriefingDialog" class="daily-briefing-dialog" aria-labelledby="dailyBriefingTitle">
           <div id="dailyBriefingContent"></div>
           <form method="dialog"><button class="primary-button" value="confirm">확인</button></form>
@@ -907,6 +887,22 @@
       </section>
     </div>
 
+    <button id="globalAiLauncher" class="global-ai-launcher" type="button" aria-controls="globalAiDrawer" aria-expanded="false">AI</button>
+    <aside id="globalAiDrawer" class="ai-chat-panel dashboard-ai-widget global-ai-drawer" aria-label="전역 AI 비서" hidden>
+      <div class="ai-chat-header">
+        <div><h2>AI 비서</h2><p>현재 화면을 유지한 채 대화합니다.</p></div>
+        <button id="globalAiCloseButton" class="icon-button" type="button" aria-label="AI 비서 닫기">×</button>
+      </div>
+      <div id="chatMessages" class="chat-messages" aria-live="polite">
+        <div class="chat-message assistant"><div class="chat-bubble">저장된 이벤트오더와 연회 운영 정보를 물어보세요.</div></div>
+      </div>
+      <form id="chatForm" class="chat-form">
+        <textarea id="chatInput" rows="2" placeholder="예: 오늘 행사 스케줄 알려줘"></textarea>
+        <button id="globalAiVoiceButton" class="secondary-button global-ai-voice-button" type="button" aria-label="음성 입력" aria-pressed="false">🎙</button>
+        <button id="chatSendButton" class="primary-button" type="submit">질문</button>
+      </form>
+      <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰" hidden></section>
+    </aside>
   </main>
 
   <div id="eventModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -1106,10 +1102,10 @@
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=base-floorplan-management-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
-  <script src="./src/aiAssistant.js?v=correction-learning-v1"></script>
+  <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
   <script src="./src/operationBoard.js?v=operation-board-v2-checkout-v3"></script>
   <script src="./src/pushNotifications.js?v=web-push-v1"></script>
-  <script src="./src/dashboardWidgets.js?v=dashboard-ai-overlay-v1"></script>
+  <script src="./src/dashboardWidgets.js?v=global-ai-drawer-v1"></script>
   <script>
     /*
      * 역할:
@@ -1321,6 +1317,10 @@
     const chatInput = document.querySelector("#chatInput");
     const chatMessages = document.querySelector("#chatMessages");
     const chatSendButton = document.querySelector("#chatSendButton");
+    const globalAiLauncher = document.querySelector("#globalAiLauncher");
+    const globalAiDrawer = document.querySelector("#globalAiDrawer");
+    const globalAiCloseButton = document.querySelector("#globalAiCloseButton");
+    const globalAiVoiceButton = document.querySelector("#globalAiVoiceButton");
     const aiInterviewPanel = document.querySelector("#aiInterviewPanel");
     const aiPageMessages = document.querySelector("#aiPageMessages");
     const aiPageChatForm = document.querySelector("#aiPageChatForm");
@@ -1768,6 +1768,8 @@
       },
       state: {
         getAssets: () => banquetAssets,
+        getPendingEvent: () => pendingEvent,
+        getPageContext: () => ({ page: appMain.dataset.activePage || "home" }),
       },
       callbacks: {
         onAnalysisStateChange: () => {
@@ -1787,6 +1789,7 @@
       initializeAiAssistantPage,
       loadAiReferenceStats,
       requestAiAnalysis,
+      resetAiAnalysis,
       createAiAnalysisSection,
       loadCurrentInterview,
       analyzeEventOrderForKnowledgeGaps,
@@ -1819,6 +1822,9 @@
     bindVenueLayoutEvents();
     input.addEventListener("change", handleExcelUpload);
     chatForm.addEventListener("submit", handleChatSubmit);
+    globalAiLauncher.addEventListener("click", openGlobalAiDrawer);
+    globalAiCloseButton.addEventListener("click", closeGlobalAiDrawer);
+    globalAiVoiceButton.addEventListener("click", toggleGlobalAiVoiceInput);
     aiPageChatForm.addEventListener("submit", handleAiPageChatSubmit);
     aiPageChatInput.addEventListener("keydown", handleAiPageInputKeydown);
     aiPageAttachmentInput.addEventListener("change", handleAiAttachmentSelect);
@@ -1949,9 +1955,9 @@
         selectedSaveDates = [...pendingEvent.calendarDates].sort();
         await resolveAndApplyVenueInfo(pendingEvent);
 
+        resetAiAnalysis();
         renderExtractedInfo(previewExtracted);
         loadSimilarEventsForPreview();
-        requestAiAnalysis(pendingEvent);
 
         const totalRows = loadedSheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
         const foundCount = fields.filter((field) => {
@@ -3189,9 +3195,10 @@
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
       renderCalendar();
-      setStatus(overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다. AI가 내용을 검토하고 있습니다.");
+      setStatus(overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다.");
       showToast(overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다.");
-      await reviewSavedEventOrderWithAi(savedEvent.id);
+      await loadEventsFromSupabase();
+      showErpPage("home");
     }
 
     function captureExtractionValues(extracted) {
@@ -3747,6 +3754,53 @@
         others: notes.filter((note) => note.note_type === "others").map((note) => note.content),
         originalFileObject: null,
       };
+    }
+
+    let globalAiSpeechRecognition = null;
+    let globalAiListening = false;
+
+    function openGlobalAiDrawer() {
+      globalAiDrawer.hidden = false;
+      globalAiLauncher.setAttribute("aria-expanded", "true");
+      requestAnimationFrame(() => chatInput.focus());
+    }
+
+    function closeGlobalAiDrawer() {
+      globalAiDrawer.hidden = true;
+      globalAiLauncher.setAttribute("aria-expanded", "false");
+      globalAiLauncher.focus();
+    }
+
+    function toggleGlobalAiVoiceInput() {
+      const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognitionApi) {
+        globalAiVoiceButton.disabled = true;
+        globalAiVoiceButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다.";
+        return;
+      }
+      if (!globalAiSpeechRecognition) {
+        globalAiSpeechRecognition = new SpeechRecognitionApi();
+        globalAiSpeechRecognition.lang = "ko-KR";
+        globalAiSpeechRecognition.interimResults = false;
+        globalAiSpeechRecognition.continuous = false;
+        globalAiSpeechRecognition.onstart = () => {
+          globalAiListening = true;
+          globalAiVoiceButton.setAttribute("aria-pressed", "true");
+          globalAiVoiceButton.textContent = "●";
+        };
+        globalAiSpeechRecognition.onresult = (event) => {
+          const transcript = Array.from(event.results).map((result) => result[0]?.transcript || "").join(" ").trim();
+          if (transcript) chatInput.value = [chatInput.value.trim(), transcript].filter(Boolean).join(" ");
+        };
+        globalAiSpeechRecognition.onend = () => {
+          globalAiListening = false;
+          globalAiVoiceButton.setAttribute("aria-pressed", "false");
+          globalAiVoiceButton.textContent = "🎙";
+          chatInput.focus();
+        };
+      }
+      if (globalAiListening) globalAiSpeechRecognition.stop();
+      else globalAiSpeechRecognition.start();
     }
 
     function handleMobileNavigation(target) {

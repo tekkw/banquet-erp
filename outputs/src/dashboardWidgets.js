@@ -15,7 +15,6 @@
     { id: "mini-calendar", name: "미니 캘린더", selector: ".dashboard-month-card", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
     { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 8, rowSpan: 5, minColSpan: 5, minRowSpan: 5 },
     { id: "quick", name: "빠른 메뉴", selector: ".dashboard-widget-grid", colSpan: 4, rowSpan: 4, minColSpan: 3, minRowSpan: 3 },
-    { id: "ai-assistant", name: "AI 비서", selector: ".dashboard-ai-widget", colSpan: 4, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
   ];
 
   let grid;
@@ -72,7 +71,6 @@
     if (!home || home.querySelector(".dashboard-widget-layout")) return;
     decorateChrome();
     ensureQuickActions(home);
-    setupDashboardAiOverlay(home);
     ensureHallCurrentStatesWidget(home);
     const header = document.createElement("header");
     header.className = "dashboard-home-header";

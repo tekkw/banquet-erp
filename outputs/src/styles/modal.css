@@ -56,6 +56,25 @@
   padding: 18px;
 }
 
+@media (min-width: 769px) {
+  #eventModal .modal {
+    max-height: calc(100dvh - 24px);
+  }
+
+  #eventModal .modal-body {
+    padding: 14px;
+  }
+
+  #eventModal .card-grid {
+    gap: 8px;
+  }
+
+  #eventModal .info-card {
+    min-height: 72px;
+    padding: 10px 12px;
+  }
+}
+
 .excel-viewer-body {
   flex: 1 1 auto;
   min-height: 0;

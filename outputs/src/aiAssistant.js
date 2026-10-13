@@ -54,6 +54,7 @@
     let aiAnalysisRawText = "";
     let aiAnalysisLoading = false;
     let aiAnalysisError = "";
+    let aiAnalysisExpanded = false;
     let aiLayoutRecommendations = [];
     let aiLayoutRecommendationError = "";
     let currentInterview = null;
@@ -92,6 +93,8 @@
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
     const CORRECTION_LOG_KEY = "banquetErp.eventOrderCorrections.v1";
     const CORRECTION_SUGGESTION_KEY = "banquetErp.aiCorrectionSuggestions.v1";
+    const conversationAgent = window.erpConversationAgent?.create({ storage: window.sessionStorage, storageKey: "banquetErp.globalAiContext.v1", maxSteps: 4 });
+    const actionRegistry = window.erpActionRegistry?.create({});
     const CORRECTION_FIELDS = new Map([
       ["guestcount", "guestCount"], ["venue", "venue"], ["place", "venue"],
       ["eventdate", "eventDate"], ["eventtype", "eventType"], ["mealtype", "mealType"],
@@ -137,6 +140,12 @@
       event.preventDefault();
       const question = chatInput.value.trim();
       if (!question) return;
+      const pageContext = state.getPageContext?.() || { page: "home" };
+      const pageRouteHint = { calendar: "event_query", assets: "asset_query", layouts: "recommend_layouts" }[pageContext.page] || "conversation_agent";
+      const plan = conversationAgent?.plan(question, pageRouteHint) || null;
+      const actionId = plan?.route === "event_query" ? "search_events" : plan?.route === "asset_query" ? "search_assets" : plan?.route === "recommend_layouts" ? "recommend_layouts" : plan?.route === "hall_state_query" ? "get_current_setup" : "";
+      chatMessages.dataset.pageContext = pageContext.page || "home";
+      chatMessages.dataset.erpAction = actionRegistry?.getAction(actionId)?.id || "";
       appendChatMessage("user", question);
       chatInput.value = "";
       chatSendButton.disabled = true;
@@ -1343,6 +1352,8 @@
      * - 업로드 직후 자동 분석을 독립 함수로 두면 나중에 재분석 버튼, 분석 이력 저장, 비용 제한을 붙이기 쉽다.
      */
     async function requestAiAnalysis(eventItem) {
+      if (!eventItem) return;
+      aiAnalysisExpanded = true;
       aiAnalysisLoading = true;
       aiAnalysisError = "";
       aiAnalysis = null;
@@ -1378,6 +1389,16 @@
         aiAnalysisLoading = false;
         callbacks.onAnalysisStateChange?.();
       }
+    }
+
+    function resetAiAnalysis() {
+      aiAnalysis = null;
+      aiAnalysisRawText = "";
+      aiAnalysisLoading = false;
+      aiAnalysisError = "";
+      aiAnalysisExpanded = false;
+      aiLayoutRecommendations = [];
+      aiLayoutRecommendationError = "";
     }
 
     async function loadLayoutRecommendations(eventItem) {
@@ -1514,8 +1535,24 @@
       section.className = "ai-analysis-section";
       const header = document.createElement("div");
       header.className = "ai-analysis-header";
-      header.innerHTML = '<div><h2>AI 자동 분석</h2><p>업로드된 이벤트오더 추출 JSON과 자산관리 데이터를 기준으로 자동 분석합니다.</p></div>';
+      header.innerHTML = '<div><h2>AI 자동 분석</h2><p>필요할 때만 이벤트오더와 자산관리 데이터를 분석합니다.</p></div>';
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "secondary-button";
+      toggle.textContent = aiAnalysisLoading ? "분석 중" : aiAnalysis ? (aiAnalysisExpanded ? "접기" : "결과 보기") : aiAnalysisError ? (aiAnalysisExpanded ? "접기" : "오류 보기") : "분석하기";
+      toggle.disabled = aiAnalysisLoading;
+      toggle.addEventListener("click", () => {
+        if (aiAnalysis || aiAnalysisError) {
+          aiAnalysisExpanded = !aiAnalysisExpanded;
+          callbacks.onAnalysisStateChange?.();
+          return;
+        }
+        requestAiAnalysis(state.getPendingEvent?.());
+      });
+      header.append(toggle);
       section.append(header);
+
+      if (!aiAnalysisExpanded && !aiAnalysisLoading) return section;
 
       if (aiAnalysisLoading) {
         const loading = document.createElement("div");
@@ -3197,6 +3234,7 @@
       initializeAiAssistantPage,
       loadAiReferenceStats,
       requestAiAnalysis,
+      resetAiAnalysis,
       createAiAnalysisSection,
       parseAiAnalysisJson,
       createRequiredRecordsAnalysisCard,

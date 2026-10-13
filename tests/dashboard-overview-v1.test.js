@@ -12,7 +12,7 @@ assert(!html.includes("<article class=\"weekday-event-card\"><strong>월</strong
 assert(html.includes('class="operations-status-grid"'));
 assert(html.includes('id="dailyBriefingDialog"'));
 assert(html.includes('data-briefing-open'));
-assert(html.includes('class="ai-chat-panel" aria-label="연회장 AI 비서" hidden'));
+assert(html.includes('class="ai-chat-panel dashboard-ai-widget global-ai-drawer" aria-label="전역 AI 비서" hidden'));
 assert(html.indexOf("dashboard-operations-row") < html.indexOf("operations-status-grid"), "중앙 일정/캘린더 다음에 운영 현황이 와야 한다");
 assert(html.includes('renderStatusCard("오늘 행사"'));
 assert(html.includes('renderStatusCard("내일 행사"'));
@@ -20,8 +20,8 @@ assert(html.includes('renderStatusCard("세팅 변경"'));
 assert(operationBoard.includes('<button type="button" data-board-cancel>취소</button>'));
 assert(!operationBoard.includes('<button value="cancel">취소</button>'));
 assert(html.includes('id="weeklySetupWidget"'));
-assert(html.includes('dashboardWidgets.js?v=dashboard-dark-v1'));
-assert(html.includes('operationBoard.js?v=dashboard-dark-v1'));
+assert(html.includes('dashboardWidgets.js?v=global-ai-drawer-v1'));
+assert(html.includes('operationBoard.js?v=board-group-tasks-v5'));
 assert(dashboardWidgets.includes('banquet-erp-dashboard-layout-v1'));
 assert(dashboardWidgets.includes('data-widget-hide'));
 assert(dashboardWidgets.includes('widget-resize-handle'));
@@ -62,8 +62,8 @@ const normalized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.normalize(
   { id: "quick", visible: true, colSpan: 1, rowSpan: 1 },
   { id: "weekly-setup", visible: true, size: "small" },
 ]);
-assert.strictEqual(normalized.length, 6, "저장 레이아웃은 알려진 위젯마다 한 항목만 유지해야 한다");
-assert.strictEqual(normalized.map((item) => item.id).join(","), "weekly-setup,quick,today-board,operations-status,mini-calendar,today-operations");
+assert.strictEqual(normalized.length, 7, "저장 레이아웃은 알려진 위젯마다 한 항목만 유지해야 한다");
+assert.strictEqual(normalized.map((item) => item.id).join(","), "weekly-setup,quick,today-board,hall-current-states,operations-status,mini-calendar,today-operations");
 assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[0])), { id: "weekly-setup", visible: true, colSpan: 4, rowSpan: 5 });
 assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[1])), { id: "quick", visible: true, colSpan: 3, rowSpan: 3 });
 const resized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.resizeLayout(normalized, "today-board", { colSpan: 2, rowSpan: 30 });
