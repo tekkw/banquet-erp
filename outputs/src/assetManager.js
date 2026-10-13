@@ -15,6 +15,17 @@
  * - 객실 비품, 식음 기자재, 시설 장비처럼 부서별 자산관리 화면을 같은 구조로 확장할 수 있다.
  */
 (function registerBanquetErpAssetManager() {
+  function filterAssets(assets, query) {
+    const keywords = String(query || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!keywords.length) return [...(assets || [])];
+    return (assets || []).filter((asset) => {
+      const haystack = [asset.asset_name, asset.floor, asset.location, asset.spec]
+        .map((value) => String(value || "").toLowerCase())
+        .join(" ");
+      return keywords.every((keyword) => haystack.includes(keyword));
+    });
+  }
+
   /*
    * 왜 이 함수를 만들었는지:
    * - 자산관리 DOM, Supabase 함수, 권한 판정을 하나의 컨트롤러로 묶기 위해 만들었다.
@@ -38,6 +49,9 @@
       assetImagePreview,
       assetSaveButton,
       assetCancelButton,
+      assetSearchInput,
+      assetSearchCount,
+      assetSearchResetButton,
       assetTableBody,
       imageModal,
       imageModalTitle,
@@ -64,6 +78,13 @@
     let mobileAssetFloorSelect = null;
     let mobileAssetList = null;
     let mobileAssetFab = null;
+
+    assetSearchInput.addEventListener("input", renderBanquetAssets);
+    assetSearchResetButton.addEventListener("click", () => {
+      assetSearchInput.value = "";
+      renderBanquetAssets();
+      assetSearchInput.focus();
+    });
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -130,11 +151,14 @@
     function renderBanquetAssets() {
       applyAssetPermissionState();
       ensureMobileAssetUi();
-      const banquetAssets = state.getAssets();
-      renderMobileAssetList(banquetAssets);
+      const allAssets = state.getAssets();
+      const banquetAssets = filterAssets(allAssets, assetSearchInput.value);
+      assetSearchCount.textContent = `${banquetAssets.length} / ${allAssets.length}개`;
+      assetSearchResetButton.disabled = !assetSearchInput.value;
+      renderMobileAssetList(allAssets);
       assetTableBody.innerHTML = "";
       if (!banquetAssets.length) {
-        assetTableBody.innerHTML = '<tr><td colspan="7">등록된 자산이 없습니다.</td></tr>';
+        assetTableBody.innerHTML = `<tr><td colspan="7">${allAssets.length ? "검색 결과가 없습니다." : "등록된 자산이 없습니다."}</td></tr>`;
         return;
       }
 
@@ -532,5 +556,6 @@
 
   window.BANQUET_ERP_ASSET_MANAGER = {
     createAssetManager,
+    filterAssets,
   };
 })();

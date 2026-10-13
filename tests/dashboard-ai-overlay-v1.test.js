@@ -14,7 +14,7 @@ assert(html.includes('id="globalAiDrawer"'));
 assert(html.includes('id="globalAiVoiceButton"'));
 assert(html.includes('id="globalAiCloseButton"'));
 assert(!script.includes('{ id: "ai-assistant", name: "AI 비서"'));
-assert(styles.includes(".erp-shell .global-ai-drawer"));
+assert(styles.includes(".overlay-root .global-ai-drawer"));
 assert(styles.includes(".global-ai-launcher"));
 
 console.log("dashboard-ai-overlay-v1 tests passed");

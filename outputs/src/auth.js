@@ -29,6 +29,7 @@
       loginScreen,
       hotelTopbar,
       appMain,
+      overlayRoot,
       mobileBottomNav,
       currentUserBadge,
       loginForm,
@@ -90,6 +91,7 @@
       loginScreen.hidden = isLoggedIn;
       hotelTopbar.hidden = !isLoggedIn;
       appMain.hidden = !isLoggedIn;
+      overlayRoot.hidden = !isLoggedIn;
       mobileBottomNav.hidden = !isLoggedIn;
     }
 

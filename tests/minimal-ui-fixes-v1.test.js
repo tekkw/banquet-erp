@@ -16,6 +16,12 @@ for (const source of [html, preview]) {
   assert(source.includes("function openGlobalAiDrawer()"));
   assert(source.includes("function closeGlobalAiDrawer()"));
   assert(source.includes("function toggleGlobalAiVoiceInput()"));
+  const mainCloseIndex = source.indexOf("</main>");
+  const overlayRootIndex = source.indexOf('id="overlayRoot" class="overlay-root" hidden');
+  assert(mainCloseIndex >= 0 && mainCloseIndex < overlayRootIndex);
+  assert(overlayRootIndex < source.indexOf('id="globalAiLauncher"'));
+  assert(overlayRootIndex < source.indexOf('id="eventModal"'));
+  assert(overlayRootIndex < source.indexOf('id="excelViewerModal"'));
 }
 
 assert(ai.includes('toggle.textContent = aiAnalysisLoading ? "분석 중"'));
@@ -31,5 +37,9 @@ assert(modal.includes("max-height: calc(100dvh - 24px)"));
 assert(modal.includes("#eventModal .card-grid"));
 assert(modal.includes("#eventModal .info-card"));
 assert(modal.includes("min-height: 72px"));
+assert(modal.includes(".overlay-root"));
+assert(modal.includes("position: fixed"));
+assert(modal.includes(".modal-body"));
+assert(modal.includes("overflow-y: auto"));
 
 console.log("minimal-ui-fixes-v1 tests passed");

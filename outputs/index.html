@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=global-ai-drawer-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=overlay-root-v2">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -257,6 +257,11 @@
           <button id="assetSaveButton" class="primary-button" type="submit">등록</button>
           <button id="assetCancelButton" class="secondary-button" type="button" hidden>취소</button>
         </form>
+        <div class="asset-search-toolbar" role="search" aria-label="자산 검색">
+          <input id="assetSearchInput" type="search" placeholder="자산명, 층, 위치, 규격 검색" autocomplete="off">
+          <span id="assetSearchCount" class="asset-search-count" aria-live="polite">0 / 0개</span>
+          <button id="assetSearchResetButton" class="secondary-button" type="button" disabled>초기화</button>
+        </div>
         <div class="asset-table-wrap">
           <table class="asset-table">
             <colgroup>
@@ -887,6 +892,9 @@
       </section>
     </div>
 
+  </main>
+
+  <div id="overlayRoot" class="overlay-root" hidden>
     <button id="globalAiLauncher" class="global-ai-launcher" type="button" aria-controls="globalAiDrawer" aria-expanded="false">AI</button>
     <aside id="globalAiDrawer" class="ai-chat-panel dashboard-ai-widget global-ai-drawer" aria-label="전역 AI 비서" hidden>
       <div class="ai-chat-header">
@@ -903,8 +911,6 @@
       </form>
       <section id="aiInterviewPanel" class="ai-interview-panel" aria-label="AI 학습 인터뷰" hidden></section>
     </aside>
-  </main>
-
   <div id="eventModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal">
       <div class="modal-header">
@@ -1078,6 +1084,7 @@
         </div>
       </section>
     </div>
+  </div>
 
     <nav class="mobile-bottom-nav" aria-label="모바일 빠른 메뉴" hidden>
     <button class="active" type="button" data-mobile-target="home"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span><strong>홈</strong></button>
@@ -1098,7 +1105,7 @@
   <script src="./src/erpConversationAgent.js?v=1"></script>
   <script src="./src/aiKnowledgeRules.js?v=ai-knowledge-execution-v1"></script>
   <script src="./src/eventOrder.js?v=correction-learning-v1"></script>
-  <script src="./src/assetManager.js"></script>
+  <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=layout-ai-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
@@ -1134,6 +1141,7 @@
     const logoutButton = document.querySelector("#logoutButton");
     const hotelTopbar = document.querySelector(".hotel-topbar");
     const appMain = document.querySelector("main");
+    const overlayRoot = document.querySelector("#overlayRoot");
     const mobileBottomNav = document.querySelector(".mobile-bottom-nav");
     const fileName = document.querySelector("#fileName");
     const statusBox = document.querySelector("#status");
@@ -1177,6 +1185,9 @@
     const assetImagePreview = document.querySelector("#assetImagePreview");
     const assetSaveButton = document.querySelector("#assetSaveButton");
     const assetCancelButton = document.querySelector("#assetCancelButton");
+    const assetSearchInput = document.querySelector("#assetSearchInput");
+    const assetSearchCount = document.querySelector("#assetSearchCount");
+    const assetSearchResetButton = document.querySelector("#assetSearchResetButton");
     const assetTableBody = document.querySelector("#assetTableBody");
     const refreshAssetsButton = document.querySelector("#refreshAssetsButton");
     const venueLayoutPanel = document.querySelector("#venueLayoutPanel");
@@ -1424,6 +1435,7 @@
         loginScreen,
         hotelTopbar,
         appMain,
+        overlayRoot,
         mobileBottomNav,
         currentUserBadge,
         loginForm,
@@ -1490,6 +1502,9 @@
         assetImagePreview,
         assetSaveButton,
         assetCancelButton,
+        assetSearchInput,
+        assetSearchCount,
+        assetSearchResetButton,
         assetTableBody,
         imageModal,
         imageModalTitle,

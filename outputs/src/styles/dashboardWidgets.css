@@ -245,7 +245,7 @@ body {
   cursor: pointer;
 }
 
-.erp-shell .global-ai-drawer {
+.overlay-root .global-ai-drawer {
   position: fixed;
   inset: 0 0 0 auto;
   z-index: 25;
@@ -262,7 +262,7 @@ body {
   box-shadow: -24px 0 70px rgba(2, 8, 23, .48);
 }
 
-.erp-shell .global-ai-drawer[hidden] { display: none !important; }
+.overlay-root .global-ai-drawer[hidden] { display: none !important; }
 .global-ai-drawer .ai-chat-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; background: #102a40; }
 .global-ai-drawer .ai-chat-header h2 { color: #f4f7fa; font-size: 20px; }
 .global-ai-drawer .ai-chat-header p { margin: 4px 0 0; color: #96a9ba; }
@@ -274,7 +274,7 @@ body {
 
 @media (max-width: 768px) {
   .global-ai-launcher { right: 12px; bottom: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom) + 12px); }
-  .erp-shell .global-ai-drawer { width: 100vw; }
+  .overlay-root .global-ai-drawer { width: 100vw; }
 }
 .dashboard-ai-full-button { flex: 0 0 auto; align-self: flex-start; min-height: 32px; margin: 0; padding: 6px 10px; white-space: nowrap; }
 .ai-widget-modal { width: min(78vw, 1120px); height: min(78vh, 820px); max-width: none; max-height: none; padding: 0; overflow: hidden; border: 1px solid var(--dash-border-strong); border-radius: 16px; background: #102a40; color: #f4f7fa; box-shadow: 0 32px 100px rgba(0, 4, 12, .72); }

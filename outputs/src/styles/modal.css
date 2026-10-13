@@ -12,7 +12,8 @@
   justify-content: center;
   padding: 20px;
   background: rgba(15, 23, 42, 0.42);
-  z-index: 10;
+  z-index: 20;
+  overscroll-behavior: contain;
 }
 
 .modal-backdrop.visible {
@@ -22,7 +23,9 @@
 .modal {
   width: min(720px, 100%);
   max-height: min(720px, calc(100vh - 40px));
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--surface);
   border-radius: 8px;
   box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
@@ -53,8 +56,21 @@
 }
 
 .modal-body {
+  min-height: 0;
   padding: 18px;
+  overflow-y: auto;
 }
+
+.overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.overlay-root[hidden] { display: none; }
+.overlay-root > * { pointer-events: auto; }
 
 @media (min-width: 769px) {
   #eventModal .modal {
