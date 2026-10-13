@@ -20,8 +20,9 @@
     const validPoints = (Array.isArray(points) ? points : [])
       .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
       .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-    if (!validPoints.length) return { points: [], widthMm: 0, heightMm: 0, areaMm2: 0, signedAreaMm2: 0, segments: [] };
+    if (!validPoints.length) return { points: [], minX: 0, minY: 0, maxX: 0, maxY: 0, widthMm: 0, heightMm: 0, areaMm2: 0, signedAreaMm2: 0, segments: [] };
     const xs = validPoints.map((point) => point.x); const ys = validPoints.map((point) => point.y);
+    const minX = Math.min(...xs); const minY = Math.min(...ys); const maxX = Math.max(...xs); const maxY = Math.max(...ys);
     let signedTwiceArea = 0;
     const segments = validPoints.slice(1).map((end, index) => {
       const start = validPoints[index];
@@ -29,8 +30,17 @@
     });
     segments.forEach(({ start, end }) => { signedTwiceArea += start.x * end.y - end.x * start.y; });
     return {
-      points: validPoints, widthMm: Math.max(...xs) - Math.min(...xs), heightMm: Math.max(...ys) - Math.min(...ys),
+      points: validPoints, minX, minY, maxX, maxY, widthMm: maxX - minX, heightMm: maxY - minY,
       areaMm2: Math.abs(signedTwiceArea) / 2, signedAreaMm2: signedTwiceArea / 2, segments,
+    };
+  }
+
+  function floorplanObjectWorkspaceCenter(row, workspaceSize, objectSize, offset = { x: 0, y: 0 }) {
+    const hasXMm = Number.isFinite(Number(row?.metadata?.xMm));
+    const hasYMm = Number.isFinite(Number(row?.metadata?.yMm));
+    return {
+      x: hasXMm ? Number(row.metadata.xMm) + Number(offset.x || 0) : Number(row?.x || 0) * workspaceSize.width + objectSize.width / 2,
+      y: hasYMm ? Number(row.metadata.yMm) + Number(offset.y || 0) : Number(row?.y || 0) * workspaceSize.height + objectSize.height / 2,
     };
   }
 
@@ -1585,16 +1595,13 @@
 
     function applyWorkspaceHallOutline(outline) {
       const points = Array.isArray(outline?.metadata?.points) ? outline.metadata.points : [];
-      const validPoints = floorplanOutlineMetrics(points).points;
+      const metrics = floorplanOutlineMetrics(points);
+      const validPoints = metrics.points;
       workspaceOutlinePoints = validPoints;
       if (!validPoints.length || !workspaceBackgroundLayer) return;
-      const xs = validPoints.map((point) => point.x);
-      const ys = validPoints.map((point) => point.y);
-      const minX = Math.min(...xs); const minY = Math.min(...ys);
-      const maxX = Math.max(...xs); const maxY = Math.max(...ys);
-      workspaceGeometryOffset = { x: -minX, y: -minY };
-      workspaceDrawingWidthMm = Math.max(1000, maxX - minX);
-      workspaceDrawingHeightMm = Math.max(1000, maxY - minY);
+      workspaceGeometryOffset = { x: -metrics.minX, y: -metrics.minY };
+      workspaceDrawingWidthMm = Math.max(1000, metrics.widthMm);
+      workspaceDrawingHeightMm = Math.max(1000, metrics.heightMm);
       syncWorkspaceSizeFromDrawing();
       syncWorkspaceDrawingInputs();
       const polygon = document.createElementNS(svgNs, "polygon");
@@ -1667,7 +1674,7 @@
       applyWorkspaceHallOutline(outline);
       const fixedObjects = (floorplanRows || [])
         .filter((row) => row.object_type !== "hall_outline")
-        .map(dbObjectToWorkspaceObject)
+        .map((row) => dbObjectToWorkspaceObject(row, true))
         .map((object) => ({ ...object, locked: true, metadata: { ...(object.metadata || {}), baseFloorplanObject: true } }));
       workspaceBaseObjects = JSON.parse(JSON.stringify(fixedObjects));
       workspaceCalibration = null;
@@ -1712,7 +1719,7 @@
       ).catch(() => []);
       workspaceObjects = [
         ...baseObjects.filter(isFloorplanStructuralObject),
-        ...(layoutRows || []).map(dbObjectToWorkspaceObject),
+        ...(layoutRows || []).map((row) => dbObjectToWorkspaceObject(row)),
       ];
       workspaceSelectedId = "";
       workspaceDirty = false;
@@ -1961,6 +1968,15 @@
       if (["wall", "calibration"].includes(object.objectType)) {
         syncWorkspaceLineObjectFromMetadata(object);
       }
+      const storageX = object.x - workspaceGeometryOffset.x;
+      const storageY = object.y - workspaceGeometryOffset.y;
+      const storageMetadata = { ...(object.metadata || {}) };
+      ["start_x_mm", "end_x_mm"].forEach((key) => {
+        if (Number.isFinite(Number(storageMetadata[key]))) storageMetadata[key] = Number(storageMetadata[key]) - workspaceGeometryOffset.x;
+      });
+      ["start_y_mm", "end_y_mm"].forEach((key) => {
+        if (Number.isFinite(Number(storageMetadata[key]))) storageMetadata[key] = Number(storageMetadata[key]) - workspaceGeometryOffset.y;
+      });
       const width = Math.max(0.001, object.widthM * workspaceMeterScale / workspaceSize.width);
       const height = Math.max(0.001, object.heightM * workspaceMeterScale / workspaceSize.height);
       return {
@@ -1979,12 +1995,13 @@
         can_resize: true,
         can_rotate: true,
         metadata: {
-          ...(object.metadata || {}),
+          ...storageMetadata,
           geometryVersion: 2,
           unit: "mm",
+          coordinateOrigin: "floorplan",
           coordinateAnchor: "center",
-          xMm: Math.round(object.x),
-          yMm: Math.round(object.y),
+          xMm: Math.round(storageX),
+          yMm: Math.round(storageY),
           widthMm: Math.round(object.widthM * 1000),
           heightMm: Math.round(object.heightM * 1000),
           object_type_id: object.masterObjectId || null,
@@ -1997,18 +2014,27 @@
       };
     }
 
-    function dbObjectToWorkspaceObject(row) {
+    function dbObjectToWorkspaceObject(row, usesFloorplanOrigin = row?.metadata?.coordinateOrigin === "floorplan") {
       const widthM = Math.max(0.1, Number(row.metadata?.widthMm) / 1000 || Number(row.metadata?.default_width_m) || (Number(row.width || 0.05) * workspaceSize.width / workspaceMeterScale));
       const heightM = Math.max(0.1, Number(row.metadata?.heightMm) / 1000 || Number(row.metadata?.default_height_m) || (Number(row.height || 0.05) * workspaceSize.height / workspaceMeterScale));
       const widthPx = widthM * workspaceMeterScale;
       const heightPx = heightM * workspaceMeterScale;
+      const coordinateOffset = usesFloorplanOrigin ? workspaceGeometryOffset : { x: 0, y: 0 };
+      const center = floorplanObjectWorkspaceCenter(row, workspaceSize, { width: widthPx, height: heightPx }, coordinateOffset);
+      const metadata = JSON.parse(JSON.stringify(row.metadata || {}));
+      ["start_x_mm", "end_x_mm"].forEach((key) => {
+        if (Number.isFinite(Number(metadata[key]))) metadata[key] = Number(metadata[key]) + coordinateOffset.x;
+      });
+      ["start_y_mm", "end_y_mm"].forEach((key) => {
+        if (Number.isFinite(Number(metadata[key]))) metadata[key] = Number(metadata[key]) + coordinateOffset.y;
+      });
       const object = {
         instanceId: row.id || (crypto.randomUUID ? crypto.randomUUID() : `object_${Date.now()}_${Math.random().toString(16).slice(2)}`),
         masterObjectId: row.object_type_id || row.metadata?.object_type_id || "",
         objectType: row.object_type,
         label: row.label || objectLabels[row.object_type] || row.object_type,
-        x: clampNumber(Number.isFinite(Number(row.metadata?.xMm)) ? Number(row.metadata.xMm) : Number(row.x || 0) * workspaceSize.width + widthPx / 2, 0, workspaceSize.width),
-        y: clampNumber(Number.isFinite(Number(row.metadata?.yMm)) ? Number(row.metadata.yMm) : Number(row.y || 0) * workspaceSize.height + heightPx / 2, 0, workspaceSize.height),
+        x: clampNumber(center.x, 0, workspaceSize.width),
+        y: clampNumber(center.y, 0, workspaceSize.height),
         widthM,
         heightM,
         rotation: Number(row.rotation || 0),
@@ -2016,7 +2042,7 @@
         zIndex: Number(row.sort_order || 0),
         locked: Boolean(row.is_locked),
         opacity: Number.isFinite(Number(row.metadata?.opacity)) ? Number(row.metadata.opacity) : undefined,
-        metadata: row.metadata || {},
+        metadata,
       };
       return ["wall", "calibration"].includes(object.objectType) ? syncWorkspaceLineObjectFromMetadata(object) : object;
     }
@@ -3688,6 +3714,7 @@
     async function createWorkspaceNewLayout(layoutName, useCurrentFloorplan, floorplanId) {
       const preserveViewport = !floorplanId || String(workspaceFloorplanSelect?.value || "") === String(floorplanId);
       const previousView = { ...view };
+      if (preserveViewport) cancelWorkspaceFit();
       if (floorplanId && String(workspaceFloorplanSelect?.value || "") !== String(floorplanId)) {
         workspaceFloorplanSelect.value = floorplanId;
         await handleWorkspaceFloorplanChange();
@@ -5111,6 +5138,7 @@
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {
     createFloorplanEditor,
     floorplanOutlineMetrics,
+    floorplanObjectWorkspaceCenter,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
     isFloorplanStructuralObject,

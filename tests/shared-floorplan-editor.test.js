@@ -12,7 +12,7 @@ assert(editor.includes('floorplanButton.dataset.floorplanAction === "open-base"'
 assert(editor.includes('floorplanButton.dataset.floorplanAction === "create-layout"'), "기본 도면 기반 레이아웃 생성 동작이 필요하다");
 assert(editor.includes('function applyWorkspaceSnapPoint(point)'), "마우스 이동용 grid snap 함수가 필요하다");
 assert(editor.includes('geometryVersion: 2'), "레이아웃 객체는 mm geometry V2로 저장해야 한다");
-assert(editor.includes('xMm: Math.round(object.x)'), "레이아웃 객체 X 좌표는 mm로 저장해야 한다");
+assert(editor.includes('xMm: Math.round(storageX)'), "레이아웃 객체 X 좌표는 기본도면 origin 기준 mm로 저장해야 한다");
 assert(editor.includes('widthMm: Math.round(object.widthM * 1000)'), "레이아웃 객체 크기는 mm로 저장해야 한다");
 assert(styles.includes('.layout-library-folder'), "기본 도면과 자식 레이아웃 계층 스타일이 필요하다");
 assert(editor.includes('renderWorkspaceFloorplanDimensions()'), "기본 도면 segment 치수를 렌더링해야 한다");
