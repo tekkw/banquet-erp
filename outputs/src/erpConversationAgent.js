@@ -5,6 +5,7 @@
   const ORDINALS = { "첫": 0, "첫째": 0, "첫번째": 0, "두": 1, "둘째": 1, "두번째": 1, "세": 2, "셋째": 2, "세번째": 2, "네": 3, "넷째": 3, "네번째": 3 };
 
   function compact(value) { return String(value || "").replace(/\s+/g, ""); }
+  function hasRecentReference(text) { return /그\s*(?:행사|거|세팅)|해당\s*행사|아까\s*(?:거|것)|아까(?:\s*\S+){0,2}\s*행사|거기|그\s*곳/.test(String(text || "")); }
   function ordinalIndex(text, length) {
     const value = compact(text); if (/마지막(?:거|행사)?/.test(value)) return length ? length - 1 : -1;
     const numeric = value.match(/(\d+)번째/); if (numeric) return Number(numeric[1]) - 1;
@@ -20,15 +21,16 @@
     function load() { try { return { ...DEFAULT_CONTEXT, ...JSON.parse(storage?.getItem(key) || "{}") }; } catch { return { ...DEFAULT_CONTEXT }; } }
     function save(context) { const next = { ...DEFAULT_CONTEXT, ...context, lastResults: Array.isArray(context?.lastResults) ? context.lastResults.slice(0, 20) : [] }; try { storage?.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ } return next; }
     function plan(text, fastRoute = "") {
-      const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value);
+      const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+번째|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
+      const contextVenue = venueIn(context.event?.venue || ""); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)));
+      if (explicitRoute && !referencesRecent) return { route: fastRoute, tool: "", text: value, usesContext: false, maxSteps };
       if (/(?:이번|다음|지난)\s*(?:주|달).*(?:뭐|행사|일정).*(?:있|하지)|(?:뭐|행사|일정).*(?:이번|다음|지난)\s*(?:주|달)/.test(value)) return { route: "event_query", tool: "findEvents", text: value.includes("행사") ? value : `${value} 행사`, maxSteps };
       if (ordinal >= 0 && results[ordinal]?.id) return { route: "event_query", tool: /원본|엑셀/.test(value) ? "openEventOriginal" : /몇\s*명|인원/.test(value) ? "getEventDetail" : "getEventDetail", selectedResultId: results[ordinal].id, text: value, maxSteps };
-      if (venue && context.event?.period && /(?:은|는)?\??$/.test(value) && !/세팅|현재/.test(value)) return { route: "event_query", tool: "findEvents", text: `${context.event.period.label || "이번 주"} ${venue} 행사 뭐 있어?`, maxSteps };
-      if (/^(?:원본|엑셀).*(?:보여|띄워|열어)|^(?:보여|띄워|열어).*(?:원본|엑셀)/.test(value) && context.event) return { route: "event_query", tool: "openEventOriginal", selectedResultId: context.event.eventOrderId, text: value, actions: [{ type: "open_event_original", eventOrderId: context.event.eventOrderId, storagePath: context.event.storagePath || "" }], maxSteps };
-      if (/^(?:몇\s*명|인원(?:은)?\??)$/.test(compact(value)) && context.event) return { route: "event_query", tool: "getEventDetail", selectedResultId: context.event.eventOrderId, text: value, maxSteps };
-      if (/^(?:몇\s*개|수량(?:은)?|얼마나)\??$/.test(compact(value)) && context.asset?.assetId) return { route: "asset_query", tool: "getAssetQuantity", assetId: context.asset.assetId, text: value, maxSteps };
-      if (/^(?:다|전부)\s*(?:했어|끝냈어|완료했어)$/.test(value) && context.setting) return { route: "confirm_current_setup", tool: "proposeCurrentSetupUpdate", text: value, maxSteps };
-      if (/그거.*오늘.*해야|오늘.*그거.*해야/.test(value) && context.setting) return { route: "setting_advisor", tool: "getSettingCandidates", text: value, maxSteps };
+      if (eventReference && /원본|엑셀/.test(value)) return { route: "event_query", tool: "openEventOriginal", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, actions: [{ type: "open_event_original", eventOrderId: context.event.eventOrderId, storagePath: context.event.storagePath || "" }], maxSteps };
+      if (eventReference && /몇\s*명|인원/.test(value)) return { route: "event_query", tool: "getEventDetail", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
+      if (referencesRecent && context.lastDomain === "asset" && context.asset?.assetId && /몇\s*개|수량|얼마나|어디/.test(value)) return { route: "asset_query", tool: "getAssetQuantity", assetId: context.asset.assetId, text: value, usesContext: true, maxSteps };
+      if (referencesRecent && context.lastDomain === "setting" && context.setting && /(?:다|전부).*(?:했어|끝냈어|완료했어)/.test(value)) return { route: "confirm_current_setup", tool: "proposeCurrentSetupUpdate", text: value, usesContext: true, maxSteps };
+      if (referencesRecent && context.lastDomain === "setting" && context.setting && /오늘.*해야|뭐.*해야/.test(value)) return { route: "setting_advisor", tool: "getSettingCandidates", text: value, usesContext: true, maxSteps };
       if (venue && /세팅.*끝났.*다음|다음.*뭐\s*(?:하지|해)/.test(value)) return { route: "setting_execution_plan", tool: "getSettingExecutionPlan", text: value, maxSteps };
       if (fastRoute && fastRoute !== "conversation_agent") return { route: fastRoute, tool: "", text: value, maxSteps };
       return { route: "board_command", tool: "proposeScheduleChange", text: value, needsLlm: true, maxSteps };
@@ -36,5 +38,5 @@
     return Object.freeze({ load, save, plan, ordinalIndex: (text) => ordinalIndex(text, load().lastResults.length), maxSteps });
   }
 
-  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex });
+  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference });
 })(window);

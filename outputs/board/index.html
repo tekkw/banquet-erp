@@ -42,7 +42,7 @@
           <button id="boardVisualCloseButton" type="button">카메라 닫기</button>
         </div>
       </div>
-      <div id="boardAiContext" class="board-ai-context" hidden></div>
+      <div id="boardAiContext" class="board-ai-context" hidden><span id="boardAiContextText"></span><button id="boardAiContextClear" type="button" aria-label="최근 행사 및 세팅 컨텍스트 지우기">×</button></div>
       <div id="boardAiResult" class="board-ai-result" aria-live="polite"></div>
       <div class="board-ai-quick-actions" aria-label="빠른 질문">
         <button type="button" data-board-ai-quick="오늘 끝나고 뭘 세팅해야 돼?">오늘 세팅</button>
@@ -73,7 +73,7 @@
   <script src="../src/boardLayoutRecommendations.js?v=1"></script>
   <script src="../src/settingAdvisor.js?v=3"></script>
   <script src="../src/erpActionRegistry.js?v=1"></script>
-  <script src="../src/erpConversationAgent.js?v=1"></script>
-  <script src="../src/operationBoardPage.js?v=28-action-registry"></script>
+  <script src="../src/erpConversationAgent.js?v=1-recent-context"></script>
+  <script src="../src/operationBoardPage.js?v=28-action-registry-recent-context"></script>
 </body>
 </html>

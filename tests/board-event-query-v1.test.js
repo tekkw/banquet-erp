@@ -36,13 +36,14 @@ assert.deepEqual(Array.from(layoutTexts), ["스쿨식 40석"], "layout answer us
 for (const sourceTable of ["event_orders", "event_calendar_dates", "event_schedules", "event_items", "event_notes"]) assert(page.includes(sourceTable));
 assert(page.includes("sessionStorage.setItem(activeEventContextKey"));
 assert(page.includes("activeEventContexts = [context, ...activeEventContexts"));
-assert(page.includes("const contextFollowup = hasContext"), "layout/original follow-ups reuse the active event without repeating '그 행사'");
+assert(!page.includes("const contextFollowup = hasContext"), "unrelated questions must not inherit the active event");
+assert(page.includes("hasRecentReference(text)"), "explicit references may reuse recent event context");
 assert(page.includes("if (matches.length > 1)"), "multiple candidates must require selection");
 assert(page.includes('data-event-query-choice="${index}"'));
 assert(page.includes("window.openStoredExcel(event.storagePath)"), "original action must open the existing viewer helper");
 assert(page.includes("등록된 원본 파일이 없습니다."));
 assert(page.includes("등록된 이벤오더에서 조건에 맞는 행사를 찾지 못했습니다."));
 assert(page.includes("등록된 이벤오더에서 레이아웃 정보를 찾지 못했습니다."));
-assert(boardHtml.includes("operationBoardPage.js?v=28-action-registry"), "board cache version must be bumped");
+assert(boardHtml.includes("operationBoardPage.js?v=28-action-registry-recent-context"), "board cache version must be bumped");
 
 console.log("board event query V1 tests passed");

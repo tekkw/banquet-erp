@@ -13,6 +13,8 @@
   const aiInput = document.getElementById("boardAiInput");
   const aiResult = document.getElementById("boardAiResult");
   const aiContextLabel = document.getElementById("boardAiContext");
+  const aiContextText = document.getElementById("boardAiContextText");
+  const aiContextClearButton = document.getElementById("boardAiContextClear");
   const aiPlusButton = document.getElementById("boardAiPlusButton");
   const aiPlusMenu = document.getElementById("boardAiPlusMenu");
   const assetPhotoButton = document.getElementById("boardAssetPhotoButton");
@@ -131,7 +133,7 @@
   function loadSettingAdvisorContext() { try { return JSON.parse(sessionStorage.getItem(settingAdvisorContextKey) || "null"); } catch { return null; } }
   function loadConversationContext() { try { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [], ...JSON.parse(sessionStorage.getItem(conversationContextKey) || "{}") }; } catch { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [] }; } }
   function saveConversationContext(next) { conversationContext = conversationAgent.save(next); }
-  function rememberDomainContext(domain, value) { saveConversationContext({ ...conversationContext, [domain]: value, lastDomain: domain }); }
+  function rememberDomainContext(domain, value) { saveConversationContext({ ...conversationContext, [domain]: value, lastDomain: domain }); renderAiContext(); }
   function rememberSettingAdvisor(row) {
     settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
     try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
@@ -141,15 +143,18 @@
     renderAiContext();
   }
   function renderAiContext() {
-    if (!aiContextLabel) return;
-    const context = settingAdvisorContext; const active = activeEventContexts[0];
-    const event = context ? events.find((item) => item.id === context.nextEventOrderId) : active ? events.find((item) => item.id === active.eventOrderId) : null;
-    if (!event) { aiContextLabel.hidden = true; aiContextLabel.textContent = ""; return; }
-    const advisorRow = context ? settingAdvisorRows.find((row) => row.nextEvent.id === event.id) : null; const fallbackPoint = context ? settingAdvisor.schedulePoints(event).filter((point) => point.date >= context.anchorDate).sort((left, right) => left.startAt - right.startAt)[0] : null;
-    const date = context ? advisorRow?.nextDate || fallbackPoint?.date : active?.eventDate;
-    const time = context ? advisorRow?.nextStart || fallbackPoint?.start : "";
-    aiContextLabel.textContent = `현재: ${context?.space || active?.venue || event.venue || "행사"} · ${[date, time, event.eventName].filter(Boolean).join(" ")}`;
+    if (!aiContextLabel || !aiContextText) return;
+    const domain = conversationContext.lastDomain; const recent = domain === "setting" ? conversationContext.setting : domain === "event" ? conversationContext.event : domain === "asset" ? conversationContext.asset : null;
+    const label = domain === "setting" ? recent?.space : domain === "event" ? recent?.venue || recent?.eventName : domain === "asset" ? recent?.assetName || recent?.query : "";
+    if (!label) { aiContextLabel.hidden = true; aiContextText.textContent = ""; return; }
+    aiContextText.textContent = `컨텍스트: ${label}`;
     aiContextLabel.hidden = false;
+  }
+  function clearRecentEventSettingContext() {
+    activeEventContexts = []; settingAdvisorContext = null; settingAdvisorRows = []; pendingEventQuery = null;
+    try { sessionStorage.removeItem(activeEventContextKey); sessionStorage.removeItem(settingAdvisorContextKey); } catch { /* session storage unavailable */ }
+    saveConversationContext({ ...conversationContext, event: null, setting: null, venue: null, lastDomain: "", lastResults: (conversationContext.lastResults || []).filter((item) => item.domain !== "event") });
+    renderAiContext();
   }
   function rememberActiveEvent(event) {
     const context = { eventOrderId: event.id, eventName: event.eventName, venue: event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "", eventDate: eventDateKeys(event)[0] || "", storagePath: event.storagePath || "", originalFilename: event.originalFilename || "" };
@@ -226,7 +231,8 @@
     return (event.schedule || []).some((row) => row.date >= period.start && row.date <= period.end);
   }
   function eventQueryType(text) { if (/(원본|엑셀|파일).*(띄워|열어|보여|보기)|(?:띄워|열어|보여).*(원본|엑셀)/i.test(text)) return "open_event_original"; if (/실제.*(?:세팅|배치)|현장.*(?:세팅|기록)/i.test(text)) return "get_field_setup_observation"; if (/레이아웃|배치|스쿨식|극장식|라운드/i.test(text)) return "get_event_layout"; if (/인원|몇\s*명|guest/i.test(text)) return "get_event_guest_count"; if (/일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크/i.test(text)) return "get_event_schedule"; if (/메뉴|품목|아이템|식음|장비/i.test(text)) return "get_event_items"; return "find_events_by_period_space"; }
-  function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContext = activeEventContexts.length > 0; const hasContextReference = /(그\s*행사|그거|해당\s*행사)/.test(text) && hasContext; const contextFollowup = hasContext && /원본|엑셀|레이아웃|배치|실제\s*세팅|현장\s*기록|인원|몇\s*명|일정|스케줄|몇\s*시|커피\s*브레이크|커피브레이크|메뉴|품목/.test(text); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|실제\s*세팅|현장\s*기록|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || contextFollowup || ((explicitEventData || (queryPeriod(text) && /레이아웃|배치/.test(text))) && (queryPeriod(text) || venueTerm(text) || hasContext))); }
+  function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContextReference = window.erpConversationAgent.hasRecentReference(text) && activeEventContexts.length > 0 && (conversationContext.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(text)); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|실제\s*세팅|현장\s*기록|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || ((explicitEventData || (queryPeriod(text) && (venueTerm(text) || /레이아웃|배치/.test(text)))) && (queryPeriod(text) || venueTerm(text)))); }
+  function referencedRecentEvent(text) { if (!window.erpConversationAgent.hasRecentReference(text)) return null; const venue = venueTerm(text); const context = venue ? activeEventContexts.find((item) => normalizedVenue(item.venue).includes(normalizedVenue(venue))) : activeEventContexts[0]; return context ? events.find((event) => String(event.id) === String(context.eventOrderId)) || null : null; }
   function displayEventDate(event, period = null) { const keys = eventDateKeys(event); const key = (period ? keys.find((value) => value >= period.start && value <= period.end) : "") || keys[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
   function eventChoiceLabel(event, period = null) { return `${displayEventDate(event, period)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
@@ -242,7 +248,8 @@
   }
   function showEventChoices(result, userText) {
     pendingEventQuery = { result, userText }; const label = [result.period?.label, result.venue, "행사"].filter(Boolean).join(" "); const answer = `${label || "조건에 맞는 행사"}는 ${result.events.length}건입니다.`;
-    saveConversationContext({ ...conversationContext, event: { ...(conversationContext.event || {}), period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period) })) });
+    saveConversationContext({ ...conversationContext, event: { period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period) })) });
+    renderAiContext();
     aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(label || "등록 행사 검색")}</h3><p>${escapeHtml(answer)} 하나를 선택해주세요.</p><div class="board-ai-choices">${result.events.map((event, index) => `<button class="board-ai-choice" type="button" data-event-query-choice="${index}">${escapeHtml(eventChoiceLabel(event, result.period))}</button>`).join("")}</div></div>`;
     rememberConversation(userText, answer); speakBoardReply(`${answer} 화면에서 하나를 선택해주세요.`); finishFieldAiAnswer();
   }
@@ -351,7 +358,7 @@
   }
   function isSettingAdvisorRequest(text) {
     if (/(다음\s*(?:세팅|행사)|오늘.*끝나고.*세팅|끝나.*(?:세팅|준비)|밤에.*세팅|내일\s*행사\s*준비|(?:뭐부터|뭘)\s*(?:준비|세팅)|세팅\s*상담|지금\s*바꿔야|오늘.*해두는\s*게|오늘.*세팅.*(?:낫|좋)|오늘.*(?:뭐|뭘).*세팅.*해야)/i.test(text)) return true;
-    return Boolean((settingAdvisorContext || settingAdvisorRows.length) && (/(컨벤션|부라노|카프리|페스타|포이어).*(?:부터\s*보자|상담)|다음\s*행사|인원|몇\s*명|몇\s*시\s*(?:시작|끝)|레이아웃\s*뭐|테이블.*(?:몇|였나)|현재\s*세팅|의자\s*몇|원본.*(?:보여|열어)|오늘\s*바로|오늘.*해야|밤에.*(?:해두|세팅)/i.test(text)));
+    return Boolean((settingAdvisorContext || settingAdvisorRows.length) && (window.erpConversationAgent.hasRecentReference(text) || venueTerm(text)) && (/(컨벤션|부라노|카프리|페스타|포이어).*(?:부터\s*보자|상담)|다음\s*행사|인원|몇\s*명|몇\s*시\s*(?:시작|끝)|레이아웃\s*뭐|테이블.*(?:몇|였나)|현재\s*세팅|의자\s*몇|원본.*(?:보여|열어)|오늘\s*바로|오늘.*해야|밤에.*(?:해두|세팅)/i.test(text)));
   }
   function isSettingExecutionPlanRequest(text) { return /(어떻게\s*준비|뭐\s*바꿔야|뭐\s*해야|세팅하려면.*(?:필요|해야)|작업\s*뭐|준비할\s*거|테이블\s*몇\s*개.*필요|의자\s*몇\s*개?|레이아웃.*(?:많이\s*)?달라|왜\s*오늘\s*해야)/i.test(text); }
   function isConfirmCurrentSetupRequest(text) { return /(?:세팅|셋팅)(?:을|은|이)?\s*(?:했어|완료했어|끝냈어|완료)|이대로\s*(?:세팅\s*)?완료/i.test(text); }
@@ -390,6 +397,7 @@
   }
   async function showSettingAdvisorList(text = "") {
     settingAdvisorRows = await buildSettingAdvisorRows(text); settingAdvisorContext = null; try { sessionStorage.removeItem(settingAdvisorContextKey); } catch { /* session storage unavailable */ }
+    saveConversationContext({ ...conversationContext, setting: null, lastDomain: "setting" });
     renderAiContext();
     if (!settingAdvisorRows.length) { showMessage("선택 날짜 종료 후 30일 이내에 이어지는 세팅을 찾지 못했습니다."); return; }
     aiResult.innerHTML = `<section><h3>다음 행사 준비</h3><p class="board-ai-status">${escapeHtml(settingAdvisorRows[0].anchorDate)} 종료 후 준비할 다음 행사 ${settingAdvisorRows.length}건</p><div class="board-setting-advisor-list">${settingAdvisorRows.map(settingAdvisorCard).join("")}</div></section>`;
@@ -999,6 +1007,7 @@
   else { voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply); }
   visualCameraButton.addEventListener("click", async () => { aiPlusMenu.hidden = true; aiPlusButton.setAttribute("aria-expanded", "false"); try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
   aiPlusButton?.addEventListener("click", () => { const open = aiPlusMenu.hidden; aiPlusMenu.hidden = !open; aiPlusButton.setAttribute("aria-expanded", String(open)); });
+  aiContextClearButton?.addEventListener("click", clearRecentEventSettingContext);
   document.querySelectorAll("[data-board-ai-quick]").forEach((button) => button.addEventListener("click", () => { aiInput.value = button.dataset.boardAiQuick; aiForm.requestSubmit(); }));
   if (!SpeechRecognitionApi) { speechButton.disabled = true; speechButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다."; setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); }
   else speechButton.addEventListener("click", toggleSpeechRecognition);
@@ -1023,6 +1032,7 @@
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
     const agentPlan = conversationAgent.plan(text, fastRoute); const route = agentPlan.route;
+    if (fastRoute === "conversation_agent" && !agentPlan.usesContext) { saveConversationContext({ ...conversationContext, lastDomain: "" }); renderAiContext(); }
     if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
     if (route === "record_field_setup") {
       showTransientMessage("현장에서 확인한 세팅을 정리하고 있습니다…");
@@ -1036,7 +1046,7 @@
     }
     if (route === "setting_execution_plan") { showTransientMessage("현재 세팅과 다음 행사 세팅을 비교하고 있습니다…"); try { await handleSettingExecutionPlan(text); aiInput.value = ""; } catch (error) { console.error("setting execution plan failed", error); showMessage(error.message || "세팅 실행 계획을 만들지 못했습니다."); } return; }
     if (route === "setting_advisor") { showTransientMessage("다음 행사와 현재 세팅을 비교하고 있습니다…"); try { await handleSettingAdvisor(text); aiInput.value = ""; } catch (error) { console.error("setting advisor failed", error); showMessage(error.message || "세팅 상담을 불러오지 못했습니다."); } return; }
-    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { const selected = agentPlan.selectedResultId ? events.find((item) => String(item.id) === String(agentPlan.selectedResultId)) : null; const actionId = agentPlan.tool === "openEventOriginal" ? "open_event_original" : agentPlan.tool === "getEventSchedule" ? "get_event_schedule" : agentPlan.tool === "getEventLayout" ? "get_event_layout" : agentPlan.tool === "getEventDetail" ? "get_event_detail" : "search_events"; actionResultValue(await actionRegistry.executeAction(actionId, { text: agentPlan.text, event: selected })); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
+    if (route === "event_query") { showTransientMessage("등록된 이벤오더를 확인하고 있습니다…"); try { const selected = agentPlan.selectedResultId ? events.find((item) => String(item.id) === String(agentPlan.selectedResultId)) : referencedRecentEvent(text); const actionId = agentPlan.tool === "openEventOriginal" ? "open_event_original" : agentPlan.tool === "getEventSchedule" ? "get_event_schedule" : agentPlan.tool === "getEventLayout" ? "get_event_layout" : agentPlan.tool === "getEventDetail" ? "get_event_detail" : "search_events"; actionResultValue(await actionRegistry.executeAction(actionId, { text: agentPlan.text, event: selected })); aiInput.value = ""; } catch (error) { console.error("event query failed", error); showMessage("등록된 이벤오더를 확인하지 못했습니다.", true); } return; }
     if (route === "recommend_layouts") { showTransientMessage("저장된 레이아웃을 비교하고 있습니다…"); try { actionResultValue(await actionRegistry.executeAction("recommend_layouts", { text })); aiInput.value = ""; } catch (error) { console.error("layout recommendation failed", error); showMessage(error.message || "저장된 레이아웃을 추천하지 못했습니다.", true); } return; }
     if (route === "visual_query" && selectedAssetImageFile) { showTransientMessage("선택한 사진을 확인하고 있습니다…"); try { await useSelectedImageForVisualQuery(text); } catch (error) { console.error("selected image query failed", error); showMessage(error.message || "사진을 확인하지 못했습니다."); } return; }
     if (!followupContext && !selectedAssetImageFile && !visualSession && isDeicticVisualQuery(text)) {
