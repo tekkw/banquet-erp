@@ -5,18 +5,34 @@
   const ORDINALS = { "첫": 0, "첫째": 0, "첫번째": 0, "두": 1, "둘째": 1, "두번째": 1, "세": 2, "셋째": 2, "세번째": 2, "네": 3, "넷째": 3, "네번째": 3 };
 
   function compact(value) { return String(value || "").replace(/\s+/g, ""); }
-  function normalizeTranscript(text) {
-    return String(text || "").trim()
+  const HOTEL_VENUE_ALIASES = Object.freeze({ "브라노": "부라노", "부리노": "부라노", "불라노": "부라노", "카브리": "카프리", "카플이": "카프리", "컨벤선": "컨벤션", "컨벤숀": "컨벤션", "컨벤션 센타": "컨벤션센터", "컨벤션센타": "컨벤션센터" });
+  function editDistance(left, right) {
+    const a = String(left || ""); const b = String(right || ""); const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i += 1) { let previous = row[0]; row[0] = i; for (let j = 1; j <= b.length; j += 1) { const current = row[j]; row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1)); previous = current; } }
+    return row[b.length];
+  }
+  function venueSimilarity(left, right) { const a = compact(left); const b = compact(right); return !a || !b ? 0 : 1 - editDistance(a, b) / Math.max(a.length, b.length); }
+  function normalizeSpeechTranscript(text, venueAliases = []) {
+    let normalized = String(text || "").trim(); let matchedVenue = ""; let confidence = 0;
+    const candidates = [...new Map([...Object.entries(HOTEL_VENUE_ALIASES).map(([alias, canonical]) => ({ alias, canonical })), ...(venueAliases || []).map((row) => ({ alias: row.alias || row.alias_name || row.venueName || row.venue_name || "", canonical: row.canonical || row.venueName || row.venue_name || "" }))].filter((row) => compact(row.alias).length >= 2 && row.canonical).map((row) => [`${row.alias}:${compact(row.canonical)}`, row])).values()];
+    candidates.sort((a, b) => compact(b.alias).length - compact(a.alias).length).some((candidate) => { const pattern = new RegExp(candidate.alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*"), "i"); if (!pattern.test(normalized)) return false; normalized = normalized.replace(pattern, candidate.canonical); matchedVenue = candidate.canonical; confidence = 1; return true; });
+    if (!matchedVenue) {
+      const tokens = normalized.match(/[가-힣A-Za-z]{3,}/g) || []; let best = null; let second = null;
+      tokens.forEach((token) => candidates.forEach((candidate) => { const score = venueSimilarity(token, candidate.alias); const match = { token, candidate, score }; if (!best || score > best.score) { second = best; best = match; } else if (!second || score > second.score) second = match; }));
+      if (best && best.score >= 0.78 && best.score - Number(second?.score || 0) >= 0.12) { normalized = normalized.replace(best.token, best.candidate.canonical); matchedVenue = best.candidate.canonical; confidence = Number(best.score.toFixed(2)); }
+    }
+    normalized = normalized
       .replace(/요번\s*주/gi, "이번주")
       .replace(/이벤트\s*오더|이벤\s*오더|이벤트오더/gi, "이벤오더")
       .replace(/레이\s+아웃/gi, "레이아웃")
       .replace(/커피\s+브레이크/gi, "커피브레이크")
-      .replace(/부라노\s+(?:일|원)(?=\s|$)/gi, "부라노1")
-      .replace(/카프리\s+(?:일|원)(?=\s|$)/gi, "카프리1")
-      .replace(/컨벤션\s*에이/gi, "컨벤션A")
-      .replace(/컨벤션\s*비/gi, "컨벤션B")
+      .replace(/부라노\s*(?:일|원|1)(?=\s|$)/gi, "부라노1").replace(/부라노\s*(?:이|2)(?=\s|$)/gi, "부라노2").replace(/부라노\s*(?:삼|3)(?=\s|$)/gi, "부라노3")
+      .replace(/카프리\s*(?:일|원|1)(?=\s|$)/gi, "카프리1").replace(/카프리\s*(?:이|2)(?=\s|$)/gi, "카프리2").replace(/카프리\s*(?:삼|3)(?=\s|$)/gi, "카프리3")
+      .replace(/컨벤션\s*에이\s*비/gi, "컨벤션AB").replace(/컨벤션\s*에이/gi, "컨벤션A").replace(/컨벤션\s*비/gi, "컨벤션B")
       .replace(/\s+/g, " ");
+    return { text: normalized, matchedVenue, confidence };
   }
+  function normalizeTranscript(text) { return normalizeSpeechTranscript(text).text; }
   function seoulTodayKey(now = new Date()) {
     const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
     const values = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${values.year}-${values.month}-${values.day}`;
@@ -79,5 +95,5 @@
     return Object.freeze({ load, save, plan, submit, ordinalIndex: (text) => ordinalIndex(text, load().lastResults.length), maxSteps });
   }
 
-  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
+  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, normalizeSpeechTranscript, venueSimilarity, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
 })(window);

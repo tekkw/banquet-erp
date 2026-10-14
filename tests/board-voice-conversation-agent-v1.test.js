@@ -24,8 +24,8 @@ assert(speechBlock.includes("event.results[index].isFinal"));
 assert(speechBlock.includes("!speechSubmitPending"));
 assert.equal((speechBlock.match(/aiForm\.requestSubmit\(\)/g) || []).length, 1, "final transcript submits once");
 assert(page.includes("conversationAgent.submit(text, { fastRoute })"), "voice and text share Conversation Agent submit");
-assert(page.includes('console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText })'));
-assert(page.includes('console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, route })'));
+assert(page.includes('console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence })'));
+assert(page.includes('console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence, route })'));
 
 const ttsStart = page.indexOf("function buildEventSelectionTts");
 const ttsEnd = page.indexOf("function eventVenue", ttsStart);

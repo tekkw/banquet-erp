@@ -98,6 +98,8 @@
   let speechErrorMessage = "";
   let speechRawTranscript = "";
   let speechSubmitPending = false;
+  let speechVenueAliases = [];
+  let speechNormalization = { matchedVenue: "", confidence: 0 };
   let fieldAiAutoSubmit = false;
   let fieldAiAwaitingAnswer = false;
   let voiceReplyEnabled = false;
@@ -130,6 +132,13 @@
       throw error;
     }
     return text ? JSON.parse(text) : null;
+  }
+  async function loadSpeechVenueAliases() {
+    try {
+      const [aliases, venues] = await Promise.all([request("venue_aliases?select=alias_name,venue_id&is_active=eq.true"), request("venues?select=id,venue_name&is_active=eq.true")]);
+      const venueNames = new Map((venues || []).map((venue) => [String(venue.id), venue.venue_name]));
+      speechVenueAliases = [...(aliases || []).map((row) => ({ alias: row.alias_name, canonical: venueNames.get(String(row.venue_id)) || "" })), ...(venues || []).map((row) => ({ alias: row.venue_name, canonical: row.venue_name }))].filter((row) => row.alias && row.canonical);
+    } catch (error) { console.debug("speech venue aliases unavailable", error); speechVenueAliases = []; }
   }
   async function childRows(table, ids, order) {
     const result = []; const pageSize = 1000; const batchSize = 50;
@@ -741,7 +750,7 @@
         const transcript = event.results[index][0]?.transcript || "";
         if (event.results[index].isFinal) finalText += transcript; else interimText += transcript;
       }
-      if (finalText.trim()) speechRawTranscript = finalText.trim(); speechFinalText = window.erpConversationAgent.normalizeTranscript(speechRawTranscript); aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
+      if (finalText.trim()) speechRawTranscript = finalText.trim(); const normalized = window.erpConversationAgent.normalizeSpeechTranscript(speechRawTranscript, speechVenueAliases); speechFinalText = normalized.text; speechNormalization = normalized; aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
     };
     speechRecognition.onerror = (event) => {
       fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = false;
@@ -752,7 +761,7 @@
       speechListening = false; setSpeechButtonState("idle");
       if (speechFinalText) {
         aiInput.value = speechInputValue(speechFinalText); resizeAiInput();
-        if (fieldAiAutoSubmit && !speechSubmitPending) { fieldAiAutoSubmit = false; speechSubmitPending = true; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText }); aiForm.requestSubmit(); }
+        if (fieldAiAutoSubmit && !speechSubmitPending) { fieldAiAutoSubmit = false; speechSubmitPending = true; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence }); aiForm.requestSubmit(); }
         else setSpeechStatus("인식된 문장을 확인한 후 보내기를 눌러주세요.");
       }
       else { aiInput.value = speechBaseText; resizeAiInput(); if (!speechErrorMessage) setSpeechStatus("음성을 인식하지 못했습니다. 다시 시도해주세요.", true); }
@@ -764,7 +773,7 @@
     fieldAiAwaitingAnswer = false; cancelBoardSpeech();
     const recognition = ensureSpeechRecognition();
     if (!recognition) { setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); return; }
-    fieldAiAutoSubmit = true; speechSubmitPending = false; speechBaseText = ""; speechRawTranscript = ""; speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
+    fieldAiAutoSubmit = true; speechSubmitPending = false; speechBaseText = ""; speechRawTranscript = ""; speechFinalText = ""; speechNormalization = { matchedVenue: "", confidence: 0 }; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
     try { recognition.start(); } catch (error) { console.error("speech recognition start failed", error); setSpeechButtonState("idle"); setSpeechStatus("음성 입력을 시작하지 못했습니다. 다시 시도해주세요.", true); }
   }
   async function waitForVisualFrame() {
@@ -1090,7 +1099,7 @@
     const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "add_schedule" ? `${Number(proposal.change.time.slice(0, 2))}시${proposal.change.time.slice(3) === "00" ? "" : ` ${Number(proposal.change.time.slice(3))}분`} ${proposal.change.content}를 추가했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
     showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success, true); aiInput.value = "";
   }
-  function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
+  function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; loadSpeechVenueAliases(); refresh(); }
 
   voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
   ttsQualitySelect.value = ttsSettings.provider;
@@ -1123,7 +1132,7 @@
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
-    const agentPlan = conversationAgent.submit(text, { fastRoute }); const route = agentPlan.route; console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, route });
+    const agentPlan = conversationAgent.submit(text, { fastRoute }); const route = agentPlan.route; console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence, route });
     if (fastRoute === "conversation_agent" && !agentPlan.usesContext) { saveConversationContext({ ...conversationContext, lastDomain: "" }); renderAiContext(); }
     if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
     if (route === "record_field_setup") {
