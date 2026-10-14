@@ -13,7 +13,7 @@ vm.createContext(context);
 vm.runInContext(`${page.slice(helperStart, helperEnd)}\nthis.api = { queryPeriod, normalizedVenue, venueTerm, eventVenueMatches, eventDateKeys, eventInPeriod, eventQueryType, explicitLayoutTexts };`, context);
 const api = context.api;
 
-assert.equal(api.eventQueryType("이번 주 카프리 행사 레이아웃 뭐였지?"), "get_event_layout");
+assert.equal(api.eventQueryType("이번 주 카프리 행사 레이아웃 뭐였지?"), "get_event_document_section");
 assert.equal(api.eventQueryType("그 행사 인원 몇 명이야?"), "get_event_guest_count");
 assert.equal(api.eventQueryType("커피브레이크 몇 시였지?"), "get_event_schedule");
 assert.equal(api.eventQueryType("원본 엑셀 띄워봐"), "open_event_original");

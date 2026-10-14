@@ -30,7 +30,7 @@ Deno.serve(async (request) => {
     assertServerConfig();
 
     const payload = await request.json();
-    const { question, mode, analysisData, attachments } = payload;
+    const { question, mode, analysisData, attachments, eventContext } = payload;
     if (mode === "event_order_analysis") {
       const [banquetAssets, recommendItems, approvedKnowledge] = await Promise.all([
         loadBanquetAssets(),
@@ -122,8 +122,10 @@ Deno.serve(async (request) => {
       return jsonResponse({ message: "질문을 입력해주세요." }, 400);
     }
 
-    const chatDataContext = await loadChatDataContext(cleanQuestion);
     const chatAttachments = Array.isArray(attachments) ? attachments : [];
+    const eventDocumentResult = !chatAttachments.length ? await answerEventDocumentQuestion(cleanQuestion, eventContext ?? null) : null;
+    if (eventDocumentResult) return jsonResponse(eventDocumentResult);
+    const chatDataContext = await loadChatDataContext(cleanQuestion);
     const coffeeBreakAnswer = answerCoffeeBreakQuestion(cleanQuestion, chatDataContext.eventData);
     if (coffeeBreakAnswer && !chatAttachments.length) {
       return jsonResponse({ answer: `${coffeeBreakAnswer}\n\n출처: event_orders, event_schedules, event_calendar_dates, event_items` });
@@ -207,6 +209,57 @@ async function loadEventOrderData() {
         content: row.content,
       })),
   }));
+}
+
+function eventDocumentSection(question: string) {
+  if (/(?:원본|엑셀).*(?:보여|열어|띄워|보기)|(?:보여|열어|띄워).*(?:원본|엑셀)/i.test(question)) return "original";
+  if (/(?:첨부|별도\s*파일|레이아웃\s*파일).*(?:있|보여|열어|목록)|(?:보여|열어).*(?:첨부|파일)/i.test(question)) return "attachments";
+  if (/레이아웃|배치|스쿨식|극장식|라운드|lay\s*&?\s*out|재인폼|re-?inform/i.test(question)) return "layout";
+  if (/음료|bev(?:erage)?|맥주|소주|와인|콜라|사이다|주스|생수/i.test(question)) return "beverage";
+  if (/요청\s*사항|요청사항|비고|others?|다른\s*요청|특이\s*사항/i.test(question)) return "requests";
+  if (/마이크|단상|장비|equipment|품목|아이템/i.test(question)) return "equipment";
+  if (/커피\s*브레이크|커피브레이크|몇\s*시|일정|스케줄/i.test(question)) return "schedule";
+  return "";
+}
+
+function normalizedEventText(value: unknown) { return String(value ?? "").toLowerCase().replace(/\s+/g, ""); }
+function noteValues(notes: Array<Record<string, unknown>>, types: string[]) { const wanted = new Set(types); return notes.filter((row) => wanted.has(String(row.note_type || "").toLowerCase())).map((row) => String(row.content || "").trim()).filter(Boolean); }
+function uniqueText(values: unknown[]) { return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))]; }
+function itemLabel(row: Record<string, unknown>) { return [row.item_name, row.quantity, row.unit].filter((value) => value !== null && value !== undefined && value !== "").join(" · "); }
+
+async function answerEventDocumentQuestion(question: string, context: Record<string, unknown> | null) {
+  const section = eventDocumentSection(question);
+  if (!section) return null;
+  const headers = await supabaseSelect("event_orders", "select=*&order=created_at.desc&limit=500");
+  const compactQuestion = normalizedEventText(question);
+  const explicitlyNamed = headers.filter((row: Record<string, unknown>) => {
+    const name = normalizedEventText(row.event_name); const venue = normalizedEventText(row.venue);
+    return (name.length >= 2 && compactQuestion.includes(name)) || (venue.length >= 2 && compactQuestion.includes(venue) && /\d{4}[-./년]|\d{1,2}\s*월\s*\d{1,2}\s*일/.test(question));
+  });
+  let target = explicitlyNamed[0] || headers.find((row: Record<string, unknown>) => String(row.id) === String(context?.eventOrderId || context?.id || ""));
+  if (!target) return { answer: "어느 행사 이벤오더인지 알려주세요." };
+  const id = String(target.id);
+  const [dates, schedules, items, notes] = await Promise.all([
+    safeSupabaseSelect("event_calendar_dates", `select=*&event_order_id=eq.${encodeURIComponent(id)}&order=calendar_date.asc`),
+    safeSupabaseSelect("event_schedules", `select=*&event_order_id=eq.${encodeURIComponent(id)}&order=created_at.asc`),
+    safeSupabaseSelect("event_items", `select=*&event_order_id=eq.${encodeURIComponent(id)}&order=created_at.asc`),
+    safeSupabaseSelect("event_notes", `select=*&event_order_id=eq.${encodeURIComponent(id)}&order=created_at.asc`),
+  ]);
+  const source = "출처: event_orders, event_calendar_dates, event_schedules, event_items, event_notes";
+  if (section === "original") return target.storage_path ? { answer: `${target.event_name || "선택한 행사"}의 원본 엑셀을 열 수 있습니다.`, uiActions: [{ type: "open_event_original", eventOrderId: id, storagePath: target.storage_path, label: "원본 엑셀 보기" }] } : { answer: "등록된 원본 파일이 없습니다." };
+  if (section === "attachments") {
+    const links = await safeSupabaseSelect("file_links", `select=file_id,link_type,sort_order&entity_type=eq.event_order&entity_id=eq.${encodeURIComponent(id)}&order=sort_order.asc,created_at.asc`);
+    const fileIds = uniqueText(links.map((row: Record<string, unknown>) => row.file_id));
+    const files = fileIds.length ? await safeSupabaseSelect("files", `select=id,bucket,storage_path,original_filename,file_type,mime_type,description&id=in.(${fileIds.map(encodeURIComponent).join(",")})`) : [];
+    if (!files.length) return { answer: "이 행사에 연결된 별도 첨부파일은 확인되지 않습니다." };
+    return { answer: `이 행사에 연결된 첨부파일이 ${files.length}개 있습니다.`, uiActions: files.map((file: Record<string, unknown>) => ({ type: "open_event_attachment", eventOrderId: id, fileId: file.id, bucket: file.bucket, storagePath: file.storage_path, label: file.description || file.original_filename || "첨부파일" })) };
+  }
+  if (section === "layout") { const values = uniqueText([target.layout_text, target.layout_eqp, target.layout_type, target.layout, ...noteValues(notes, ["layout_eqp", "layout"])]); const text = values.join(" / "); return { answer: values.length ? (/re[- ]?inform|재인폼/i.test(text) ? "레이아웃은 재인폼 예정으로 기재되어 있습니다." : `LAY & OUT에는 ${text}으로 요청되어 있습니다.`) : "등록된 이벤오더에서 레이아웃 요청은 확인되지 않습니다.", sources: source }; }
+  if (section === "beverage") { const related = items.filter((row: Record<string, unknown>) => /음료|bev(?:erage)?|맥주|소주|와인|콜라|사이다|커피|주스|생수/i.test(String(row.item_name || ""))); const values = uniqueText([target.beverages_text, target.beverage, target.bev, ...noteValues(notes, ["bev", "beverage", "beverages", "fnb"]), ...related.map(itemLabel)]); return { answer: values.length ? `BEV에는 ${values.join(" / ")}으로 기재되어 있습니다.` : "등록된 이벤오더에서 음료 요청은 확인되지 않습니다.", sources: source }; }
+  if (section === "requests") { const values = uniqueText([target.others_text, target.others, target.special_requests, target.internal_memo, ...noteValues(notes, ["others", "internal_memo", "special_requests"])]).filter((value) => !value.startsWith("[field_setup_observation]")); return { answer: values.length ? `OTHERS에는 ${values.join(" / ")}으로 기재되어 있습니다.` : "등록된 이벤오더에서 별도 요청사항은 확인되지 않습니다.", sources: source }; }
+  if (section === "equipment") { const pattern = /마이크/i.test(question) ? /마이크|mic/i : /단상/i.test(question) ? /단상|podium/i : /마이크|mic|단상|podium|장비|equipment|스크린|빔|프로젝터|태극기/i; const values = uniqueText([...items.filter((row: Record<string, unknown>) => pattern.test(String(row.item_name || ""))).map(itemLabel), ...noteValues(notes, ["others", "equipment", "special_requests"]).filter((value) => pattern.test(value))]); return { answer: values.length ? values.join(" / ") : "등록된 이벤오더에서 해당 장비 요청은 확인되지 않습니다.", sources: source }; }
+  const coffeeOnly = /커피\s*브레이크|커피브레이크/i.test(question); const rows = schedules.filter((row: Record<string, unknown>) => !coffeeOnly || /커피\s*브레이크|커피브레이크|coffee\s*break/i.test(String(row.content || "")));
+  return { answer: rows.length ? rows.map((row: Record<string, unknown>) => [row.schedule_time, row.content].filter(Boolean).join(" · ")).join("\n") : `등록된 이벤오더에서 ${coffeeOnly ? "커피브레이크" : "일정"} 정보는 확인되지 않습니다.`, sources: source, dates };
 }
 
 async function loadBanquetAssets() {

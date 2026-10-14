@@ -91,6 +91,7 @@
     let aiMessagesLoading = false;
     let aiConversationPersistenceAvailable = true;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
+    const eventConversationAgent = globalThis.erpConversationAgent?.create({ storage: globalThis.sessionStorage, storageKey: "banquetBoard.conversationContext.v1", maxSteps: 4 });
     const CORRECTION_LOG_KEY = "banquetErp.eventOrderCorrections.v1";
     const CORRECTION_SUGGESTION_KEY = "banquetErp.aiCorrectionSuggestions.v1";
     const conversationAgent = window.erpConversationAgent?.create({ storage: window.sessionStorage, storageKey: "banquetErp.globalAiContext.v1", maxSteps: 4 });
@@ -270,6 +271,11 @@
         bubble.append(renderMessageAttachments(meta.attachments));
       }
       bubble.append(renderStructuredAiText(text));
+      if (meta?.uiActions?.length) {
+        const actions = document.createElement("div"); actions.className = "board-ai-actions";
+        meta.uiActions.forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.textContent = action.label || "파일 열기"; button.addEventListener("click", () => { if (action.type === "open_event_original" && action.storagePath) window.open(`./index.html?excelPreview=${encodeURIComponent(action.storagePath)}`, "_blank", "noopener"); else if (action.type === "open_event_attachment" && action.bucket && action.storagePath) { const path = String(action.storagePath).split("/").map(encodeURIComponent).join("/"); window.open(`${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(action.bucket)}/${path}`, "_blank", "noopener"); } }); actions.append(button); });
+        bubble.append(actions);
+      }
       if (meta?.saveSuggestion) {
         bubble.append(createSaveSuggestionCard(meta.saveSuggestion));
       }
@@ -696,7 +702,7 @@
             apikey: supabaseConfig.anonKey,
             Authorization: `Bearer ${supabaseConfig.anonKey}`,
           },
-          body: JSON.stringify({ question, attachments: uploadedAttachments }),
+          body: JSON.stringify({ question, attachments: uploadedAttachments, eventContext: eventConversationAgent?.load()?.event || null }),
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
@@ -707,6 +713,7 @@
         const assistantMessage = conversation.messages[conversation.messages.length - 1];
         assistantMessage.meta = {
           saveSuggestion: detectOperationalSaveSuggestion(question, assistantMessage.text),
+          uiActions: Array.isArray(body.uiActions) ? body.uiActions : [],
         };
         await persistAiMessage(conversation.id, "assistant", assistantMessage.text, []);
       } catch (error) {
