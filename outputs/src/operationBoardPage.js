@@ -213,19 +213,20 @@
     return proposal;
   }
   function seoulTodayKey() {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-    const values = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${values.year}-${values.month}-${values.day}`;
+    return window.erpConversationAgent.seoulTodayKey();
   }
-  function shiftDateKey(key, days) { const date = new Date(`${key}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
+  function shiftDateKey(key, days) { return window.erpConversationAgent.shiftDateKey(key, days); }
   function queryPeriod(text, anchorDate = board.getSelectedDate()) {
-    const today = seoulTodayKey(); const anchor = /^\d{4}-\d{2}-\d{2}$/.test(anchorDate || "") ? anchorDate : today; const weekday = new Date(`${anchor}T00:00:00Z`).getUTCDay(); const mondayOffset = weekday === 0 ? -6 : 1 - weekday; const weekStart = shiftDateKey(anchor, mondayOffset);
+    const today = seoulTodayKey(); const resolved = window.erpConversationAgent.resolveDateReference(text, { selectedBoardDate: anchorDate, today }); const anchor = resolved.source === "selectedBoardDate" ? resolved.date : today; const weekday = new Date(`${anchor}T00:00:00Z`).getUTCDay(); const mondayOffset = weekday === 0 ? -6 : 1 - weekday; const weekStart = shiftDateKey(anchor, mondayOffset);
     if (/지난\s*주/.test(text)) { const start = shiftDateKey(weekStart, -7); return { start, end: shiftDateKey(start, 6), label: "지난 주" }; }
     if (/다음\s*주/.test(text)) { const start = shiftDateKey(weekStart, 7); return { start, end: shiftDateKey(start, 6), label: "다음 주" }; }
     if (/이번\s*주/.test(text)) return { start: weekStart, end: shiftDateKey(weekStart, 6), label: "이번 주" };
     if (/다음\s*달/.test(text)) { const next = new Date(`${anchor.slice(0, 7)}-01T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); const start = next.toISOString().slice(0, 10); next.setUTCMonth(next.getUTCMonth() + 1); return { start, end: shiftDateKey(next.toISOString().slice(0, 10), -1), label: "다음 달" }; }
     if (/이번\s*달/.test(text)) { const start = `${anchor.slice(0, 7)}-01`; const next = new Date(`${start}T00:00:00Z`); next.setUTCMonth(next.getUTCMonth() + 1); return { start, end: shiftDateKey(next.toISOString().slice(0, 10), -1), label: "이번 달" }; }
     if (/내일/.test(text)) { const key = shiftDateKey(today, 1); return { start: key, end: key, label: "내일" }; }
+    if (/어제/.test(text)) { const key = shiftDateKey(today, -1); return { start: key, end: key, label: "어제" }; }
     if (/오늘/.test(text)) return { start: today, end: today, label: "오늘" };
+    if (resolved.source === "selectedBoardDate") return { start: resolved.date, end: resolved.date, label: "선택한 날짜" };
     const direct = text.match(/(?:(\d{4})\s*(?:년|[.\/-]))?\s*(\d{1,2})\s*(?:월|[.\/-])\s*(\d{1,2})\s*(?:일)?/);
     if (direct) { const key = `${direct[1] || today.slice(0, 4)}-${String(direct[2]).padStart(2, "0")}-${String(direct[3]).padStart(2, "0")}`; return { start: key, end: key, label: `${Number(direct[2])}/${Number(direct[3])}` }; }
     return null;

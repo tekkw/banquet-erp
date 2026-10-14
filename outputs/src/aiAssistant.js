@@ -152,6 +152,8 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
+        const selectedBoardDate = sessionStorage.getItem("banquet-erp-operation-board-selected-date-v2") || "";
+        const resolvedQuestion = window.erpConversationAgent.questionWithResolvedDate(question, { selectedBoardDate });
         const response = await fetch(supabaseConfig.functionUrl, {
           method: "POST",
           headers: {
@@ -159,7 +161,7 @@
             apikey: supabaseConfig.anonKey,
             Authorization: `Bearer ${supabaseConfig.anonKey}`,
           },
-          body: JSON.stringify({ question }),
+          body: JSON.stringify({ question: resolvedQuestion }),
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
@@ -695,6 +697,9 @@
           };
           renderAiPageMessages();
         }
+        const selectedBoardDate = sessionStorage.getItem("banquet-erp-operation-board-selected-date-v2") || "";
+        const dateReference = window.erpConversationAgent.resolveDateReference(question, { selectedBoardDate });
+        const resolvedQuestion = window.erpConversationAgent.questionWithResolvedDate(question, { selectedBoardDate });
         const response = await fetch(supabaseConfig.functionUrl, {
           method: "POST",
           headers: {
@@ -702,7 +707,7 @@
             apikey: supabaseConfig.anonKey,
             Authorization: `Bearer ${supabaseConfig.anonKey}`,
           },
-          body: JSON.stringify({ question, attachments: uploadedAttachments, eventContext: eventConversationAgent?.load()?.event || null }),
+          body: JSON.stringify({ question: resolvedQuestion, attachments: uploadedAttachments, eventContext: dateReference.source === "none" ? eventConversationAgent?.load()?.event || null : null }),
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");

@@ -740,6 +740,21 @@ button.mini-day:hover {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
+  .calendar-event-bar.desktop-calendar-hidden { display: none; }
+  .desktop-calendar-overflow { position: absolute; right: 6px; bottom: 5px; z-index: 3; color: var(--theme-gold); font-size: 11px; font-weight: 800; }
+  .calendar-day-drawer { position: fixed; z-index: 1400; top: 0; right: 0; width: min(390px, 34vw); height: 100vh; padding: 22px; overflow-y: auto; border-left: 1px solid var(--border); background: var(--surface); box-shadow: -16px 0 36px rgba(0, 0, 0, .24); transform: translateX(105%); transition: transform .2s ease; }
+  .calendar-day-drawer.visible { transform: translateX(0); }
+  .calendar-day-drawer header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+  .calendar-day-drawer h2, .calendar-day-drawer p { margin: 0; }
+  .calendar-day-drawer header button { width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--surface-muted); color: inherit; font-size: 22px; }
+  .calendar-day-drawer-list { display: grid; gap: 10px; }
+  .calendar-day-drawer-event { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; width: 100%; padding: 12px; border: 1px solid var(--border); border-left: 4px solid var(--event-color); border-radius: 10px; background: var(--surface-muted); color: inherit; text-align: left; }
+  .calendar-day-drawer-event .calendar-day-drawer-badge { padding: 2px 6px; border-radius: 999px; background: color-mix(in srgb, var(--event-color) 18%, transparent); color: var(--event-color); font-size: 11px; font-weight: 800; }
+  .calendar-day-drawer-event small { align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .calendar-day-drawer-event strong { grid-column: 1 / 3; }
+  .calendar-day-drawer-event > span:last-child { grid-column: 3; grid-row: 2; font-weight: 700; }
+  .calendar-day-drawer-empty { color: var(--text-muted); }
 }
 
 .calendar-overflow-count {

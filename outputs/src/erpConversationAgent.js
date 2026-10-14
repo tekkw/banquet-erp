@@ -17,6 +17,23 @@
       .replace(/컨벤션\s*비/gi, "컨벤션B")
       .replace(/\s+/g, " ");
   }
+  function seoulTodayKey(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${values.year}-${values.month}-${values.day}`;
+  }
+  function shiftDateKey(key, days) { const date = new Date(`${key}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); }
+  function resolveDateReference(text, options = {}) {
+    const value = String(text || ""); const today = options.today || seoulTodayKey(options.now); const selected = /^\d{4}-\d{2}-\d{2}$/.test(options.selectedBoardDate || "") ? options.selectedBoardDate : today;
+    if (/오늘/.test(value)) return { date: today, source: "today" };
+    if (/내일/.test(value)) return { date: shiftDateKey(today, 1), source: "tomorrow" };
+    if (/어제/.test(value)) return { date: shiftDateKey(today, -1), source: "yesterday" };
+    if (/이\s*날짜|선택한\s*날짜|운영\s*보드\s*날짜|운영보드\s*날짜/.test(value)) return { date: selected, source: "selectedBoardDate" };
+    return { date: "", source: "none" };
+  }
+  function questionWithResolvedDate(text, options = {}) {
+    const resolved = resolveDateReference(text, options); if (!resolved.date) return String(text || "");
+    return `${text}\n[확정 날짜 기준: ${resolved.date}, ${resolved.source}]`;
+  }
   function hasRecentReference(text) { return /그\s*(?:행사|거|세팅)|이\s*행사|이벤\s*오더에|해당\s*행사|아까\s*(?:거|것)|아까(?:\s*\S+){0,2}\s*행사|거기|그\s*곳/.test(String(text || "")); }
   function ordinalIndex(text, length) {
     const value = compact(text); if (/마지막(?:거|행사)?/.test(value)) return length ? length - 1 : -1;
@@ -61,5 +78,5 @@
     return Object.freeze({ load, save, plan, submit, ordinalIndex: (text) => ordinalIndex(text, load().lastResults.length), maxSteps });
   }
 
-  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript });
+  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
 })(window);

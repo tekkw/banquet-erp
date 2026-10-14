@@ -30,6 +30,23 @@
     const { eventColors } = constants;
     const { formatDateKey, normalizeEventColorKey, getEventRenderRange, syncExportDefaults } = helpers;
     const { openEventModal, openDateEventsSheet } = callbacks;
+    const DESKTOP_EVENT_LIMIT = 5;
+
+    function shortVenueLabel(eventItem) {
+      const source = [eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean).join(" ");
+      if (/부라노\s*(?:전체|ALL)/i.test(source)) return "부ALL";
+      if (/컨벤션\s*(?:전체|AB)/i.test(source)) return "컨AB";
+      const mappings = [[/컨벤션\s*A(?!B)/i, "컨A"], [/컨벤션\s*B/i, "컨B"], [/부라노\s*1/i, "부1"], [/부라노\s*2/i, "부2"], [/부라노\s*3/i, "부3"], [/카프리\s*1/i, "카1"], [/카프리\s*2/i, "카2"], [/카프리\s*3/i, "카3"], [/페스타/i, "페스타"], [/올리비아/i, "올리"]];
+      const venues = mappings.filter(([pattern]) => pattern.test(source)).map(([, label]) => label);
+      if (!venues.length) return String(eventItem.venue || eventItem.schedule?.[0]?.venue || "장소 미정");
+      if (venues.length === 1) return venues[0];
+      if (venues.length === 2) return venues.join("+");
+      return `${venues[0]} 외 ${venues.length - 1}`;
+    }
+
+    function fullVenueLabel(eventItem) {
+      return [...new Set([eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean))].join(", ") || "장소 미입력";
+    }
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -110,7 +127,11 @@
             overflow.textContent = `+${mobileOverflowByDate.get(dateKey)}`;
             dayCell.append(overflow);
           }
-          dayCell.addEventListener("click", () => openDateEventsSheet?.(dateKey));
+          const desktopHiddenCount = Math.max(0, (dailyEventCounts.get(dateKey) || 0) - DESKTOP_EVENT_LIMIT);
+          if (desktopHiddenCount) {
+            const overflow = document.createElement("span"); overflow.className = "desktop-calendar-overflow"; overflow.textContent = `+${desktopHiddenCount}건`; dayCell.append(overflow);
+          }
+          dayCell.addEventListener("click", () => window.matchMedia("(min-width: 769px)").matches ? openDesktopDayDrawer(dateKey, savedEvents) : openDateEventsSheet?.(dateKey));
           weekRow.append(dayCell);
         });
 
@@ -141,19 +162,40 @@
       if (segment.densityClass) button.classList.add(segment.densityClass);
       button.style.gridColumn = `${segment.columnStart} / ${segment.columnEnd}`;
       button.style.gridRow = String(segment.laneIndex + 1);
+      if (segment.laneIndex >= DESKTOP_EVENT_LIMIT) button.classList.add("desktop-calendar-hidden");
       const color = eventColors[normalizeEventColorKey(segment.eventItem.color)] || eventColors.gray;
       const strip = document.createElement("span");
       strip.className = "event-color-strip";
       strip.style.background = color.dot || color.border;
       const title = document.createElement("span");
       title.className = "event-title";
-      title.textContent = segment.eventItem.eventName;
+      const eventName = segment.eventItem.eventName || "이름 없는 행사";
+      title.textContent = `${shortVenueLabel(segment.eventItem)} ${eventName}`;
+      button.title = eventName;
       button.append(strip, title);
       button.style.background = color.background;
       button.style.borderColor = color.border;
       button.style.color = color.text;
       button.addEventListener("click", () => openEventModal?.(segment.eventItem, segment.clickDateKey));
       return button;
+    }
+
+    function openDesktopDayDrawer(dateKey, savedEvents) {
+      let drawer = document.getElementById("calendarDayDrawer");
+      if (!drawer) {
+        drawer = document.createElement("aside"); drawer.id = "calendarDayDrawer"; drawer.className = "calendar-day-drawer"; drawer.setAttribute("aria-label", "날짜별 행사 상세"); document.body.append(drawer);
+      }
+      const events = savedEvents.filter((eventItem) => {
+        const range = getEventRenderRange(eventItem); const date = new Date(`${dateKey}T00:00:00`); return range.startDate && range.endDate && date >= range.startDate && date <= range.endDate;
+      });
+      const date = new Date(`${dateKey}T00:00:00`); const heading = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(date);
+      drawer.innerHTML = `<header><div><h2>${heading}</h2><p>총 ${events.length}건</p></div><button type="button" data-calendar-drawer-close aria-label="닫기">×</button></header><div class="calendar-day-drawer-list"></div>`;
+      const list = drawer.querySelector(".calendar-day-drawer-list");
+      events.forEach((eventItem) => {
+        const color = eventColors[normalizeEventColorKey(eventItem.color)] || eventColors.gray; const button = document.createElement("button"); button.type = "button"; button.className = "calendar-day-drawer-event"; button.style.setProperty("--event-color", color.dot || color.border); button.innerHTML = `<span class="calendar-day-drawer-badge">${eventItem.eventType || "행사"}</span><small>${fullVenueLabel(eventItem)}</small><strong>${eventItem.eventName || "이름 없는 행사"}</strong><span>${eventItem.guestCount || "-"}명</span>`; button.addEventListener("click", () => openEventModal?.(eventItem, dateKey)); list.append(button);
+      });
+      if (!events.length) list.innerHTML = `<p class="calendar-day-drawer-empty">등록된 행사가 없습니다.</p>`;
+      drawer.querySelector("[data-calendar-drawer-close]").addEventListener("click", () => drawer.classList.remove("visible")); drawer.classList.add("visible");
     }
 
     function getCalendarDensityClass(count) {
