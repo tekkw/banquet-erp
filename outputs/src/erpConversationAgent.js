@@ -34,14 +34,14 @@
     const resolved = resolveDateReference(text, options); if (!resolved.date) return String(text || "");
     return `${text}\n[확정 날짜 기준: ${resolved.date}, ${resolved.source}]`;
   }
-  function hasRecentReference(text) { return /그\s*(?:행사|거|세팅)|이\s*행사|이벤\s*오더에|해당\s*행사|아까\s*(?:거|것)|아까(?:\s*\S+){0,2}\s*행사|거기|그\s*곳/.test(String(text || "")); }
+  function hasRecentReference(text) { return /그럼|그\s*(?:행사|거|세팅)|이\s*행사|다음\s*세팅|이벤\s*오더에|해당\s*행사|아까\s*(?:거|것)|아까(?:\s*\S+){0,2}\s*행사|거기|그\s*곳/.test(String(text || "")); }
   function ordinalIndex(text, length) {
     const value = compact(text); if (/마지막(?:거|행사)?/.test(value)) return length ? length - 1 : -1;
     const numeric = value.match(/(\d+)번째/); if (numeric) return Number(numeric[1]) - 1;
     const word = Object.keys(ORDINALS).find((key) => value.includes(key)); return word ? ORDINALS[word] : -1;
   }
   function venueIn(text) { return compact(text).match(/(?:컨벤션(?:A|B|C|[123])?|부라노(?:[123])?|카프리(?:[123](?:\+[123])*)?|페스타|포이어)/i)?.[0] || ""; }
-  function eventDocumentTool(text) { const value = String(text || ""); if (/(?:첨부|별도\s*파일|레이아웃\s*파일).*(?:있|보여|열어|목록)|(?:보여|열어).*(?:첨부|파일)/i.test(value)) return "getEventAttachments"; if (/(?:요청\s*사항|요청사항|비고|others?|다른\s*요청|특이\s*사항|이벤\s*오더.*(?:뭐라고|써\s*있|적혀))/i.test(value)) return "getEventRequests"; if (/(?:레이아웃|lay\s*&?\s*out|재인폼|re-?inform|세팅.*어떻게.*(?:해달|하래)|음료|bev(?:erage)?|마이크|단상|장비|품목|커피\s*브레이크|커피브레이크)/i.test(value)) return "getEventDocumentSection"; return ""; }
+  function eventDocumentTool(text) { const value = String(text || ""); if (/(?:점심|중식|런치|lunch)|커피\s*브레이크|커피브레이크/i.test(value)) return "getEventSchedule"; if (/(?:첨부|별도\s*파일|레이아웃\s*파일).*(?:있|보여|열어|목록)|(?:보여|열어).*(?:첨부|파일)/i.test(value)) return "getEventAttachments"; if (/(?:요청\s*사항|요청사항|비고|others?|다른\s*요청|특이\s*사항|이벤\s*오더.*(?:뭐라고|써\s*있|적혀))/i.test(value)) return "getEventRequests"; if (/(?:레이아웃|lay\s*&?\s*out|재인폼|re-?inform|세팅.*어떻게.*(?:해달|하래)|음료|bev(?:erage)?|마이크|단상|장비|품목)/i.test(value)) return "getEventDocumentSection"; return ""; }
   function createToolRegistry(tools) {
     const registry = { ...tools };
     return Object.freeze({ has: (name) => typeof registry[name] === "function", run: (name, input) => { if (typeof registry[name] !== "function") throw new Error(`ERP tool not registered: ${name}`); return registry[name](input); }, names: () => Object.keys(registry) });
@@ -53,7 +53,8 @@
     function plan(text, fastRoute = "") {
       const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+번째|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
       const contextVenue = venueIn(context.event?.venue || ""); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)));
-      const selectedEventQuery = context.event?.eventOrderId && !/(추가|변경|수정|등록|메모\s*남겨)/.test(value);
+      const explicitEventTarget = Boolean(venue || /(?:오늘|내일|어제|이번|다음|지난)\s*(?:주|달)?|\d{1,2}\s*월|\d{4}[-./년]/.test(value));
+      const selectedEventQuery = context.event?.eventOrderId && !explicitEventTarget && !/(추가|변경|수정|등록|메모\s*남겨)/.test(value);
       if (selectedEventQuery && /(?:원본|원본\s*엑셀|엑셀|이벤\s*오더|원본\s*파일|파일).*(?:보여|띄워|열어)|(?:보여|띄워|열어).*(?:원본|엑셀|이벤\s*오더|파일)/.test(value)) return { route: "event_query", tool: "openEventOriginal", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, actions: [{ type: "open_event_original", eventOrderId: context.event.eventOrderId, storagePath: context.event.storagePath || "" }], maxSteps };
       if (selectedEventQuery && /몇\s*명|인원/.test(value)) return { route: "event_query", tool: "getEventDetail", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
       if (selectedEventQuery && !/커피\s*브레이크|커피브레이크/.test(value) && /몇\s*시|일정|스케줄/.test(value)) return { route: "event_query", tool: "getEventSchedule", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
