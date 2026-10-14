@@ -93,6 +93,8 @@
   let speechBaseText = "";
   let speechFinalText = "";
   let speechErrorMessage = "";
+  let speechRawTranscript = "";
+  let speechSubmitPending = false;
   let fieldAiAutoSubmit = false;
   let fieldAiAwaitingAnswer = false;
   let voiceReplyEnabled = false;
@@ -243,6 +245,7 @@
   function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContextReference = window.erpConversationAgent.hasRecentReference(text) && activeEventContexts.length > 0 && (conversationContext.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(text)); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|실제\s*세팅|현장\s*기록|몇\s*명|인원|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || ((explicitEventData || (queryPeriod(text) && (venueTerm(text) || /레이아웃|배치/.test(text)))) && (queryPeriod(text) || venueTerm(text)))); }
   function referencedRecentEvent(text) { if (!window.erpConversationAgent.hasRecentReference(text)) return null; const venue = venueTerm(text); const context = venue ? activeEventContexts.find((item) => normalizedVenue(item.venue).includes(normalizedVenue(venue))) : activeEventContexts[0]; return context ? events.find((event) => String(event.id) === String(context.eventOrderId)) || null : null; }
   function displayEventDate(event, period = null) { const keys = eventDateKeys(event); const key = (period ? keys.find((value) => value >= period.start && value <= period.end) : "") || keys[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
+  function buildEventSelectionTts(event, period = null) { const key = (period ? eventDateKeys(event).find((value) => value >= period.start && value <= period.end) : "") || eventDateKeys(event)[0] || ""; const date = /^\d{4}-\d{2}-\d{2}$/.test(key) ? `${Number(key.slice(5, 7))}월 ${Number(key.slice(8, 10))}일` : "날짜 미등록"; return { text: `${date}, ${event.eventName || "행사명 미등록"}, ${eventVenue(event)}.` }; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
   function eventChoiceLabel(event, period = null) { return `${displayEventDate(event, period)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
   function textValues(row) { return Object.values(row || {}).filter((value) => ["string", "number"].includes(typeof value)).map(String); }
@@ -276,7 +279,8 @@
     else answer = `${displayEventDate(event, period)} · ${eventVenue(event)}\n${event.eventName || "행사명 미등록"}${event.guestCount !== "" ? `\n${event.guestCount}명` : ""}`;
     const actions = `<div class="board-ai-actions">${attachmentActions}${event.storagePath ? '<button type="button" data-event-query-action="open_event_original">원본 엑셀 보기</button>' : ""}<button type="button" data-event-query-action="get_event_schedule">일정 보기</button><button type="button" data-event-query-action="get_event_layout">레이아웃 보기</button></div>`;
     aiResult.innerHTML = `<article class="board-event-query-card" data-event-order-id="${escapeHtml(event.id)}"><h3>${escapeHtml(displayEventDate(event, period))} · ${escapeHtml(eventVenue(event))}</h3><strong>${escapeHtml(event.eventName || "행사명 미등록")}</strong>${sourceBadge ? `<small class="board-event-source-badge">${escapeHtml(sourceBadge)}</small>` : ""}<p>${escapeHtml(answer).replace(/\n/g, "<br>")}</p>${details ? `<pre>${escapeHtml(details)}</pre>` : ""}${actions}</article>`;
-    rememberConversation(userText, answer); speakBoardReply(answer); finishFieldAiAnswer();
+    const ttsText = queryType === "find_events_by_period_space" ? buildEventSelectionTts(event, period).text : queryType === "open_event_original" && event.storagePath ? "원본 이벤오더를 열었습니다." : answer;
+    rememberConversation(userText, answer); speakBoardReply(ttsText); finishFieldAiAnswer();
   }
   async function handleEventQuery(text, selectedEvent = null, forcedType = "") {
     const queryType = forcedType || eventQueryType(text); const anchorDate = board.getSelectedDate(); const hasRelativePeriod = /(이번|다음|지난)\s*(?:주|달)/.test(text); let period = queryPeriod(text, anchorDate); const venue = venueTerm(text); const allowAll = /전체\s*(?:보여|알려|검색)?/.test(text); let matches = [];
@@ -665,7 +669,7 @@
         const transcript = event.results[index][0]?.transcript || "";
         if (event.results[index].isFinal) finalText += transcript; else interimText += transcript;
       }
-      speechFinalText = finalText.trim(); aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
+      if (finalText.trim()) speechRawTranscript = finalText.trim(); speechFinalText = window.erpConversationAgent.normalizeTranscript(speechRawTranscript); aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
     };
     speechRecognition.onerror = (event) => {
       fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = false;
@@ -676,7 +680,7 @@
       speechListening = false; setSpeechButtonState("idle");
       if (speechFinalText) {
         aiInput.value = speechInputValue(speechFinalText); resizeAiInput();
-        if (fieldAiAutoSubmit) { fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); aiForm.requestSubmit(); }
+        if (fieldAiAutoSubmit && !speechSubmitPending) { fieldAiAutoSubmit = false; speechSubmitPending = true; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText }); aiForm.requestSubmit(); }
         else setSpeechStatus("인식된 문장을 확인한 후 보내기를 눌러주세요.");
       }
       else { aiInput.value = speechBaseText; resizeAiInput(); if (!speechErrorMessage) setSpeechStatus("음성을 인식하지 못했습니다. 다시 시도해주세요.", true); }
@@ -688,7 +692,7 @@
     fieldAiAwaitingAnswer = false; cancelBoardSpeech();
     const recognition = ensureSpeechRecognition();
     if (!recognition) { setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); return; }
-    fieldAiAutoSubmit = true; speechBaseText = ""; speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
+    fieldAiAutoSubmit = true; speechSubmitPending = false; speechBaseText = ""; speechRawTranscript = ""; speechFinalText = ""; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
     try { recognition.start(); } catch (error) { console.error("speech recognition start failed", error); setSpeechButtonState("idle"); setSpeechStatus("음성 입력을 시작하지 못했습니다. 다시 시도해주세요.", true); }
   }
   async function waitForVisualFrame() {
@@ -1044,7 +1048,7 @@
     if (followupContext && startsNewAssetRequest(text)) { explicitNewAsset = true; await deleteUnlinkedAssetImage(); resetAssetImage(); pendingAssetProposal = null; pendingAssetContext = null; followupContext = null; }
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
-    const agentPlan = conversationAgent.plan(text, fastRoute); const route = agentPlan.route;
+    const agentPlan = conversationAgent.submit(text, { fastRoute }); const route = agentPlan.route; console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, route });
     if (fastRoute === "conversation_agent" && !agentPlan.usesContext) { saveConversationContext({ ...conversationContext, lastDomain: "" }); renderAiContext(); }
     if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
     if (route === "record_field_setup") {
