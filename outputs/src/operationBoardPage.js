@@ -142,6 +142,7 @@
   function rememberSettingAdvisor(row) {
     settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
     try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
+    row.nextEvent.sourceLayoutId ||= row.nextLayout?.sourceLayoutId || row.savedLayout?.id || null;
     rememberActiveEvent(row.nextEvent);
     rememberDomainContext("venue", { name: row.space });
     rememberDomainContext("setting", { ...settingAdvisorContext, nextLayout: row.nextLayout, nextDate: row.nextDate, nextStart: row.nextStart });
@@ -162,7 +163,7 @@
     renderAiContext();
   }
   function rememberActiveEvent(event) {
-    const context = { eventOrderId: event.id, eventName: event.eventName, venue: event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "", eventDate: eventDateKeys(event)[0] || "", storagePath: event.storagePath || "", originalFilename: event.originalFilename || "" };
+    const context = { eventOrderId: event.id, eventName: event.eventName, venue: event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "", eventDate: eventDateKeys(event)[0] || "", guestCount: event.guestCount ?? "", storagePath: event.storagePath || "", originalFilename: event.originalFilename || "", sourceLayoutId: event.sourceLayoutId || null };
     activeEventContexts = [context, ...activeEventContexts.filter((item) => item.eventOrderId !== context.eventOrderId)].slice(0, 3);
     try { sessionStorage.setItem(activeEventContextKey, JSON.stringify(activeEventContexts)); } catch { /* session storage unavailable */ }
     rememberDomainContext("event", { ...conversationContext.event, ...context });
@@ -267,7 +268,7 @@
   }
   async function showEventAnswer(event, queryType, userText, period = null) {
     rememberActiveEvent(event); pendingEventQuery = null; let answer = ""; let details = ""; let sourceBadge = ""; let attachmentActions = "";
-    if (queryType === "open_event_original") { if (!event.storagePath) answer = "등록된 원본 파일이 없습니다."; else { answer = `${event.eventName || "선택한 행사"}의 원본 엑셀을 열었습니다.`; window.openStoredExcel(event.storagePath); } }
+    if (queryType === "open_event_original") { if (!event.storagePath && event.id) { const rows = await request(`event_orders?select=id,storage_path,original_filename&id=eq.${encodeURIComponent(event.id)}&limit=1`); event.storagePath = rows?.[0]?.storage_path || ""; event.originalFilename = rows?.[0]?.original_filename || event.originalFilename || ""; if (event.storagePath) rememberActiveEvent(event); } if (!event.storagePath) answer = "등록된 원본 파일이 없습니다."; else { answer = `${event.eventName || "선택한 행사"}의 원본 엑셀을 열었습니다.`; window.openStoredExcel(event.storagePath); } }
     else if (queryType === "get_event_guest_count") answer = event.guestCount !== "" && event.guestCount != null ? `${event.eventName || "선택한 행사"}의 등록 인원은 ${event.guestCount}명입니다.` : "등록된 이벤오더에서 인원 정보를 찾지 못했습니다.";
     else if (queryType === "get_event_schedule") { const rows = (event.schedule || []).filter((row) => !/커피\s*브레이크|커피브레이크/i.test(userText) || /커피\s*브레이크|커피브레이크/i.test(row.content)); answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 일정입니다.` : "등록된 이벤오더에서 일정 정보를 찾지 못했습니다."; details = rows.map((row) => [row.date, row.time, row.content, row.venue].filter(Boolean).join(" · ")).join("\n"); }
     else if (queryType === "get_event_items") { const rows = event.items || []; answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 품목입니다.` : "등록된 이벤오더에서 품목 정보를 찾지 못했습니다."; details = rows.slice(0, 20).map((row) => [row.item_name, row.quantity, row.amount].filter((value) => value !== "" && value != null).join(" · ")).join("\n"); }
@@ -425,14 +426,14 @@
     const term = venueTerm(text); if (!term) return null;
     return settingAdvisorRows.find((row) => normalizedVenue(text).includes(normalizedVenue(row.space).replace(/센터/g, "")) || normalizedVenue(row.space).includes(term)) || null;
   }
-  function showSettingAdvisorDetail(row) {
-    rememberSettingAdvisor(row); const answer = `${row.nextDate.slice(5).replace("-", "/")} ${row.nextStart} ${row.space} ${row.nextEvent.eventName || "행사명 미등록"}을 선택했습니다.`;
-    aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>행사 선택됨</h3><p>${escapeHtml(answer)}</p><p class="board-ai-status">인원, 레이아웃, 종료 시각, 현재 세팅 차이 또는 원본을 물어보세요.</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button></div></article>`; rememberConversation("행사 선택", answer); speakBoardReply(answer); finishFieldAiAnswer();
+  async function showSettingAdvisorDetail(row) {
+    rememberSettingAdvisor(row);
+    await showEventAnswer(row.nextEvent, "find_events_by_period_space", "행사 선택", { start: row.nextDate, end: row.nextDate });
   }
   async function handleSettingAdvisor(text) {
     if (!settingAdvisorRows.length || !settingAdvisorContext) settingAdvisorRows = await buildSettingAdvisorRows(text);
     const named = explicitSettingAdvisorRow(text);
-    if (named && /부터\s*보자|상담/.test(text)) { showSettingAdvisorDetail(named); return; }
+    if (named && /부터\s*보자|상담/.test(text)) { await showSettingAdvisorDetail(named); return; }
     const row = named || currentSettingAdvisorRow();
     if (!row) { await showSettingAdvisorList(text); return; }
     if (/원본|엑셀/.test(text)) { if (row.nextEvent.storagePath) { rememberActiveEvent(row.nextEvent); window.openStoredExcel(row.nextEvent.storagePath); showMessage(`${row.nextEvent.eventName || "다음 행사"} 원본 엑셀을 열었습니다.`, true); } else showMessage("다음 행사에 등록된 원본 파일이 없습니다."); return; }
@@ -445,7 +446,7 @@
     else if (/현재\s*세팅.*(?:뭐|알려)|현재\s*세팅\s*$/.test(text)) answer = row.currentLayout.layoutType ? `현재 세팅은 ${settingLayoutLabel(row.currentLayout)}${row.currentLayout.seats != null ? ` ${row.currentLayout.seats}석` : ""}${row.currentLayout.tables != null ? ` ${row.currentLayout.tables}T` : ""}입니다.` : "현재 세팅 정보를 확인하지 못했습니다.";
     else if (/현재\s*세팅|뭐가\s*달라|차이|의자\s*몇/.test(text)) answer = `${row.advice}. ${row.taskSummary}`;
     else if (/오늘\s*바로|오늘.*해야|밤에.*(?:해두|세팅)/.test(text)) answer = `${row.advice}. ${row.taskSummary}`;
-    else { showSettingAdvisorDetail(row); return; }
+    else { await showSettingAdvisorDetail(row); return; }
     aiResult.innerHTML = `<article class="board-setting-advisor-card"><h3>${escapeHtml(row.space)} 세팅 상담</h3><p>${escapeHtml(answer)}</p><div class="board-ai-actions"><button type="button" data-setting-advisor-back>전체 목록</button></div></article>`; rememberConversation(text, answer); speakBoardReply(answer); finishFieldAiAnswer();
   }
   function addMinutes(time, minutes) { const match = String(time || "").match(/^(\d{2}):(\d{2})$/); if (!match) return ""; const total = Number(match[1]) * 60 + Number(match[2]) + minutes; return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`; }
@@ -1104,7 +1105,7 @@
     if (event.target.closest("[data-setting-plan-layout]")) { const row = pendingSettingExecutionPlan?.row; if (row?.savedLayout?.id) window.open(`../index.html?layoutPreview=${encodeURIComponent(row.savedLayout.id)}`, "_blank", "noopener"); else showMessage("연결된 저장 레이아웃이 없습니다."); return; }
     if (event.target.closest("[data-setting-plan-original]")) { const row = pendingSettingExecutionPlan?.row; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
     const settingSelect = event.target.closest("[data-setting-advisor-select]");
-    if (settingSelect) { const row = settingAdvisorRows[Number(settingSelect.dataset.settingAdvisorSelect)]; if (row) showSettingAdvisorDetail(row); return; }
+    if (settingSelect) { const row = settingAdvisorRows[Number(settingSelect.dataset.settingAdvisorSelect)]; if (row) await showSettingAdvisorDetail(row); return; }
     const settingEvent = event.target.closest("[data-setting-advisor-event]");
     if (settingEvent) { const row = settingAdvisorRows[Number(settingEvent.dataset.settingAdvisorEvent)]; if (row) await showEventAnswer(row.nextEvent, "find_events_by_period_space", "다음 행사 보기", { start: row.nextDate, end: row.nextDate }); return; }
     const settingOriginal = event.target.closest("[data-setting-advisor-original]");

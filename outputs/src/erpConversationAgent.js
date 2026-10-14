@@ -36,6 +36,14 @@
     function plan(text, fastRoute = "") {
       const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+번째|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
       const contextVenue = venueIn(context.event?.venue || ""); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)));
+      const selectedEventQuery = context.event?.eventOrderId && !/(추가|변경|수정|등록|메모\s*남겨)/.test(value);
+      if (selectedEventQuery && /(?:원본|원본\s*엑셀|엑셀|이벤\s*오더|원본\s*파일|파일).*(?:보여|띄워|열어)|(?:보여|띄워|열어).*(?:원본|엑셀|이벤\s*오더|파일)/.test(value)) return { route: "event_query", tool: "openEventOriginal", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, actions: [{ type: "open_event_original", eventOrderId: context.event.eventOrderId, storagePath: context.event.storagePath || "" }], maxSteps };
+      if (selectedEventQuery && /몇\s*명|인원/.test(value)) return { route: "event_query", tool: "getEventDetail", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
+      if (selectedEventQuery && !/커피\s*브레이크|커피브레이크/.test(value) && /몇\s*시|일정|스케줄/.test(value)) return { route: "event_query", tool: "getEventSchedule", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
+      const selectedDocumentTool = selectedEventQuery ? eventDocumentTool(value) : "";
+      if (selectedDocumentTool) return { route: "event_query", tool: selectedDocumentTool, selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
+      if (venue && context.event?.period && /(?:은|는)?\??$/.test(value) && !/세팅|현재/.test(value)) return { route: "event_query", tool: "findEvents", text: `${context.event.period.label || "이번 주"} ${venue} 행사 뭐 있어?`, maxSteps };
+      if (context.lastDomain === "asset" && context.asset?.assetId && /몇\s*개|수량|얼마나|어디/.test(value)) return { route: "asset_query", tool: "getAssetQuantity", assetId: context.asset.assetId, text: value, usesContext: true, maxSteps };
       if (explicitRoute && !referencesRecent) return { route: fastRoute, tool: "", text: value, usesContext: false, maxSteps };
       if (/(?:이번|다음|지난)\s*(?:주|달).*(?:뭐|행사|일정).*(?:있|하지)|(?:뭐|행사|일정).*(?:이번|다음|지난)\s*(?:주|달)/.test(value)) return { route: "event_query", tool: "findEvents", text: value.includes("행사") ? value : `${value} 행사`, maxSteps };
       if (ordinal >= 0 && results[ordinal]?.id) return { route: "event_query", tool: /원본|엑셀/.test(value) ? "openEventOriginal" : /몇\s*명|인원/.test(value) ? "getEventDetail" : "getEventDetail", selectedResultId: results[ordinal].id, text: value, maxSteps };
@@ -43,8 +51,7 @@
       const documentTool = eventDocumentTool(value);
       if (documentTool) { const explicitTarget = Boolean(venue || /(?:오늘|내일|모레|이번|다음|지난)\s*(?:주|달)?|\d{1,2}\s*월|\d{4}[-./년]/.test(value)); return { route: "event_query", tool: documentTool, selectedResultId: explicitTarget ? "" : context.event?.eventOrderId || "", text: value, usesContext: !explicitTarget && Boolean(context.event), maxSteps }; }
       if (eventReference && /몇\s*명|인원/.test(value)) return { route: "event_query", tool: "getEventDetail", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, maxSteps };
-      if (referencesRecent && context.lastDomain === "asset" && context.asset?.assetId && /몇\s*개|수량|얼마나|어디/.test(value)) return { route: "asset_query", tool: "getAssetQuantity", assetId: context.asset.assetId, text: value, usesContext: true, maxSteps };
-      if (referencesRecent && context.lastDomain === "setting" && context.setting && /(?:다|전부).*(?:했어|끝냈어|완료했어)/.test(value)) return { route: "confirm_current_setup", tool: "proposeCurrentSetupUpdate", text: value, usesContext: true, maxSteps };
+      if (context.lastDomain === "setting" && context.setting && /(?:다|전부).*(?:했어|끝냈어|완료했어)/.test(value)) return { route: "confirm_current_setup", tool: "proposeCurrentSetupUpdate", text: value, usesContext: true, maxSteps };
       if (referencesRecent && context.lastDomain === "setting" && context.setting && /오늘.*해야|뭐.*해야/.test(value)) return { route: "setting_advisor", tool: "getSettingCandidates", text: value, usesContext: true, maxSteps };
       if (venue && /세팅.*끝났.*다음|다음.*뭐\s*(?:하지|해)/.test(value)) return { route: "setting_execution_plan", tool: "getSettingExecutionPlan", text: value, maxSteps };
       if (fastRoute && fastRoute !== "conversation_agent") return { route: fastRoute, tool: "", text: value, maxSteps };
