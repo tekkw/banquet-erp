@@ -31,6 +31,9 @@ Deno.serve(async (request) => {
 
     const payload = await request.json();
     const { question, mode, analysisData, attachments, eventContext } = payload;
+    if (mode === "board_tts") {
+      return synthesizeBoardSpeech(payload);
+    }
     if (mode === "event_order_analysis") {
       const [banquetAssets, recommendItems, approvedKnowledge] = await Promise.all([
         loadBanquetAssets(),
@@ -147,6 +150,27 @@ Deno.serve(async (request) => {
     return jsonResponse({ message: getErrorMessage(error, "AI response generation failed.") }, 500);
   }
 });
+
+const BOARD_TTS_VOICES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse", "marin", "cedar"]);
+
+async function synthesizeBoardSpeech(payload: Record<string, unknown>) {
+  const input = String(payload.text ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
+  if (!input) return jsonResponse({ message: "음성으로 읽을 내용이 없습니다." }, 400);
+  const requestedVoice = String(payload.voice ?? "marin");
+  const voice = BOARD_TTS_VOICES.has(requestedVoice) ? requestedVoice : "marin";
+  const speed = Math.min(1.25, Math.max(0.75, Number(payload.speed) || 1));
+  const tone = payload.tone === "calm" ? "calm and composed" : payload.tone === "bright" ? "bright and friendly" : "natural";
+  const response = await fetch("https://api.openai.com/v1/audio/speech", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "gpt-4o-mini-tts", voice, input, instructions: `Speak in Korean with a ${tone} hotel concierge tone.`, response_format: "mp3", speed }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.error?.message || "OpenAI speech generation failed");
+  }
+  return new Response(await response.arrayBuffer(), { status: 200, headers: { ...corsHeaders, "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+}
 
 function assertServerConfig() {
   if (!SUPABASE_URL) throw new Error("SUPABASE_URL 환경변수가 설정되지 않았습니다.");

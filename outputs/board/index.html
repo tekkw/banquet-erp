@@ -32,6 +32,11 @@
     <section id="boardAiPanel" class="board-ai-panel" aria-label="현장 AI 협업">
       <div class="board-ai-voice-settings">
         <button id="boardVoiceReplyButton" type="button" aria-pressed="false">🔊 음성 답변 OFF</button>
+        <label for="boardTtsQuality">음성 품질</label>
+        <select id="boardTtsQuality">
+          <option value="browser">기본 브라우저</option>
+          <option value="high_quality">고품질</option>
+        </select>
         <span id="boardVoiceReplyStatus" aria-live="polite" hidden></span>
       </div>
       <div id="boardVisualCamera" class="board-visual-camera" hidden>

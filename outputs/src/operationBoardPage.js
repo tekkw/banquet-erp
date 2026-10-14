@@ -29,8 +29,10 @@
   const speechStatus = document.getElementById("boardSpeechStatus");
   const voiceReplyButton = document.getElementById("boardVoiceReplyButton");
   const voiceReplyStatus = document.getElementById("boardVoiceReplyStatus");
+  const ttsQualitySelect = document.getElementById("boardTtsQuality");
   const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voiceReplyStorageKey = "banquetBoard.voiceReplyEnabled";
+  const ttsSettingsStorageKey = "banquetBoard.ttsSettings.v1";
   const activeEventContextKey = "banquetBoard.activeEventContext.v1";
   const settingAdvisorContextKey = "banquetBoard.settingAdvisorContext.v1";
   const conversationContextKey = "banquetBoard.conversationContext.v1";
@@ -39,6 +41,7 @@
   let events = [];
   let pendingProposal = null;
   let pendingHallStateProposal = null;
+  let pendingTtsSettingsProposal = null;
   let pendingLayoutRecommendation = null;
   let pendingAssetProposal = null;
   let pendingAssetContext = null;
@@ -99,6 +102,10 @@
   let fieldAiAwaitingAnswer = false;
   let voiceReplyEnabled = false;
   let lastSpokenText = "";
+  let ttsSettings = loadTtsSettings();
+  let highQualityAudio = null;
+  let highQualityAudioUrl = "";
+  let ttsPlaybackId = 0;
 
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
   function storedUser() { try { const value = JSON.parse(localStorage.getItem(constants.authStorageKey) || "null"); return constants.loginAccounts.find((account) => account.id === value?.id && account.role === value?.role) || null; } catch { return null; } }
@@ -623,25 +630,85 @@
     visualStream = null; visualVideo.srcObject = null; visualCamera.hidden = true;
   }
   function storedVoiceReplyEnabled() { try { return localStorage.getItem(voiceReplyStorageKey) === "true"; } catch { return false; } }
+  function loadTtsSettings() {
+    const defaults = { provider: "browser", voice: "marin", gender: "current", tone: "current", speed: 1 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(ttsSettingsStorageKey) || "null");
+      return saved && typeof saved === "object" ? { ...defaults, ...saved, provider: saved.provider === "high_quality" ? "high_quality" : "browser" } : defaults;
+    } catch { return defaults; }
+  }
+  function saveTtsSettings(settings) {
+    ttsSettings = settings; ttsQualitySelect.value = settings.provider;
+    try { localStorage.setItem(ttsSettingsStorageKey, JSON.stringify(settings)); } catch { /* storage unavailable */ }
+  }
   function updateVoiceReplyButton() { voiceReplyButton.textContent = voiceReplyEnabled ? "🔊 음성 답변 ON" : "🔊 음성 답변 OFF"; voiceReplyButton.setAttribute("aria-pressed", String(voiceReplyEnabled)); }
-  function cancelBoardSpeech() { if (speechSynthesisApi) speechSynthesisApi.cancel(); }
+  function cancelBoardSpeech() {
+    ttsPlaybackId += 1;
+    if (speechSynthesisApi) speechSynthesisApi.cancel();
+    if (highQualityAudio) { highQualityAudio.pause(); highQualityAudio = null; }
+    if (highQualityAudioUrl) { URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; }
+  }
   function conciseBoardReply(text) {
     const clean = String(text || "").replace(/\s+/g, " ").trim();
     if (clean.length <= 220) return clean;
     const firstSentence = clean.match(/^.{1,180}?(?:[.!?]|다\.|요\.|니다\.)/)?.[0] || `${clean.slice(0, 180).trim()}…`;
     return `${firstSentence} 자세한 내용은 화면을 확인해주세요.`;
   }
-  function speakBoardReply(text) {
+  function playBrowserTts(spokenText) {
+    if (!speechSynthesisApi || !SpeechSynthesisUtteranceApi) throw new Error("browser speech synthesis unavailable");
+    speechSynthesisApi.cancel();
+    const utterance = new SpeechSynthesisUtteranceApi(spokenText); utterance.lang = "ko-KR"; utterance.rate = ttsSettings.speed;
+    const koreanVoice = speechSynthesisApi.getVoices().find((voice) => String(voice.lang || "").toLowerCase().startsWith("ko"));
+    if (koreanVoice) utterance.voice = koreanVoice;
+    utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board browser TTS failed", event.error); };
+    speechSynthesisApi.speak(utterance);
+  }
+  async function playHighQualityTts(spokenText, playbackId) {
+    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, {
+      method: "POST",
+      headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "board_tts", text: spokenText, voice: ttsSettings.voice, tone: ttsSettings.tone, speed: ttsSettings.speed }),
+    });
+    if (!response.ok) throw new Error(`high quality TTS failed (${response.status})`);
+    const blob = await response.blob();
+    if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
+    highQualityAudioUrl = URL.createObjectURL(blob); highQualityAudio = new Audio(highQualityAudioUrl);
+    highQualityAudio.addEventListener("ended", () => { if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; highQualityAudio = null; }, { once: true });
+    await highQualityAudio.play();
+  }
+  const ttsProviders = { browser: playBrowserTts, high_quality: playHighQualityTts };
+  async function speakBoardReply(text) {
     const spokenText = conciseBoardReply(text);
-    if (speechListening || !voiceReplyEnabled || !speechSynthesisApi || !SpeechSynthesisUtteranceApi || !spokenText || spokenText === lastSpokenText) return;
+    if (speechListening || !voiceReplyEnabled || !spokenText || spokenText === lastSpokenText) return;
+    cancelBoardSpeech(); const playbackId = ttsPlaybackId; lastSpokenText = spokenText;
     try {
-      speechSynthesisApi.cancel();
-      const utterance = new SpeechSynthesisUtteranceApi(spokenText); utterance.lang = "ko-KR"; utterance.rate = 1;
-      const koreanVoice = speechSynthesisApi.getVoices().find((voice) => String(voice.lang || "").toLowerCase().startsWith("ko"));
-      if (koreanVoice) utterance.voice = koreanVoice;
-      utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board voice reply failed", event.error); };
-      lastSpokenText = spokenText; speechSynthesisApi.speak(utterance);
-    } catch (error) { console.warn("board voice reply failed", error); }
+      await ttsProviders[ttsSettings.provider](spokenText, playbackId);
+    } catch (error) {
+      console.warn("preferred board TTS failed; using browser fallback", error);
+      if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
+      try { playBrowserTts(spokenText); } catch (fallbackError) { console.warn("board TTS fallback failed", fallbackError); }
+    }
+  }
+  function ttsSettingsProposal(text) {
+    if (!/(?:목소리|음성|말(?:하는)?\s*속도|천천히|빠르게|고품질|브라우저).*(?:바꿔|변경|해줘|말해|유지)|(?:천천히|빠르게)\s*말해|말(?:하는)?\s*속도\s*(?:빠르게|천천히|느리게|빨리)/i.test(text)) return null;
+    const next = { ...ttsSettings }; const changes = [];
+    if (/지금\s*(?:목소리|음성).*(?:유지|그대로)/.test(text)) changes.push("현재 음성 설정 유지");
+    else {
+      if (/남성/.test(text)) { next.gender = "male"; next.voice = "cedar"; next.provider = "high_quality"; changes.push("차분한 남성형 음성"); }
+      if (/여성/.test(text)) { next.gender = "female"; next.voice = "marin"; next.provider = "high_quality"; changes.push("차분한 여성형 음성"); }
+      if (/차분|편안/.test(text)) { next.tone = "calm"; changes.push("차분한 말투"); }
+      if (/밝게|활기/.test(text)) { next.tone = "bright"; changes.push("밝은 말투"); }
+      if (/천천히|느리게/.test(text)) { next.speed = 0.85; changes.push("느린 속도"); }
+      if (/빠르게|빨리/.test(text)) { next.speed = 1.15; changes.push("빠른 속도"); }
+      if (/고품질/.test(text)) { next.provider = "high_quality"; changes.push("고품질 음성"); }
+      if (/기본\s*브라우저|브라우저\s*음성/.test(text)) { next.provider = "browser"; changes.push("기본 브라우저 음성"); }
+    }
+    return { settings: next, summary: [...new Set(changes)].join(", ") || "현재 음성 설정 유지" };
+  }
+  function showTtsSettingsProposal(proposal) {
+    pendingTtsSettingsProposal = proposal;
+    aiResult.innerHTML = `<div class="board-ai-proposal"><h3>음성 설정 변경</h3><p>${escapeHtml(proposal.summary)} 설정으로 바꿀까요?</p><div class="board-ai-actions"><button type="button" data-tts-settings-approve>적용</button><button type="button" data-tts-settings-cancel>취소</button></div></div>`;
+    aiInput.value = ""; finishFieldAiAnswer();
   }
   function setVoiceReplyEnabled(enabled) {
     voiceReplyEnabled = Boolean(enabled); lastSpokenText = ""; updateVoiceReplyButton();
@@ -1021,8 +1088,9 @@
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; refresh(); }
 
-  if (!speechSynthesisApi || !SpeechSynthesisUtteranceApi) { voiceReplyButton.disabled = true; voiceReplyButton.textContent = "🔇 음성 답변 미지원"; voiceReplyButton.title = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.textContent = "이 브라우저에서는 음성 답변을 지원하지 않습니다."; voiceReplyStatus.hidden = false; }
-  else { voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply); }
+  voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
+  ttsQualitySelect.value = ttsSettings.provider;
+  ttsQualitySelect.addEventListener("change", () => saveTtsSettings({ ...ttsSettings, provider: ttsQualitySelect.value === "high_quality" ? "high_quality" : "browser" }));
   visualCameraButton.addEventListener("click", async () => { aiPlusMenu.hidden = true; aiPlusButton.setAttribute("aria-expanded", "false"); try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
   aiPlusButton?.addEventListener("click", () => { const open = aiPlusMenu.hidden; aiPlusMenu.hidden = !open; aiPlusButton.setAttribute("aria-expanded", String(open)); });
   aiContextClearButton?.addEventListener("click", clearRecentEventSettingContext);
@@ -1042,6 +1110,8 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    const ttsProposal = ttsSettingsProposal(text);
+    if (ttsProposal && !selectedAssetImageFile) { showTtsSettingsProposal(ttsProposal); return; }
     if (pendingProposal?.intent === "add_schedule" && /^(?:추가해|추가|응|네|예|확인|좋아|진행해)[.!\s]*$/i.test(text)) { const proposal = pendingProposal; showTransientMessage("승인된 일정을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board schedule add failed", error); showMessage(error.code === "schedule_duplicate" ? error.message : "일정 저장에 실패했습니다. 기존 일정은 유지됩니다.", true); } return; }
     if (pendingProposal?.intent === "add_schedule" && pendingProposal.needsClarification) { const time = scheduleTimeFromText(text); if (time && pendingProposal.target?.eventOrderId) { pendingProposal.change ||= {}; pendingProposal.change.time = time; pendingProposal.needsClarification = false; pendingProposal.confidence = Math.max(0.7, Number(pendingProposal.confidence) || 0); pendingProposal.confirmationText = `${pendingProposal.change.venue || pendingProposal.target.venue || "행사"}에 ${time} ${pendingProposal.change.content || "일정"}을 추가할까요?`; pendingProposal.userText = `${pendingProposal.userText || ""} ${text}`.trim(); aiInput.value = ""; showProposal(pendingProposal); return; } }
     let followupContext = pendingAssetProposal?.needsClarification ? pendingAssetContext : null;
@@ -1099,6 +1169,8 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    if (event.target.closest("[data-tts-settings-cancel]")) { pendingTtsSettingsProposal = null; showMessage("음성 설정 변경을 취소했습니다."); return; }
+    if (event.target.closest("[data-tts-settings-approve]") && pendingTtsSettingsProposal) { const proposal = pendingTtsSettingsProposal; pendingTtsSettingsProposal = null; saveTtsSettings(proposal.settings); showMessage(`${proposal.summary} 설정을 적용했습니다.`, true); return; }
     if (event.target.closest("[data-setting-plan-propose]")) { showSettingTaskProposal(); return; }
     if (event.target.closest("[data-setting-plan-cancel]")) { pendingSettingExecutionPlan = null; showMessage("세팅 작업 추가를 취소했습니다."); return; }
     if (event.target.closest("[data-setting-plan-approve]")) { showTransientMessage("세팅 작업을 추가하고 있습니다…"); try { await approveSettingTasks(); } catch (error) { console.error("setting tasks add failed", error); showMessage(error.message || "세팅 작업을 추가하지 못했습니다."); } return; }
