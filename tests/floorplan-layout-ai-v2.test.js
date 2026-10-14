@@ -70,7 +70,7 @@ assert.equal(api.applySchoolSpacingProfile(explicitGapPlan, profile).verticalGap
 
 const source = fs.readFileSync("outputs/src/floorplanEditor.js", "utf8");
 assert(source.includes("workspaceFloorplanRecord?.id") && source.includes("layoutAiContextMatches(requested, currentNames)"));
-assert(source.includes("sameSpace && sameSpec ? 1 : sameSpace ? 2 : sameFamily ? 3 : 4"));
+assert(source.includes("sameSpace && sameSpec ? 1 : sameSpace ? 2 : sameFamily && sameSpec ? 3 : sameFamily ? 4 : 5"));
 assert(source.includes('plan.layoutType === "round" ? generateRoundLayout'));
 
 console.log("floorplan layout AI V2 tests passed");

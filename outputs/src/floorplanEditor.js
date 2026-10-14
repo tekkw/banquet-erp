@@ -134,13 +134,13 @@
     const roundRequested = /(라운드|round)/i.test(value); const schoolRequested = /(스쿨|세미나|class|school)/i.test(value);
     if (/(u[- ]?shape|u자|ㅁ[- ]?shape|ㅁ자|t[- ]?shape|t자)/i.test(value) && !schoolRequested) return { unsupportedType: true };
     const grid = value.match(/(\d+)\s*(?:x|×)\s*(\d+)|(\d+)\s*열\s*(\d+)\s*(?:줄|행)/i); const seats = value.match(/(\d+)\s*석\s*씩|테이블(?:당|마다)?\s*(\d+)\s*석/i);
-    const people = value.match(/(\d+)\s*명/i); const tables = value.match(/(?:테이블\s*)?(\d+)\s*(?:개|T\b)|테이블\s*(\d+)/i); const hGap = value.match(/가로\s*간격\s*(\d+)\s*mm/i); const vGap = value.match(/(?:줄|세로)\s*간격\s*(\d+)\s*mm/i);
+    const people = value.match(/(\d+)\s*명/i); const targetSeats = value.match(/(\d+)\s*석(?!\s*씩)/i); const tables = value.match(/(?:테이블\s*)?(\d+)\s*(?:개|T\b)|테이블\s*(\d+)/i); const hGap = value.match(/가로\s*간격\s*(\d+)\s*mm/i); const vGap = value.match(/(?:줄|세로)\s*간격\s*(\d+)\s*mm/i);
     const tableSpec = value.match(/(?:세미나\s*테이블|테이블)?\s*(1600|1800)(?:\s*mm)?/i);
     const aisle = value.match(/(왼쪽|오른쪽|중앙)\s*통로\s*(\d+)\s*mm/i); const shift = value.match(/전체(?:를)?\s*(뒤|앞|오른쪽|왼쪽)(?:으?로)?\s*(\d+)\s*mm\s*옮겨/i);
     const layoutType = roundRequested ? "round" : schoolRequested ? "school" : currentPlan?.layoutType || "school";
     const plan = { ...(currentPlan || {}), layoutType, orientation: "screen-facing", aisle: { center: 0, left: 0, right: 0, ...(currentPlan?.aisle || {}) } };
     if (grid) { plan.columns = Number(grid[1] || grid[3]); plan.rows = Number(grid[2] || grid[4]); } if (seats) { plan.seatsPerTable = Number(seats[1] || seats[2]); plan.explicitSeats = true; }
-    if (people) plan.targetPeople = Number(people[1]); if (tables) plan.requestedTableCount = Number(tables[1] || tables[2]);
+    if (people || targetSeats) { plan.targetPeople = Number(people?.[1] || targetSeats?.[1]); plan.capacityMode = people && /들어가|수용|이상/.test(value) ? "at-least" : "exact"; } if (tables) plan.requestedTableCount = Number(tables[1] || tables[2]);
     if (tableSpec) plan.tableWidthMm = Number(tableSpec[1]);
     if (hGap) { plan.horizontalGapMm = Number(hGap[1]); plan.explicitHorizontalGap = true; } if (vGap) { plan.verticalGapMm = Number(vGap[1]); plan.explicitVerticalGap = true; }
     if (aisle) plan.aisle[({ "왼쪽": "left", "오른쪽": "right", "중앙": "center" })[aisle[1]]] = Number(aisle[2]);
@@ -172,8 +172,10 @@
     const value = String(text || "").trim();
     if (!value) return null;
     if (/(?:이 상태 )?저장(?:하자|해|해주세요|해줘)?$/.test(value)) return { type: "save" };
+    if (/(?:이거|이 배치|이 레이아웃).*(?:실제로 썼어|괜찮았어|사용했어)/.test(value)) return { type: "verify" };
     if (/(?:방금 (?:수정 )?취소|되돌리기|실행 취소)/.test(value)) return { type: "undo" };
     if (/(?:다시 만들어|다시 생성)/.test(value)) return { type: "regenerate" };
+    if (/(?:조금|좀)\s*(?:더\s*)?(?:넓혀|벌려)/.test(value)) return { type: "gap-both", amount: 100 };
     const movement = value.match(/(오른쪽|왼쪽|위|아래)(?:으?로)?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?(?:\s*(?:옮겨|이동))?/i);
     if (movement) {
       const amount = layoutAiUnitToMm(movement[2], movement[3] || "mm");
@@ -329,6 +331,31 @@
     if (profile.rightMarginMm != null) next.rightMarginMm = profile.rightMarginMm;
     next.totalSeats = Number(next.tableCount || 0) * Number(next.seatsPerTable || 0);
     return next;
+  }
+
+  function selectSchoolAnchorPair(anchors, targetCapacity) {
+    const rows = (anchors || []).filter((row) => Number(row.capacity) > 0).sort((a, b) => Number(a.capacity) - Number(b.capacity));
+    if (!rows.length) return { lower: null, upper: null };
+    const lowerRows = rows.filter((row) => Number(row.capacity) <= targetCapacity); const upperRows = rows.filter((row) => Number(row.capacity) >= targetCapacity);
+    const preferVerified = (items, edge) => { const verified = items.filter((row) => row.verified); const source = verified.length ? verified : items; return edge === "lower" ? source.at(-1) : source[0]; };
+    return { lower: preferVerified(lowerRows, "lower") || null, upper: preferVerified(upperRows, "upper") || null };
+  }
+
+  function resolveSchoolTargetPlan(plan, anchors = []) {
+    const target = Number(plan?.targetPeople || 0); if (!target) return plan;
+    const pair = selectSchoolAnchorPair(anchors, target); const references = [pair.lower, pair.upper].filter(Boolean);
+    const nearest = [...references].sort((a, b) => Number(Boolean(b.verified)) - Number(Boolean(a.verified)) || Math.abs(Number(a.capacity) - target) - Math.abs(Number(b.capacity) - target))[0] || null;
+    const preferredColumns = [...new Set([nearest?.columns, ...references.map((row) => row.columns), 3].map(Number).filter((value) => value > 0))];
+    const preferredSeats = [...new Set([...references.map((row) => row.seatsPerTable), 2, 3].map(Number).filter((value) => value > 0))];
+    const candidates = [];
+    preferredSeats.forEach((seatsPerTable) => preferredColumns.forEach((columns) => {
+      const tableCount = Math.ceil(target / seatsPerTable); const rows = Math.ceil(tableCount / columns); const capacity = tableCount * seatsPerTable; const overshoot = capacity - target;
+      const exactPenalty = plan.capacityMode === "exact" && overshoot ? 10000 + overshoot * 100 : overshoot * 100;
+      const conventionPenalty = Math.abs(columns - Number(nearest?.columns || columns)) * 10 + (references.some((row) => Number(row.seatsPerTable) === seatsPerTable) ? 0 : 5);
+      candidates.push({ columns, rows, seatsPerTable, tableCount, totalSeats: capacity, score: exactPenalty + conventionPenalty + rows });
+    }));
+    const chosen = candidates.sort((a, b) => a.score - b.score)[0];
+    return { ...plan, ...chosen, requestedTableCount: chosen.tableCount, explicitSeats: true, anchorPair: { lowerId: pair.lower?.id || null, upperId: pair.upper?.id || null }, generationStatus: "generated" };
   }
 
   function validateGeneratedLayout(objects, room, fixedObjects = [], plan = {}) {
@@ -892,7 +919,7 @@
       if (!allowed) return null;
       return { left: Math.max(0, allowed.x - allowed.widthM * 500), top: Math.max(0, allowed.y - allowed.heightM * 500), right: Math.min(room.widthMm, allowed.x + allowed.widthM * 500), bottom: Math.min(room.heightMm, allowed.y + allowed.heightM * 500) };
     }
-    async function layoutAiSchoolSpacingProfile(plan, room, masters) {
+    async function layoutAiSchoolAnchorContext(plan, room, masters) {
       if (!allLibraryLayouts.length) await loadAllLibraryLayouts();
       const currentSpaceId = workspaceSpaceSelect?.value || ""; const currentVenueId = workspaceVenueSelect?.value || "";
       const currentVenueName = workspaceVenues.find((venue) => String(venue.id) === String(currentVenueId))?.venue_name || ""; const currentFamily = venueFamilyName(currentVenueName);
@@ -903,21 +930,27 @@
         const profile = calculateSchoolSpacingProfile(libraryObjectsByLayout.get(layout.id) || [], candidateRoom, { seatsPerTable: layout.seats_per_table, tableWidthMm: masters.table.widthMm, tableDepthMm: masters.table.heightMm }); if (!profile) return null;
         const sameSpace = String(layout.space_id || "") === String(currentSpaceId); const sameSpec = Math.abs(Number(profile.tableWidthMm || 0) - Number(masters.table.widthMm || 0)) <= 50 && Math.abs(Number(profile.tableDepthMm || 0) - Number(masters.table.heightMm || 0)) <= 50;
         const venueName = allLibraryVenues.get(String(layout.venue_id || ""))?.venue_name || ""; const sameFamily = currentFamily && venueFamilyName(venueName) === currentFamily;
-        return { profile, priority: sameSpace && sameSpec ? 1 : sameSpace ? 2 : sameFamily ? 3 : 4 };
-      }).filter((candidate) => candidate && candidate.priority < 4);
+        const capacity = Number(layout.setup_capacity || layout.max_people || profile.seatsPerTable * Number(layout.table_count || 0));
+        const verified = /\[status:verified\]/i.test(String(layout.layout_notes || ""));
+        return { id: layout.id, profile, capacity, columns: Number(layout.column_count || 0), rows: Number(layout.row_count || 0), seatsPerTable: Number(layout.seats_per_table || profile.seatsPerTable || 0), verified, priority: sameSpace && sameSpec ? 1 : sameSpace ? 2 : sameFamily && sameSpec ? 3 : sameFamily ? 4 : 5 };
+      }).filter((candidate) => candidate && candidate.priority < 5);
       const priority = Math.min(...candidates.map((candidate) => candidate.priority));
-      return Number.isFinite(priority) ? mergeSchoolSpacingProfiles(candidates.filter((candidate) => candidate.priority === priority).map((candidate) => candidate.profile)) : null;
+      if (!Number.isFinite(priority)) return { anchors: [], profile: null, source: "system-default" };
+      const anchors = candidates.filter((candidate) => candidate.priority === priority);
+      const pair = selectSchoolAnchorPair(anchors, Number(plan.targetPeople || plan.totalSeats || 0));
+      const selected = [pair.lower, pair.upper].filter(Boolean); const preferred = selected.filter((candidate) => candidate.verified);
+      return { anchors, profile: mergeSchoolSpacingProfiles((preferred.length ? preferred : selected.length ? selected : anchors).map((candidate) => candidate.profile)), source: priority <= 2 ? "same-space" : "venue-family" };
     }
     async function renderLayoutAiDraft(plan, answer) {
       if (!workspaceFloorplanRecord?.id) throw new Error("공간의 기본 도면을 먼저 선택해주세요.");
       pushWorkspaceHistory(); layoutAiPreviousPlan = layoutAiPlan ? JSON.parse(JSON.stringify(layoutAiPlan)) : null; layoutAiSessionId ||= `layout_ai_${Date.now()}`;
       const fixed = workspaceObjects.filter(isWorkspaceBaseObject); const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex(), frontDirection: frontDirection({ widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, fixed) }; room.usableArea = layoutAiUsableArea(fixed, room);
-      const masters = layoutAiMasters(plan); if (plan.layoutType === "school") plan = applySchoolSpacingProfile(plan, await layoutAiSchoolSpacingProfile(plan, room, masters));
+      const masters = layoutAiMasters(plan); if (plan.layoutType === "school") { const anchorContext = await layoutAiSchoolAnchorContext(plan, room, masters); plan = resolveSchoolTargetPlan(plan, anchorContext.anchors); plan = applySchoolSpacingProfile(plan, anchorContext.profile); plan.anchorSource = anchorContext.source; }
       const generated = plan.layoutType === "round" ? generateRoundLayout(plan, room, masters, layoutAiSessionId) : generateSchoolLayout(plan, room, masters, layoutAiSessionId); layoutAiValidation = validateGeneratedLayout(generated, room, fixed, plan);
       workspaceObjects = [...fixed, ...generated]; workspaceActiveLayout = null; if (workspaceSavedLayoutSelect) workspaceSavedLayoutSelect.value = ""; layoutAiPlan = plan;
       const spaceName = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value))?.space_name || "선택 공간"; plan.spaceId = workspaceSpaceSelect?.value || null; plan.spaceName = spaceName;
       const typeLabel = plan.layoutType === "round" ? "라운드" : "스쿨식"; if (workspaceNameInput) workspaceNameInput.value = `${spaceName} ${typeLabel} ${plan.columns}x${plan.rows} ${plan.totalSeats}석`;
-      pendingLayoutInfo = { layout_type: plan.layoutType, layout_name: workspaceNameInput?.value || `AI ${typeLabel}`, min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: "AI deterministic draft" };
+      pendingLayoutInfo = { layout_type: plan.layoutType, layout_name: workspaceNameInput?.value || `AI ${typeLabel}`, min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: `[status:generated] AI ${plan.anchorSource || "deterministic"} draft` };
       workspaceSourceRow = { ...(workspaceSourceRow || {}), row_count: plan.rows, column_count: plan.columns, seats_per_table: plan.seatsPerTable, table_count: plan.tableCount, layout_type: plan.layoutType };
       markWorkspaceDirty(); renderWorkspace(); appendLayoutAiTurn(answer, `${typeLabel} ${plan.columns}x${plan.rows}, ${plan.tableCount}T, ${plan.totalSeats}석으로 생성했습니다.`); renderLayoutAiPanel();
     }
@@ -938,6 +971,13 @@
       refreshLayoutAiValidation();
       if (!layoutAiValidation?.valid) { setStatus("검증 오류를 해결한 뒤 저장해주세요.", "warn"); return; }
       openLayoutInfoModal("save", true);
+    }
+    async function verifyCurrentLayout(text) {
+      if (!workspaceActiveLayout?.id) { appendLayoutAiTurn(text, "먼저 이 레이아웃을 저장해주세요."); renderLayoutAiPanel(); return; }
+      const notes = String(workspaceActiveLayout.layout_notes || "").replace(/\[status:(?:generated|verified)\]\s*/gi, "").trim();
+      const layout_notes = `[status:verified]${notes ? ` ${notes}` : ""}`;
+      const rows = await loggedSupabaseRequest("workspace layout verify", `venue_layouts?id=eq.${encodeURIComponent(workspaceActiveLayout.id)}&select=*`, { method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ layout_notes }) });
+      workspaceActiveLayout = rows?.[0] || { ...workspaceActiveLayout, layout_notes }; await loadAllLibraryLayouts(); appendLayoutAiTurn(text, "실사용 확인 레이아웃으로 표시했습니다."); renderLayoutAiPanel();
     }
     function undoLayoutAiChange(user = "방금 수정 취소") {
       if (!workspaceUndoStack.length) { appendLayoutAiTurn(user, "되돌릴 AI 수정이 없습니다."); renderLayoutAiPanel(); return; }
@@ -969,6 +1009,7 @@
       try {
         const edit = parseLayoutAiEditCommand(text, layoutAiPlan);
         if (edit?.type === "save") { openLayoutAiSaveModal(); return; }
+        if (edit?.type === "verify") { await verifyCurrentLayout(text); return; }
         if (edit?.type === "undo") { undoLayoutAiChange(text); return; }
         if (edit && !layoutAiPlan) throw new Error("먼저 레이아웃을 생성해주세요.");
         if (edit?.type === "move") { moveLayoutAiObjects(edit, text); return; }
@@ -978,6 +1019,7 @@
           const key = edit.axis === "vertical" ? "verticalGapMm" : "horizontalGapMm"; const next = Math.max(0, Number(layoutAiPlan[key] || 0) + edit.amount);
           await renderLayoutAiDraft({ ...layoutAiPlan, [key]: next, [edit.axis === "vertical" ? "explicitVerticalGap" : "explicitHorizontalGap"]: true }, text); return;
         }
+        if (edit?.type === "gap-both") { await renderLayoutAiDraft({ ...layoutAiPlan, horizontalGapMm: Number(layoutAiPlan.horizontalGapMm || 0) + edit.amount, verticalGapMm: Number(layoutAiPlan.verticalGapMm || 0) + edit.amount, explicitHorizontalGap: true, explicitVerticalGap: true }, text); return; }
         if (edit?.type === "grid") { await renderLayoutAiDraft(updateLayoutAiPlan({ ...layoutAiPlan, columns: edit.columns, rows: edit.rows }), text); return; }
         if (edit?.type === "seats") { await renderLayoutAiDraft(updateLayoutAiPlan({ ...layoutAiPlan, seatsPerTable: edit.seatsPerTable, explicitSeats: true }), text); return; }
         await ensureLayoutAiSpace(text); const parsed = parseLayoutAiCommand(text, layoutAiPlan || (workspaceActiveLayout ? { columns: workspaceActiveLayout.column_count, rows: workspaceActiveLayout.row_count, seatsPerTable: workspaceActiveLayout.seats_per_table || 2 } : null));
@@ -5422,6 +5464,8 @@
     calculateSchoolSpacingProfile,
     mergeSchoolSpacingProfiles,
     applySchoolSpacingProfile,
+    selectSchoolAnchorPair,
+    resolveSchoolTargetPlan,
     validateGeneratedLayout,
   };
 })();
