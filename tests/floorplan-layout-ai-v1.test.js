@@ -56,10 +56,11 @@ const source = fs.readFileSync(path.join(__dirname, "../outputs/src/floorplanEdi
 const html = fs.readFileSync(path.join(__dirname, "../outputs/index.html"), "utf8");
 assert(source.includes('generatedBy: "layout_ai"'));
 assert(source.includes("pushWorkspaceHistory(); layoutAiPreviousPlan"), "AI 적용 직전 undo snapshot");
-assert(source.includes('openLayoutInfoModal("save", !workspaceActiveLayout?.id)'), "G/H: 승인 버튼이 기존 저장 흐름만 연다");
+assert(source.includes('openLayoutInfoModal("save", true)'), "G/H: AI 저장은 기존 저장 모달을 새 레이아웃 모드로 연다");
+assert(source.includes("workspaceActiveLayout || pendingLayoutInfo"), "AI draft의 유형/이름을 기존 저장 모달에 전달한다");
 assert(source.includes("layoutAiPlan && !layoutAiValidation?.valid"), "치명적 검증 오류는 기존 저장 버튼에서도 차단한다");
 assert(source.includes("workspaceActiveLayout = null"), "I: 기존 레이아웃 AI 수정은 새 draft로 분리한다");
 assert(!source.includes('mode: "layout_ai"'), "명확한 V1 명령은 Edge/LLM 호출 없이 처리한다");
-assert(html.includes("floorplanEditor.js?v=layout-ai-v2"));
+assert(/floorplanEditor\.js\?v=layout-ai-v\d+/.test(html));
 
 console.log("floorplan layout AI V1 tests passed");

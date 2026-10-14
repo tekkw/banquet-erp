@@ -162,6 +162,38 @@
     return { plan, isModification: Boolean(currentPlan), understood: Boolean(plan.columns && plan.rows) };
   }
 
+  function layoutAiUnitToMm(value, unit = "mm") {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return null;
+    return Math.round(amount * ({ mm: 1, cm: 10, m: 1000 }[String(unit).toLowerCase()] || 1));
+  }
+
+  function parseLayoutAiEditCommand(text, currentPlan = null) {
+    const value = String(text || "").trim();
+    if (!value) return null;
+    if (/(?:이 상태 )?저장(?:하자|해|해주세요|해줘)?$/.test(value)) return { type: "save" };
+    if (/(?:방금 (?:수정 )?취소|되돌리기|실행 취소)/.test(value)) return { type: "undo" };
+    if (/(?:다시 만들어|다시 생성)/.test(value)) return { type: "regenerate" };
+    const movement = value.match(/(오른쪽|왼쪽|위|아래)(?:으?로)?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?(?:\s*(?:옮겨|이동))?/i);
+    if (movement) {
+      const amount = layoutAiUnitToMm(movement[2], movement[3] || "mm");
+      return { type: "move", dx: movement[1] === "오른쪽" ? amount : movement[1] === "왼쪽" ? -amount : 0, dy: movement[1] === "아래" ? amount : movement[1] === "위" ? -amount : 0, amount, direction: movement[1] };
+    }
+    const gap = value.match(/(앞뒤|세로|좌우|가로)\s*간격(?:을)?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?\s*(더|늘려|벌려|줄여|좁혀)/i);
+    if (gap) {
+      const amount = layoutAiUnitToMm(gap[2], gap[3] || "mm") * (/줄여|좁혀/.test(gap[4]) ? -1 : 1);
+      return { type: "gap", axis: /앞뒤|세로/.test(gap[1]) ? "vertical" : "horizontal", amount };
+    }
+    if (/(?:첫|앞|맨 앞)\s*(?:줄|행)(?:을)?\s*(?:하나\s*)?(?:빼|제거)/.test(value)) return { type: "remove-row", edge: "first" };
+    if (/(?:마지막|맨 뒤)\s*(?:줄|행)(?:을)?\s*(?:하나\s*)?(?:빼|제거)/.test(value)) return { type: "remove-row", edge: "last" };
+    const grid = value.match(/(\d+)\s*(?:x|×)\s*(\d+)\s*(?:으로)?\s*(?:바꿔|변경)/i);
+    if (grid) return { type: "grid", columns: Number(grid[1]), rows: Number(grid[2]) };
+    const seats = value.match(/(\d+)\s*석씩(?:으로)?\s*(?:바꿔|변경)/i);
+    if (seats) return { type: "seats", seatsPerTable: Number(seats[1]) };
+    if (/의자(?:를)?\s*(?:하나|1개?)씩\s*더/.test(value)) return { type: "seats", seatsPerTable: Number(currentPlan?.seatsPerTable || 0) + 1 };
+    return null;
+  }
+
   function frontDirection(room, objects = []) {
     const candidates = (objects || []).filter((object) => object?.objectType === "screen");
     const references = candidates.length ? candidates : (objects || []).filter((object) => object?.metadata?.frontReference === true || object?.objectType === "front_reference" || object?.objectType === "stage");
@@ -820,13 +852,12 @@
 
     function initializeLayoutAiPanel() {
       if (!workspaceStatusbar || document.getElementById("layoutAiPanel")) return;
-      const style = document.createElement("style"); style.textContent = `.layout-ai-panel{margin:12px 0;padding:14px;border:1px solid #c8b26a;border-radius:12px;background:#fffdf5;color:#1B2A3A}.layout-ai-panel h3{margin:0 0 8px;color:#102A40}.layout-ai-panel .layout-ai-result{color:#1B2A3A}.layout-ai-panel .layout-ai-history{color:#526579}.layout-ai-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.layout-ai-form input{min-width:0}.layout-ai-result,.layout-ai-history{margin-top:8px;font-size:13px}.layout-ai-summary{display:flex;gap:8px;flex-wrap:wrap}.layout-ai-summary span{padding:3px 7px;border-radius:999px;background:#eef2f7;color:#102A40}.layout-ai-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}.layout-ai-errors{color:#b91c1c}.layout-ai-warnings{color:#92400e}`; document.head.append(style);
-      layoutAiPanel = document.createElement("section"); layoutAiPanel.id = "layoutAiPanel"; layoutAiPanel.className = "layout-ai-panel"; layoutAiPanel.innerHTML = `<h3>AI 레이아웃</h3><form class="layout-ai-form" data-layout-ai-form><input data-layout-ai-input placeholder="부라노1 스쿨식 3x7 2석씩 만들어줘" maxlength="200"><button type="submit">생성/수정</button></form><div class="layout-ai-result" data-layout-ai-result>스쿨식 생성 명령을 입력하세요.</div><div class="layout-ai-history" data-layout-ai-history></div><div class="layout-ai-actions"><button type="button" data-layout-ai-save disabled>저장</button><button type="button" data-layout-ai-regenerate disabled>다시 생성</button><button type="button" data-layout-ai-undo disabled>AI 수정 취소</button><button type="button" data-layout-ai-reset disabled>초기화</button></div>`;
+      const style = document.createElement("style"); style.textContent = `.layout-ai-panel{margin:12px 0;padding:12px;border:1px solid #c8b26a;border-radius:12px;background:#fffdf5;color:#1B2A3A}.layout-ai-panel h3{margin:0 0 6px;color:#102A40}.layout-ai-panel .layout-ai-result{color:#1B2A3A}.layout-ai-history{max-height:150px;overflow:auto;margin:7px 0;display:grid;gap:5px}.layout-ai-message{max-width:88%;padding:6px 9px;border-radius:10px;font-size:13px;white-space:pre-wrap}.layout-ai-message.user{justify-self:end;background:#102A40;color:white}.layout-ai-message.assistant{justify-self:start;background:#eef2f7;color:#1B2A3A}.layout-ai-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.layout-ai-form input{min-width:0}.layout-ai-result{margin-top:6px;font-size:13px}.layout-ai-summary{display:flex;gap:6px;flex-wrap:wrap}.layout-ai-summary span{padding:2px 6px;border-radius:999px;background:#eef2f7;color:#102A40}.layout-ai-actions{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}.layout-ai-errors{color:#b91c1c}.layout-ai-warnings{color:#92400e}`; document.head.append(style);
+      layoutAiPanel = document.createElement("section"); layoutAiPanel.id = "layoutAiPanel"; layoutAiPanel.className = "layout-ai-panel"; layoutAiPanel.innerHTML = `<h3>AI 레이아웃</h3><div class="layout-ai-result" data-layout-ai-result>현재 draft를 대화로 생성·수정할 수 있습니다.</div><div class="layout-ai-history" data-layout-ai-history aria-live="polite"></div><form class="layout-ai-form" data-layout-ai-form><input data-layout-ai-input placeholder="명령 입력…" maxlength="200"><button type="submit">전송</button></form><div class="layout-ai-actions"><button type="button" data-layout-ai-save disabled>저장</button><button type="button" data-layout-ai-undo disabled>되돌리기</button><button type="button" data-layout-ai-reset disabled>초기화</button></div>`;
       workspaceStatusbar.parentElement?.insertBefore(layoutAiPanel, workspaceStatusbar);
       layoutAiPanel.querySelector("[data-layout-ai-form]")?.addEventListener("submit", async (event) => { event.preventDefault(); const input = layoutAiPanel.querySelector("[data-layout-ai-input]"); const text = input.value.trim(); if (!text) return; await applyLayoutAiCommand(text); input.value = ""; });
-      layoutAiPanel.querySelector("[data-layout-ai-save]")?.addEventListener("click", () => { if (!layoutAiValidation?.valid) return; openLayoutInfoModal("save", !workspaceActiveLayout?.id); });
-      layoutAiPanel.querySelector("[data-layout-ai-regenerate]")?.addEventListener("click", async () => { if (layoutAiPlan) await renderLayoutAiDraft(layoutAiPlan, "같은 조건으로 다시 생성했습니다."); });
-      layoutAiPanel.querySelector("[data-layout-ai-undo]")?.addEventListener("click", () => { undoWorkspaceChange(); layoutAiPlan = layoutAiPreviousPlan; layoutAiPreviousPlan = null; layoutAiValidation = layoutAiPlan ? validateGeneratedLayout(workspaceObjects, { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, workspaceObjects.filter(isWorkspaceBaseObject), layoutAiPlan) : null; layoutAiConversation.push({ user: "AI 수정 취소", answer: "직전 상태를 복원했습니다." }); renderLayoutAiPanel(); });
+      layoutAiPanel.querySelector("[data-layout-ai-save]")?.addEventListener("click", () => openLayoutAiSaveModal());
+      layoutAiPanel.querySelector("[data-layout-ai-undo]")?.addEventListener("click", () => undoLayoutAiChange());
       layoutAiPanel.querySelector("[data-layout-ai-reset]")?.addEventListener("click", resetLayoutAiDraft);
     }
     function layoutAiRequestedSpace(text) { return String(text).replace(/\s+/g, "").match(/(?:부라노|카프리)[123]|컨벤션(?:AB|A|B)/i)?.[0] || ""; }
@@ -888,21 +919,80 @@
       const typeLabel = plan.layoutType === "round" ? "라운드" : "스쿨식"; if (workspaceNameInput) workspaceNameInput.value = `${spaceName} ${typeLabel} ${plan.columns}x${plan.rows} ${plan.totalSeats}석`;
       pendingLayoutInfo = { layout_type: plan.layoutType, layout_name: workspaceNameInput?.value || `AI ${typeLabel}`, min_people: null, max_people: plan.totalSeats, setup_capacity: plan.totalSeats, layout_notes: "AI deterministic draft" };
       workspaceSourceRow = { ...(workspaceSourceRow || {}), row_count: plan.rows, column_count: plan.columns, seats_per_table: plan.seatsPerTable, table_count: plan.tableCount, layout_type: plan.layoutType };
-      markWorkspaceDirty(); renderWorkspace(); layoutAiConversation.push({ user: answer, answer: `${plan.tableCount}T · ${plan.totalSeats}석` }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel();
+      markWorkspaceDirty(); renderWorkspace(); appendLayoutAiTurn(answer, `${typeLabel} ${plan.columns}x${plan.rows}, ${plan.tableCount}T, ${plan.totalSeats}석으로 생성했습니다.`); renderLayoutAiPanel();
+    }
+    function appendLayoutAiTurn(user, answer) { layoutAiConversation.push({ user, answer }); layoutAiConversation = layoutAiConversation.slice(-10); }
+    function layoutAiRoom() {
+      const fixed = workspaceObjects.filter(isWorkspaceBaseObject);
+      const room = { widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, paddingMm: 800, frontClearanceMm: 1200, baseZIndex: getWorkspaceMaxZIndex(), frontDirection: frontDirection({ widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm }, fixed) };
+      room.usableArea = layoutAiUsableArea(fixed, room);
+      return { fixed, room };
+    }
+    function refreshLayoutAiValidation() {
+      if (!layoutAiPlan) return;
+      const { fixed, room } = layoutAiRoom();
+      layoutAiValidation = validateGeneratedLayout(workspaceObjects, room, fixed, layoutAiPlan);
+      renderLayoutAiPanel();
+    }
+    function openLayoutAiSaveModal() {
+      refreshLayoutAiValidation();
+      if (!layoutAiValidation?.valid) { setStatus("검증 오류를 해결한 뒤 저장해주세요.", "warn"); return; }
+      openLayoutInfoModal("save", true);
+    }
+    function undoLayoutAiChange(user = "방금 수정 취소") {
+      if (!workspaceUndoStack.length) { appendLayoutAiTurn(user, "되돌릴 AI 수정이 없습니다."); renderLayoutAiPanel(); return; }
+      undoWorkspaceChange(); layoutAiPlan = layoutAiPreviousPlan; layoutAiPreviousPlan = null; refreshLayoutAiValidation();
+      appendLayoutAiTurn(user, "직전 상태를 복원했습니다."); renderLayoutAiPanel();
+    }
+    function updateLayoutAiPlan(plan) {
+      plan.tableCount = Number(plan.columns || 0) * Number(plan.rows || 0);
+      plan.totalSeats = plan.tableCount * Number(plan.seatsPerTable || 0);
+      plan.requestedTableCount = plan.tableCount;
+      return plan;
+    }
+    function moveLayoutAiObjects(command, text) {
+      const { fixed, room } = layoutAiRoom();
+      const candidate = workspaceObjects.map((object) => isWorkspaceBaseObject(object) ? object : { ...object, x: Number(object.x || 0) + command.dx, y: Number(object.y || 0) + command.dy });
+      const validation = validateGeneratedLayout(candidate, room, fixed, layoutAiPlan);
+      if (!validation.valid) { appendLayoutAiTurn(text, `${command.direction} 이동 시 경계 또는 고정 구조물과 충돌해서 적용하지 않았습니다.`); renderLayoutAiPanel(); return; }
+      pushWorkspaceHistory(); layoutAiPreviousPlan = JSON.parse(JSON.stringify(layoutAiPlan)); workspaceObjects = candidate; layoutAiPlan.shift = { x: Number(layoutAiPlan.shift?.x || 0) + command.dx, y: Number(layoutAiPlan.shift?.y || 0) + command.dy }; layoutAiValidation = validation;
+      markWorkspaceDirty(); renderWorkspace(); appendLayoutAiTurn(text, `${command.direction}으로 ${command.amount}mm 이동했습니다.`); renderLayoutAiPanel();
+    }
+    function removeLayoutAiRow(command, text) {
+      if (Number(layoutAiPlan?.rows || 0) <= 1) throw new Error("한 줄 이하로는 줄일 수 없습니다.");
+      const removedRow = command.edge === "first" ? 1 : Number(layoutAiPlan.rows);
+      pushWorkspaceHistory(); layoutAiPreviousPlan = JSON.parse(JSON.stringify(layoutAiPlan));
+      workspaceObjects = workspaceObjects.filter((object) => isWorkspaceBaseObject(object) || Number(object.metadata?.row) !== removedRow).map((object) => command.edge === "first" && !isWorkspaceBaseObject(object) && Number(object.metadata?.row) > 1 ? { ...object, metadata: { ...object.metadata, row: Number(object.metadata.row) - 1 } } : object);
+      layoutAiPlan = updateLayoutAiPlan({ ...layoutAiPlan, rows: Number(layoutAiPlan.rows) - 1 }); refreshLayoutAiValidation(); markWorkspaceDirty(); renderWorkspace(); appendLayoutAiTurn(text, `${command.edge === "first" ? "첫" : "마지막"} 줄을 제거했습니다.`); renderLayoutAiPanel();
     }
     async function applyLayoutAiCommand(text) {
       try {
+        const edit = parseLayoutAiEditCommand(text, layoutAiPlan);
+        if (edit?.type === "save") { openLayoutAiSaveModal(); return; }
+        if (edit?.type === "undo") { undoLayoutAiChange(text); return; }
+        if (edit && !layoutAiPlan) throw new Error("먼저 레이아웃을 생성해주세요.");
+        if (edit?.type === "move") { moveLayoutAiObjects(edit, text); return; }
+        if (edit?.type === "remove-row") { removeLayoutAiRow(edit, text); return; }
+        if (edit?.type === "regenerate") { await renderLayoutAiDraft({ ...layoutAiPlan }, text); return; }
+        if (edit?.type === "gap") {
+          const key = edit.axis === "vertical" ? "verticalGapMm" : "horizontalGapMm"; const next = Math.max(0, Number(layoutAiPlan[key] || 0) + edit.amount);
+          await renderLayoutAiDraft({ ...layoutAiPlan, [key]: next, [edit.axis === "vertical" ? "explicitVerticalGap" : "explicitHorizontalGap"]: true }, text); return;
+        }
+        if (edit?.type === "grid") { await renderLayoutAiDraft(updateLayoutAiPlan({ ...layoutAiPlan, columns: edit.columns, rows: edit.rows }), text); return; }
+        if (edit?.type === "seats") { await renderLayoutAiDraft(updateLayoutAiPlan({ ...layoutAiPlan, seatsPerTable: edit.seatsPerTable, explicitSeats: true }), text); return; }
         await ensureLayoutAiSpace(text); const parsed = parseLayoutAiCommand(text, layoutAiPlan || (workspaceActiveLayout ? { columns: workspaceActiveLayout.column_count, rows: workspaceActiveLayout.row_count, seatsPerTable: workspaceActiveLayout.seats_per_table || 2 } : null));
-        if (parsed.unsupportedType) { layoutAiConversation.push({ user: text, answer: "현재 자동 생성 V2는 스쿨식과 라운드식을 지원합니다." }); renderLayoutAiPanel(); return; }
+        if (parsed.unsupportedType) { appendLayoutAiTurn(text, "현재 자동 생성 V2는 스쿨식과 라운드식을 지원합니다."); renderLayoutAiPanel(); return; }
         if (parsed.needsConfirmation) throw new Error(parsed.confirmationMessage);
         if (!parsed.understood) throw new Error("열×행을 알려주세요. 예: 스쿨식 3x7 또는 라운드 2x3 6T"); await renderLayoutAiDraft(parsed.plan, text);
-      } catch (error) { layoutAiConversation.push({ user: text, answer: error.message || "명령을 적용하지 못했습니다." }); layoutAiConversation = layoutAiConversation.slice(-5); renderLayoutAiPanel(); }
+      } catch (error) { appendLayoutAiTurn(text, error.message || "명령을 적용하지 못했습니다."); renderLayoutAiPanel(); }
     }
     function renderLayoutAiPanel() {
       if (!layoutAiPanel) return; const result = layoutAiPanel.querySelector("[data-layout-ai-result]"); const history = layoutAiPanel.querySelector("[data-layout-ai-history]");
       if (layoutAiPlan) result.innerHTML = `<div class="layout-ai-summary"><span>AI 생성안</span><span>${escapeHtml(layoutAiPlan.spaceName || "")}</span><span>${layoutAiPlan.layoutType === "round" ? "라운드" : "스쿨식"} ${layoutAiPlan.columns}×${layoutAiPlan.rows}</span><span>${layoutAiPlan.tableCount}T</span><span>${layoutAiPlan.totalSeats}석</span></div>${layoutAiValidation?.errors.length ? `<p class="layout-ai-errors">${escapeHtml(layoutAiValidation.errors.slice(0, 3).join(" · "))}</p>` : ""}${layoutAiValidation?.warnings.length ? `<p class="layout-ai-warnings">${escapeHtml(layoutAiValidation.warnings.slice(0, 3).join(" · "))}</p>` : `<p>${layoutAiValidation?.valid ? "검증 완료" : ""}</p>`}`;
-      history.innerHTML = layoutAiConversation.slice(-5).map((turn) => `<p><strong>${escapeHtml(turn.user)}</strong><br>${escapeHtml(turn.answer)}</p>`).join("");
-      layoutAiPanel.querySelector("[data-layout-ai-save]").disabled = !layoutAiValidation?.valid; layoutAiPanel.querySelector("[data-layout-ai-regenerate]").disabled = !layoutAiPlan; layoutAiPanel.querySelector("[data-layout-ai-undo]").disabled = !workspaceUndoStack.length; layoutAiPanel.querySelector("[data-layout-ai-reset]").disabled = !layoutAiPlan;
+      else result.textContent = "현재 draft를 대화로 생성·수정할 수 있습니다.";
+      history.innerHTML = layoutAiConversation.slice(-10).map((turn) => `<div class="layout-ai-message user">${escapeHtml(turn.user)}</div><div class="layout-ai-message assistant">${escapeHtml(turn.answer)}</div>`).join("");
+      history.scrollTop = history.scrollHeight;
+      layoutAiPanel.querySelector("[data-layout-ai-save]").disabled = !layoutAiValidation?.valid; layoutAiPanel.querySelector("[data-layout-ai-undo]").disabled = !workspaceUndoStack.length; layoutAiPanel.querySelector("[data-layout-ai-reset]").disabled = !layoutAiPlan;
     }
     function resetLayoutAiDraft() { if (layoutAiPlan) { pushWorkspaceHistory(); workspaceObjects = workspaceObjects.filter((object) => object.metadata?.generatedBy !== "layout_ai"); } layoutAiPlan = null; layoutAiValidation = null; layoutAiSessionId = ""; pendingLayoutInfo = null; markWorkspaceDirty(); renderWorkspace(); renderLayoutAiPanel(); }
 
@@ -937,7 +1027,7 @@
       workspaceNewModal?.addEventListener("click", (event) => {
         if (event.target === workspaceNewModal) closeWorkspaceNewLayoutModal();
       });
-      workspaceSaveButton?.addEventListener("click", () => workspaceEditMode === "base" ? saveWorkspaceBaseFloorplan() : openLayoutInfoModal("save", false));
+      workspaceSaveButton?.addEventListener("click", () => workspaceEditMode === "base" ? saveWorkspaceBaseFloorplan() : openLayoutInfoModal("save", Boolean(layoutAiPlan)));
       workspaceSaveAsButton?.addEventListener("click", () => workspaceEditMode === "base" ? saveWorkspaceBaseFloorplan() : openLayoutInfoModal("save", true));
       libraryCreateButton?.addEventListener("click", startNewLibraryLayout);
       document.getElementById("floorplanV2EventModeButton")?.addEventListener("click", showLayoutLibrary);
@@ -1670,9 +1760,9 @@
     function nullableNumber(input) { return input.value === "" ? null : Number(input.value); }
     function openLayoutInfoModal(mode, forceNew) {
       if (!workspaceFloorplanRecord?.id) { setStatus("기본 도면을 먼저 선택해 주세요.", "warn"); return; }
-      libraryModalMode = mode; libraryModalForceNew = forceNew; const row = mode === "info" ? workspaceActiveLayout : workspaceActiveLayout;
+      libraryModalMode = mode; libraryModalForceNew = forceNew; const row = mode === "info" ? workspaceActiveLayout : (workspaceActiveLayout || pendingLayoutInfo);
       librarySpaceInput.value = workspaceSpaceSelect?.selectedOptions?.[0]?.textContent || ""; libraryTypeInput.value = row?.layout_type || "";
-      libraryNameInput.value = forceNew ? `${row?.layout_name || workspaceNameInput?.value || "새 레이아웃"} - 복사본` : row?.layout_name || workspaceNameInput?.value || "";
+      libraryNameInput.value = forceNew && workspaceActiveLayout?.id ? `${row?.layout_name || workspaceNameInput?.value || "새 레이아웃"} - 복사본` : row?.layout_name || workspaceNameInput?.value || "";
       libraryMinInput.value = row?.min_people ?? ""; libraryMaxInput.value = row?.max_people ?? ""; libraryCapacityInput.value = row?.setup_capacity ?? ""; libraryNotesInput.value = row?.layout_notes || "";
       libraryModal.hidden = false; libraryNameInput.focus();
     }
@@ -1957,7 +2047,12 @@
         workspaceSavedLayoutSelect.value = workspaceActiveLayout.id;
         workspaceDirty = false;
         pendingLayoutInfo = null;
+        layoutAiPlan = null;
+        layoutAiValidation = null;
+        layoutAiPreviousPlan = null;
+        layoutAiSessionId = "";
         resetWorkspaceHistory();
+        renderLayoutAiPanel();
         updateWorkspaceStatus("??λ맖");
         await reloadVenueLayouts?.();
         setStatus("?꾨㈃ ?덉씠?꾩썐 媛앹껜瑜???ν뻽?듬땲??");
@@ -3413,6 +3508,7 @@
     }
 
     function endWorkspaceDrag(event) {
+      const movedLayoutAiObject = Boolean(workspaceDragState?.moved && layoutAiPlan);
       if (workspaceDragState) {
         console.log("pointerup", {
           dragMode: workspaceDragState.mode,
@@ -3435,6 +3531,7 @@
       workspaceSvg?.classList.remove("is-panning");
       releaseWorkspacePointer(event);
       renderWorkspace();
+      if (movedLayoutAiObject) refreshLayoutAiValidation();
     }
 
     function handleWorkspaceWheel(event) {
@@ -5315,6 +5412,8 @@
     layoutLibraryObjectGeometry,
     layoutLibraryViewBox,
     parseLayoutAiCommand,
+    layoutAiUnitToMm,
+    parseLayoutAiEditCommand,
     frontDirection,
     chairFacingDirection,
     getRoundSeatAngles,

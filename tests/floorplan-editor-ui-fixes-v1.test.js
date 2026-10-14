@@ -78,9 +78,9 @@ const fitSource = source.slice(source.indexOf("function fitWorkspaceToScreen()")
 const centerSource = source.slice(source.indexOf("function centerWorkspaceView()"), source.indexOf("function markWorkspaceDirty()"));
 assert(!fitSource.includes("workspaceObjects"), "fit must only change the viewport");
 assert(!centerSource.includes("workspaceObjects"), "center must only change the viewport");
-assert(source.includes('.layout-ai-panel h3{margin:0 0 8px;color:#102A40}'));
+assert(source.includes('.layout-ai-panel h3{margin:0 0 6px;color:#102A40}'));
 assert(source.includes('.layout-ai-panel .layout-ai-result{color:#1B2A3A}'));
-assert(source.includes('.layout-ai-panel .layout-ai-history{color:#526579}'));
+assert(source.includes('.layout-ai-history{max-height:150px;overflow:auto'));
 assert(styles.includes('.layout-editor-canvas-shell * { user-select: none; -webkit-user-select: none; }'));
 
 console.log("floorplan editor UI fixes V1 tests passed");
