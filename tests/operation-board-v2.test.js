@@ -17,6 +17,7 @@ const context = {
 };
 vm.createContext(context);
 const source = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
+vm.runInContext(fs.readFileSync("outputs/src/venueUtils.js", "utf8"), context);
 vm.runInContext(source, context);
 const board = context.window.BANQUET_ERP_OPERATION_BOARD;
 
@@ -86,15 +87,15 @@ const grouped = board.groupBlocksBySpace([
   { key: "convention", venue: "컨벤션센터 A", time: "09:00" },
   { key: "burano-early", venue: "부라노1", time: "10:00" },
 ]);
-assert.strictEqual(grouped.map((group) => group.name).join(","), "컨벤션,부라노,카프리");
-assert.strictEqual(grouped.find((group) => group.name === "부라노").venues[0].blocks.map((block) => block.time).join(","), "10:00,16:00");
+assert.strictEqual(grouped.map((group) => group.name).join(","), "컨벤션A,부라노1,카프리2");
+assert.strictEqual(grouped.find((group) => group.name === "부라노1").venues[0].blocks.map((block) => block.time).join(","), "10:00,16:00");
 
 // 다음 세팅은 종료 행사의 physical space를 이어받아 같은 공간 그룹에 남는다.
 const groupedNext = board.groupBlocksBySpace(board.buildAutoBlocks([
   { id: "convention-today", eventName: "컨벤션 행사", calendarDates: [targetDate], venue: "컨벤션 A", schedule: [{ date: targetDate, time: "18:00", content: "행사 종료", venue: "컨벤션 A" }] },
   { id: "convention-next", eventName: "다음 컨벤션 행사", calendarDates: [otherDate], venue: "컨벤션 A", schedule: [{ date: otherDate, time: "09:00", content: "행사 시작", venue: "컨벤션 A" }] },
 ], targetDate));
-assert(groupedNext.find((group) => group.name === "컨벤션").blocks.some((block) => block.type === "next_setup"));
+assert(groupedNext.find((group) => group.name === "컨벤션A").blocks.some((block) => block.type === "next_setup"));
 
 // 다일 행사 병합 셀의 빈 날짜는 직전 유효 날짜를 상속하고 일반 일정도 버리지 않는다.
 const multiDayEvents = [{
@@ -152,7 +153,7 @@ const fallbackBlocks = board.buildAutoBlocks(fallbackEvents, targetDate).filter(
 assert.strictEqual(fallbackBlocks.length, 2);
 assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "ambiguous-multi").time, "14:30");
 assert.strictEqual(fallbackBlocks.find((item) => item.eventOrderId === "empty-schedule").time, "시간 미정");
-assert.strictEqual(board.groupBlocksBySpace(fallbackBlocks).map((group) => group.name).join(","), "부라노,카프리");
+assert.strictEqual(board.groupBlocksBySpace(fallbackBlocks).map((group) => group.name).join(","), "부라노1,카프리1");
 assert(source.includes("세부 일정 확인 필요"));
 
 const productionDateFormatEvent = {

@@ -4,7 +4,8 @@
   const SELECTED_DATE_KEY = "banquet-erp-operation-board-selected-date-v2";
   const OPEN_GROUPS_KEY = "banquet-erp-operation-board-open-groups-v2";
   const TYPES = { start: "행사 시작", schedule: "운영 일정", lunch: "중식", dinner: "석식", coffee: "커피브레이크", checkin: "체크인", checkout: "체크아웃", end: "행사 종료", next_setup: "다음 세팅", manual: "직접 작업" };
-  const SPACE_GROUP_ORDER = ["컨벤션", "페스타", "부라노", "올리비아", "카프리", "기타"];
+  const VENUE_GROUP_LABELS = { CONVENTION_A: "컨벤션A", CONVENTION_B: "컨벤션B", CONVENTION_AB: "컨벤션AB", BURANO_1: "부라노1", BURANO_2: "부라노2", BURANO_3: "부라노3", BURANO_ALL: "부라노전체", CAPRI_1: "카프리1", CAPRI_2: "카프리2", CAPRI_3: "카프리3", CAPRI_ALL: "카프리전체", FESTA: "페스타", OLIVIA: "올리비아" };
+  const SPACE_GROUP_ORDER = [...Object.values(VENUE_GROUP_LABELS), "기타"];
   const COLORS = ["#2563eb", "#0f766e", "#9333ea", "#c2410c", "#be123c", "#4f46e5", "#15803d", "#a16207"];
   let root;
   let weeklyRoot;
@@ -192,14 +193,18 @@
     const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
     return knowledgeResult ?? existingResult;
   }
+  function getVenueGroup(rawVenue) {
+    const canonical = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(rawVenue) || "";
+    return VENUE_GROUP_LABELS[canonical] || "기타";
+  }
   function spaceGroupFromKeys(keys) {
-    const families = (keys || []).filter((key) => key.startsWith("place:"))
-      .map((key) => key.split(":")[1].replace(/센터/g, ""));
-    return SPACE_GROUP_ORDER.find((group) => group !== "기타" && families.some((family) => family.startsWith(group))) || "기타";
+    const place = (keys || []).find((key) => key.startsWith("place:"));
+    if (!place) return "기타";
+    const [, family, member] = place.split(":");
+    return getVenueGroup(`${family}${member === "*" ? "전체" : member || ""}`);
   }
   function spaceGroupForBlock(block) {
-    const keys = block.physicalSpaces?.length ? block.physicalSpaces : physicalSpaceKeys({ venue: block.venue || "" });
-    return spaceGroupFromKeys(keys);
+    return getVenueGroup(block.venue);
   }
   function groupBlocksBySpace(blocks) {
     const groups = new Map();
@@ -634,5 +639,5 @@
     if (context) Object.entries(context).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value || ""; });
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, setupEventDetails, setupEventCandidates, isOverdue, setSetupPin, updateSetupTask, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, setupEventDetails, setupEventCandidates, isOverdue, setSetupPin, updateSetupTask, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; } };
 })();
