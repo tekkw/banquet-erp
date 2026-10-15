@@ -1,6 +1,6 @@
 # Banquet Board Widget V1
 
-Android 홈 화면에서 오늘의 연회 운영 일정을 보여주는 Kotlin + Jetpack Glance 위젯입니다. 웹 ERP와 데이터를 복제하지 않고 Supabase의 `event_calendar_dates`, `event_orders`, `event_schedules`를 직접 읽습니다.
+Android 홈 화면에서 웹 운영보드와 같은 오늘의 미완료 연회 운영 일정을 보여주는 Kotlin + Jetpack Glance 위젯입니다. `event_schedules`와 `operation_board_items`의 기존 완료/manual task 상태를 함께 읽습니다.
 
 ## 기능
 
@@ -11,11 +11,11 @@ Android 홈 화면에서 오늘의 연회 운영 일정을 보여주는 Kotlin +
 - 오프라인 시 마지막 정상 캐시 유지
 - 위젯/전체보기 클릭 시 `https://banquet-erp.vercel.app/board/` 열기
 - Front, Check In/Out 제외 및 Firenze 식사 일정 규칙
-- 같은 공간 및 `ALL` 관계만 고려한 다음 세팅 요약
+- 최대 8개 표시 및 초과 일정 건수 안내
 
 ## 완료 체크
 
-원격 Supabase 프로젝트에서 `operation_board_items`가 PostgREST schema cache에 존재하지 않아(`PGRST205`) V1은 읽기 전용입니다. 임의의 완료 키나 별도 저장소를 만들지 않았습니다. 테이블과 RLS가 실제 운영 환경에 적용된 뒤 웹의 `item_key` 규칙을 그대로 사용해 추가할 수 있습니다.
+위젯은 읽기 전용이며, 웹 운영보드가 사용하는 `operation_board_items.is_completed`와 동일한 `item_key`를 조회합니다. 운영보드에서 완료한 일정은 다음 위젯 갱신 때 제외됩니다.
 
 ## 빌드
 

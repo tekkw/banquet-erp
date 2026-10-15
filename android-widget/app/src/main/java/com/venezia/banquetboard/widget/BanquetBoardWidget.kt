@@ -65,8 +65,7 @@ class BanquetBoardWidget : GlanceAppWidget() {
 @Composable
 private fun WidgetContent(snapshot: BoardSnapshot?, error: String) {
     val size = LocalSize.current
-    val rowLimit = when { size.height < 150.dp -> 3; size.height < 250.dp -> 6; else -> 11 }
-    val showNext = size.height >= 170.dp
+    val rowLimit = when { size.height < 150.dp -> 3; size.height < 250.dp -> 6; else -> 8 }
     val openBoard = actionStartActivity(Intent(Intent.ACTION_VIEW, Uri.parse(MainActivity.BOARD_URL)))
     Column(
         modifier = GlanceModifier.fillMaxSize().background(ColorProvider(Color(0xFF081A2B))).cornerRadius(18.dp).padding(14.dp).clickable(openBoard),
@@ -86,20 +85,18 @@ private fun WidgetContent(snapshot: BoardSnapshot?, error: String) {
         } else if (snapshot == null) {
             Text("일정을 불러오는 중…", style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 14.sp))
         } else if (snapshot.rows.isEmpty()) {
-            Text("오늘 등록된 일정이 없습니다.", style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 14.sp))
+            Text("오늘 남은 일정이 없습니다.", style = TextStyle(color = ColorProvider(Color.LightGray), fontSize = 14.sp))
         } else {
+            Text("오늘 남은 일정 ${snapshot.rows.size}건", style = TextStyle(color = ColorProvider(Color(0xFF6EE7B7)), fontSize = 13.sp, fontWeight = FontWeight.Bold))
             snapshot.rows.take(rowLimit).forEach { BoardRowView(it) }
-        }
-        if (showNext && snapshot?.nextSetup != null) {
-            Spacer(GlanceModifier.height(6.dp))
-            Text("다음 세팅", style = TextStyle(color = ColorProvider(Color(0xFFD4A853)), fontSize = 13.sp, fontWeight = FontWeight.Bold))
-            Text("${snapshot.nextSetup.venue} · ${shortDate(snapshot.nextSetup.date)} ${snapshot.nextSetup.eventName}", maxLines = 1, style = TextStyle(color = ColorProvider(Color.White), fontSize = 13.sp))
+            val hidden = snapshot.rows.size - rowLimit
+            if (hidden > 0) Text("+ 외 ${hidden}건", style = TextStyle(color = ColorProvider(Color(0xFF94A3B8)), fontSize = 12.sp))
         }
         Spacer(GlanceModifier.height(6.dp))
         Row(GlanceModifier.fillMaxWidth(), horizontalAlignment = Alignment.End, verticalAlignment = Alignment.CenterVertically) {
             snapshot?.let { Text(syncLabel(it), style = TextStyle(color = ColorProvider(if (it.offline) Color(0xFFFBBF24) else Color(0xFF94A3B8)), fontSize = 11.sp)) }
             Spacer(GlanceModifier.width(10.dp))
-            Text("전체보기", modifier = GlanceModifier.padding(vertical = 5.dp, horizontal = 8.dp).clickable(openBoard), style = TextStyle(color = ColorProvider(Color(0xFF6EE7B7)), fontSize = 13.sp, fontWeight = FontWeight.Bold))
+            Text("운영보드 열기", modifier = GlanceModifier.padding(vertical = 5.dp, horizontal = 8.dp).clickable(openBoard), style = TextStyle(color = ColorProvider(Color(0xFF6EE7B7)), fontSize = 13.sp, fontWeight = FontWeight.Bold))
         }
     }
 }
@@ -108,10 +105,7 @@ private fun WidgetContent(snapshot: BoardSnapshot?, error: String) {
 private fun BoardRowView(row: BoardRow) {
     Row(GlanceModifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(row.time, modifier = GlanceModifier.width(52.dp), style = TextStyle(color = ColorProvider(Color(0xFF7DD3FC)), fontSize = 14.sp, fontWeight = FontWeight.Bold))
-        Column {
-            Text("${row.venue} · ${row.title}", maxLines = 1, style = TextStyle(color = ColorProvider(Color.White), fontSize = 14.sp, fontWeight = FontWeight.Medium))
-            if (row.people != null) Text("${row.eventName} · ${row.people}명", maxLines = 1, style = TextStyle(color = ColorProvider(Color(0xFFCBD5E1)), fontSize = 12.sp))
-        }
+        Text("${row.venue} · ${row.title}", maxLines = 1, style = TextStyle(color = ColorProvider(Color.White), fontSize = 14.sp, fontWeight = FontWeight.Medium))
     }
 }
 
@@ -135,7 +129,6 @@ class BanquetBoardWidgetReceiver : GlanceAppWidgetReceiver() {
 private fun dateLabel(value: String?): String = runCatching {
     LocalDate.parse(value ?: LocalDate.now(ZoneId.of("Asia/Seoul")).toString()).format(DateTimeFormatter.ofPattern("M월 d일 EEEE"))
 }.getOrDefault("오늘")
-private fun shortDate(value: String): String = runCatching { LocalDate.parse(value).format(DateTimeFormatter.ofPattern("M/d")) }.getOrDefault(value)
 private fun syncLabel(snapshot: BoardSnapshot): String {
     val time = DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.of("Asia/Seoul")).format(Instant.ofEpochMilli(snapshot.syncedAt))
     return if (snapshot.offline) "오프라인 · $time" else "동기화 $time"
