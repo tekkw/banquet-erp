@@ -41,5 +41,10 @@ const groups = Array.from(board.groupBlocksBySpace([
   { key: "capri", venue: "카프리1", time: "11:00" },
 ]), (group) => group.name);
 assert(groups.includes("컨벤션") && groups.includes("부라노") && groups.includes("카프리"), "기존 컨벤션/부라노/카프리 그룹을 유지해야 한다");
+assert(source.includes('data-setup-editor') && source.includes('name="eventOrderId"'), "수정은 행사 선택 modal을 사용해야 한다");
+assert(!source.includes('prompt("연결 행사 ID"'), "행사 ID를 문자열 prompt로 수정하면 안 된다");
+assert(source.includes("eventOrderId: data.eventOrderId") && source.includes("setupEventDetails(linkedEvent)"), "선택 행사의 실제 ID와 표시 정보를 연결해야 한다");
+assert(source.includes("data-editor-child-add") && source.includes("data-editor-child-delete") && source.includes("data-editor-child-complete"), "modal에서 하위 항목을 관리할 수 있어야 한다");
+assert(source.includes('class="setup-venue-badge"') && source.includes('class="setup-task-summary"'), "상단 카드는 장소 badge와 하위 항목 요약을 표시해야 한다");
 
 console.log("operation-board setup task V1 tests passed");

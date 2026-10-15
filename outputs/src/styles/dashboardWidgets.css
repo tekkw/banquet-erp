@@ -281,14 +281,16 @@ body {
 .setup-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .setup-task-board h3 { margin: 0; font-size: 15px; }
 .setup-task-board header span { color: var(--dash-muted); font-size: 11px; }
-.setup-task-list { display: grid; gap: 7px; }
-.setup-task-card { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.4fr) auto; align-items: center; gap: 8px 12px; padding: 8px; border: 1px solid rgba(150, 180, 205, .15); border-radius: 8px; background: rgba(6, 17, 31, .55); }
+.setup-task-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 9px; }
+.setup-task-card { display: grid; align-content: start; gap: 9px; padding: 11px; border: 1px solid rgba(150, 180, 205, .24); border-radius: 9px; background: rgba(6, 17, 31, .68); }
 .setup-task-card.completed { opacity: .72; }
 .setup-task-main { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; }
 .setup-task-main > div { display: grid; min-width: 0; gap: 1px; }
 .setup-task-main span, .setup-task-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-task-main span { font-size: 12px; }
 .setup-task-main small { color: var(--dash-muted); font-size: 10px; }
+.setup-venue-badge { padding: 3px 7px; border: 1px solid rgba(198, 166, 103, .45); border-radius: 999px; color: #f2c76e; font-size: 11px; font-weight: 800; }
+.setup-task-summary { margin: 0; overflow: hidden; color: #c7d3dc; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .setup-task-children { display: grid; gap: 4px; }
 .setup-task-child { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 5px; font-size: 11px; }
 .setup-task-child.completed span { color: var(--dash-muted); text-decoration: line-through; }
@@ -297,11 +299,25 @@ body {
 .setup-task-actions .setup-original-action { flex-basis: auto; }
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
+.setup-editor-dialog { width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 0; overflow: auto; border: 1px solid var(--dash-border-strong); border-radius: 14px; background: #102438; color: var(--dash-text); }
+.setup-editor-dialog::backdrop { background: rgba(0, 7, 15, .76); }
+.setup-editor-dialog form { display: grid; gap: 12px; padding: 18px; }
+.setup-editor-dialog header, .setup-editor-dialog footer, .setup-editor-items > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.setup-editor-dialog h3 { margin: 2px 0 0; }
+.setup-editor-dialog label { display: grid; gap: 5px; color: #c7d3dc; font-size: 11px; }
+.setup-editor-dialog input, .setup-editor-dialog select, .setup-editor-dialog textarea { min-width: 0; padding: 8px; border: 1px solid var(--dash-border); border-radius: 7px; background: rgba(6, 17, 31, .7); color: var(--dash-text); font: inherit; }
+.setup-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.setup-event-secondary { min-height: 1.4em; margin: -7px 0 0; color: var(--dash-muted); font-size: 10px; }
+.setup-editor-items { display: grid; gap: 7px; padding-top: 4px; border-top: 1px solid var(--dash-border); }
+.setup-editor-child { display: grid; grid-template-columns: auto minmax(130px, 1fr) 70px 64px auto; gap: 5px; align-items: center; margin-top: 5px; }
+.setup-editor-dialog button { min-height: 30px; padding: 4px 9px; border: 1px solid var(--dash-border); border-radius: 7px; background: transparent; color: var(--dash-text); cursor: pointer; }
+.setup-editor-dialog footer { justify-content: flex-end; }
 
 @media (max-width: 768px) {
   .setup-task-board { top: 6px; padding: 8px; }
   .setup-task-card { grid-template-columns: 1fr; gap: 7px; }
   .setup-task-actions { justify-content: flex-start; }
+  .setup-editor-child { grid-template-columns: auto minmax(100px, 1fr) 56px 52px auto; }
 }
 .dashboard-ai-full-button { flex: 0 0 auto; align-self: flex-start; min-height: 32px; margin: 0; padding: 6px 10px; white-space: nowrap; }
 .ai-widget-modal { width: min(78vw, 1120px); height: min(78vh, 820px); max-width: none; max-height: none; padding: 0; overflow: hidden; border: 1px solid var(--dash-border-strong); border-radius: 16px; background: #102a40; color: #f4f7fa; box-shadow: 0 32px 100px rgba(0, 4, 12, .72); }
