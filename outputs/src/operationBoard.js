@@ -139,6 +139,12 @@
       ...(event.venueSpaces || []).flatMap((space) => [space?.spaceName, space?.spaceCode]),
       ...(event.eventSpaces || []).map((space) => space?.spaceName)];
     names.filter(Boolean).forEach((value) => {
+      const canonical = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value);
+      if (canonical) {
+        const [family, member] = canonical.toLowerCase().split("_");
+        keys.add(`place:${family}:${member === "all" || canonical === "CONVENTION_AB" ? "*" : member}`);
+        return;
+      }
       const normalized = String(value).toLowerCase().replace(/[Ⅰⅰ]/g, "1").replace(/[Ⅱⅱ]/g, "2").replace(/[Ⅲⅲ]/g, "3")
         .replace(/^\s*\d+\s*f\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
       if (!normalized) return;
@@ -177,6 +183,9 @@
     return (leftKeys || []).some((key) => key.startsWith("id:") && right.has(key));
   }
   function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
+    const venueUtils = window.BANQUET_ERP_VENUE_UTILS;
+    const currentVenue = venueName(currentRow, currentEvent); const futureVenue = venueName(futureRow, futureEvent);
+    if (venueUtils?.normalizeVenue(currentVenue) && venueUtils?.normalizeVenue(futureVenue)) return venueUtils.spacesOverlap(currentVenue, futureVenue);
     const existingResult = physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
     const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
     return knowledgeResult ?? existingResult;
@@ -268,14 +277,14 @@
         normalizedScheduleRows(event).forEach(({ row, day }) => {
           if (isHiddenHotelSchedule(row, event)) return;
           const candidateSpaces = nextSetupPhysicalSpaceKeys(event, row);
-          const existingOverlap = physicalSpaceKeysOverlap(ended.nextSetupSpaces || ended.physicalSpaces, candidateSpaces);
-          const knowledgeOverlap = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride({ venue: ended.venue }, event, { venue: ended.venue }, row);
+          const existingOverlap = spacesOverlap({ venue: ended.venue }, { venue: venueName(row, event) });
+          const knowledgeOverlap = null;
           if (window.BANQUET_ERP_DEBUG_NEXT_SETUP === true) console.debug("next_setup overlap check", {
             endedVenue: ended.venue, endedSpaceId: ended.spaceId, endedPhysicalSpaces: ended.physicalSpaces,
             endedNextSetupSpaces: ended.nextSetupSpaces, candidateVenue: venueName(row, event), candidatePhysicalSpaceKeys: candidateSpaces,
             existingOverlap, knowledgeOverlap,
           });
-          if (day > today && (knowledgeOverlap ?? existingOverlap)) candidates.push({ day, event, row });
+          if (day > today && day <= addDays(today, 30) && existingOverlap) candidates.push({ day, event, row });
         });
       });
       candidates.sort((a, b) => a.day.localeCompare(b.day) || timeValue(a.row.time).localeCompare(timeValue(b.row.time)));
@@ -550,5 +559,5 @@
     if (context) Object.entries(context).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value || ""; });
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, isOverdue, getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, isOverdue, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], ...value }; } };
 })();

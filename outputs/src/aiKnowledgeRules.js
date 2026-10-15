@@ -20,6 +20,8 @@
     return { ruleType: "exclude_schedule_from_banquet_calculation", venue: "피렌체", categories: [...calculationCategories], approved: true };
   }
   function matchesVenue(value, venue) {
+    const venueUtils = global.BANQUET_ERP_VENUE_UTILS;
+    if (venueUtils?.normalizeVenue(value) && venueUtils?.normalizeVenue(venue)) return venueUtils.spacesOverlap(value, venue);
     const name = comparable(value); const target = comparable(venue);
     if (!target) return false;
     return /^(피렌체|florence|firenze)$/.test(target) ? /피렌체|florence|firenze/.test(name) : name.includes(target);

@@ -79,7 +79,7 @@ const weddingNextFixture = [
   { id: "burano-today", eventName: "오늘 부라노 행사", calendarDates: [today], venue: "부라노1", schedule: [{ date: today, time: "18:00", content: "행사 종료", venue: "부라노1" }] },
   { id: "wedding-tomorrow", eventName: "내일 웨딩", calendarDates: ["2026-09-09"], venue: "올리비아", eventSpaces: weddingSpaces, schedule: [{ date: "2026-09-09", time: "11:30", content: "예식시작", venue: "컨벤션센터 A" }] },
 ];
-assert.strictEqual(board.buildAutoBlocks(weddingNextFixture, today).find((item) => item.type === "next_setup")?.next?.name, "내일 웨딩", "부라노1 다음 세팅에서 웨딩의 혼주라운지 점유를 인식해야 한다");
+assert.strictEqual(board.buildAutoBlocks(weddingNextFixture, today).find((item) => item.type === "next_setup")?.next, null, "다음 세팅은 후보 일정의 주 장소가 다른 부대공간과 겹쳐도 연결하지 않아야 한다");
 
 const overlapEvents = [
   { id: "all-today", eventName: "오늘 ALL", calendarDates: [today], ...buranoAll, schedule: [{ date: today, time: "18:00", venue: "부라노 ALL", content: "행사 종료" }] },

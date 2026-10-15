@@ -33,15 +33,8 @@
     const DESKTOP_EVENT_LIMIT = 5;
 
     function shortVenueLabel(eventItem) {
-      const source = [eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean).join(" ");
-      if (/부라노\s*(?:전체|ALL)/i.test(source)) return "부ALL";
-      if (/컨벤션\s*(?:전체|AB)/i.test(source)) return "컨AB";
-      const mappings = [[/컨벤션\s*A(?!B)/i, "컨A"], [/컨벤션\s*B/i, "컨B"], [/부라노\s*1/i, "부1"], [/부라노\s*2/i, "부2"], [/부라노\s*3/i, "부3"], [/카프리\s*1/i, "카1"], [/카프리\s*2/i, "카2"], [/카프리\s*3/i, "카3"], [/페스타/i, "페스타"], [/올리비아/i, "올리"]];
-      const venues = mappings.filter(([pattern]) => pattern.test(source)).map(([, label]) => label);
-      if (!venues.length) return String(eventItem.venue || eventItem.schedule?.[0]?.venue || "장소 미정");
-      if (venues.length === 1) return venues[0];
-      if (venues.length === 2) return venues.join("+");
-      return `${venues[0]} 외 ${venues.length - 1}`;
+      const venues = [eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean);
+      return window.BANQUET_ERP_VENUE_UTILS?.formatVenueShortList(venues) || String(venues[0] || "장소 미정");
     }
 
     function fullVenueLabel(eventItem) {
