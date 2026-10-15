@@ -11,7 +11,7 @@ assert(calendar.includes("formatVenueShortList(venues)"));
 assert(calendar.includes("+${desktopHiddenCount}건"));
 assert(calendar.includes("openDesktopDayDrawer"));
 assert(calendar.includes("openEventModal?.(eventItem, dateKey)"));
-assert(calendar.includes("button.title = eventName"));
+assert(calendar.includes("button.title = [eventTitle, secondaryTitle]"));
 assert(css.includes("@media (min-width: 769px)"));
 assert(css.includes(".calendar-day-drawer.visible"));
 assert(css.includes(".calendar-event-bar.desktop-calendar-hidden"));

@@ -1098,6 +1098,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="./src/constants.js"></script>
   <script src="./src/utils.js"></script>
+  <script src="./src/eventDisplayUtils.js?v=event-display-v1"></script>
   <script src="./src/venueUtils.js?v=venue-normalization-v1"></script>
   <script src="./src/storage.js"></script>
   <script src="./src/auth.js"></script>
@@ -4199,8 +4200,9 @@
     }
 
     function getDashboardEventTitle(eventItem) {
-      return cleanValue(eventItem.eventName)
+      return window.BANQUET_ERP_EVENT_DISPLAY?.getEventDisplayTitle(eventItem)
         || cleanValue(eventItem.companyName)
+        || cleanValue(eventItem.eventName)
         || cleanValue((eventItem.schedule || [])[0]?.content)
         || "이름 없는 행사";
     }
