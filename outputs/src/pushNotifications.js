@@ -38,8 +38,9 @@
   }
 
   async function enable() {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("알림 권한이 허용되지 않았습니다.");
+    if (Notification.permission === "denied") throw new Error("브라우저 알림 권한이 차단되어 있습니다.");
+    const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+    if (permission !== "granted") throw new Error("브라우저 알림 권한이 필요합니다.");
     const { worker, subscription: existing } = await currentSubscription();
     let publicKey;
     try {
@@ -68,6 +69,15 @@
       throw stageError("구독 DB 저장 실패", error);
     }
     bind();
+    console.debug("[Push Notifications] subscription ready", { permission, subscriptionExists: Boolean(subscription), endpoint: subscription.endpoint.slice(0, 32) });
+    return subscription;
+  }
+
+  async function ensureEnabled() {
+    if (Notification.permission === "denied") throw new Error("브라우저 알림 권한이 차단되어 있습니다.");
+    const { subscription } = await currentSubscription();
+    console.debug("[Push Notifications] status", { permission: Notification.permission, subscriptionExists: Boolean(subscription) });
+    return enable();
   }
 
   async function disable() {
@@ -103,5 +113,6 @@
   }
 
   window.addEventListener("banquet:operation-board-rendered", bind);
+  window.BANQUET_ERP_PUSH_NOTIFICATIONS = { enable, disable, ensureEnabled, currentSubscription };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true }); else bind();
 })();

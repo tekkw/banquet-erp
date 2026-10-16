@@ -1246,7 +1246,12 @@
   document.querySelectorAll("[data-board-page-step]").forEach((button) => button.onclick = () => moveBoardDate(Number(button.dataset.boardPageStep)));
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
   document.getElementById("boardLoginForm").onsubmit = (event) => { event.preventDefault(); const id = document.getElementById("boardLoginId").value.trim(); const password = document.getElementById("boardLoginPassword").value; const account = constants.loginAccounts.find((item) => item.id === id && item.password === password); if (!account) { document.getElementById("boardLoginError").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; return; } localStorage.setItem(constants.authStorageKey, JSON.stringify({ id: account.id, role: account.role, label: account.label })); start(); };
-  window.openStoredExcel = (path) => window.open(`../index.html?excelPreview=${encodeURIComponent(String(path))}`, "_blank", "noopener");
+  window.openStoredExcel = (path, context = {}) => {
+    const route = context.eventOrderId ? `../index.html?eventPreviewId=${encodeURIComponent(String(context.eventOrderId))}` : `../index.html?excelPreview=${encodeURIComponent(String(path))}`;
+    if (window.matchMedia?.("(max-width: 768px)").matches) { window.location.assign(route); return; }
+    const opened = window.open(route, "_blank", "noopener");
+    if (!opened) window.location.assign(route);
+  };
   window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }

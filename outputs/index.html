@@ -1113,8 +1113,8 @@
 <script src="./src/floorplanEditor.js?v=layout-ai-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
-  <script src="./src/operationBoard.js?v=operation-board-tabs-v1"></script>
-  <script src="./src/pushNotifications.js?v=web-push-v1"></script>
+  <script src="./src/operationBoard.js?v=mobile-preview-reminder-v1"></script>
+  <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v1"></script>
   <script src="./src/dashboardWidgets.js?v=pc-today-agenda-v1"></script>
   <script>
     /*
@@ -4959,10 +4959,13 @@
 
     function openRequestedExcelPreview() {
       const params = new URLSearchParams(window.location.search);
-      const storagePath = params.get("excelPreview");
+      const eventPreviewId = params.get("eventPreviewId");
+      const eventItem = eventPreviewId ? savedEvents.find((item) => String(item.id) === String(eventPreviewId)) : null;
+      const storagePath = eventItem?.storagePath || params.get("excelPreview");
       if (!storagePath) return;
       openStoredExcel(storagePath);
       params.delete("excelPreview");
+      params.delete("eventPreviewId");
       history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`);
     }
 
