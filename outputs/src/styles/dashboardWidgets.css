@@ -299,6 +299,14 @@ body {
 .setup-task-actions .setup-original-action { flex-basis: auto; }
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
+.dashboard-agenda-widget { display: grid; align-content: start; gap: 10px; height: 100%; padding: 14px; box-sizing: border-box; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-panel); color: var(--dash-text); }
+.dashboard-agenda-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dashboard-agenda-heading h2 { margin: 2px 0 0; font-size: 17px; }
+.dashboard-agenda-list { display: grid; gap: 2px; overflow: auto; }
+.dashboard-agenda-row { display: grid; grid-template-columns: auto 46px minmax(0, 1fr); align-items: center; gap: 7px; min-height: 30px; padding: 3px 2px; border-bottom: 1px solid rgba(150, 180, 205, .09); font-size: 11px; cursor: pointer; }
+.dashboard-agenda-row time { color: #f2c76e; font-variant-numeric: tabular-nums; }
+.dashboard-agenda-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dashboard-agenda-widget > button { justify-self: start; min-height: 30px; padding: 4px 8px; border: 1px solid var(--dash-border); border-radius: 7px; background: transparent; color: var(--dash-muted); cursor: pointer; }
 .setup-editor-dialog { width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 32px); padding: 0; overflow: auto; border: 1px solid var(--dash-border-strong); border-radius: 14px; background: #102438; color: var(--dash-text); }
 .setup-editor-dialog::backdrop { background: rgba(0, 7, 15, .76); }
 .setup-editor-dialog form { display: grid; gap: 12px; padding: 18px; }

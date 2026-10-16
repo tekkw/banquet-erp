@@ -358,7 +358,7 @@
       state.checklist = [...state.checklist.filter((item) => item.date !== boardDate), ...(checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, date: boardDate, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }))];
       remoteLoadedDates.add(boardDate);
       saveState(); remoteStatus = "ready";
-      if (selectedDate === boardDate) render();
+      if (selectedDate === boardDate || document.getElementById("todayRemainingScheduleWidget")) render();
     } catch (error) { remoteStatus = "fallback"; console.info("운영보드 DB migration 적용 전: 브라우저 저장소를 사용합니다.", error.message); }
     finally { remoteLoadingDates.delete(boardDate); }
   }
@@ -409,6 +409,8 @@
     if (!root) return;
     currentEvents = events;
     hydrateRemote(selectedDate);
+    const actualToday = seoulDateKey();
+    if (actualToday !== selectedDate) hydrateRemote(actualToday);
     const blocks = allBlocks(selectedDate);
     const selectedEvents = currentEvents.filter((event) => eventDates(event).includes(selectedDate));
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
@@ -421,7 +423,7 @@
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
       ${renderSetupTaskBoard(blocks)}
-      ${renderTodayAgenda(activeAgenda, completedAgenda)}
+      ${window.matchMedia?.("(max-width: 768px)").matches ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
       <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<div class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br><button class="primary-button" type="button" data-general-board-add>일반 작업 추가</button></div>'}</div>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><input name="eventOrderId" type="hidden"><input name="spaceId" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>
       <dialog class="operation-dialog operation-detail-dialog" data-operation-detail><div data-operation-detail-content></div></dialog>
@@ -433,6 +435,7 @@
     });
     if (weeklyRoot) weeklyRoot.innerHTML = renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents));
     bindEvents();
+    renderDashboardAgendaWidget();
     window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
   function setupBoardTasks(blocks) {
@@ -452,6 +455,14 @@
     const row = (block) => `<label class="operation-agenda-row" data-key="${escapeHtml(block.key)}"><input type="checkbox" data-complete><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(block.venue)}</strong> · ${escapeHtml(block.title)}</span>${isOverdue(block) ? '<small>지연</small>' : ""}</label>`;
     const completedRow = (block) => `<div class="operation-agenda-row completed" data-key="${escapeHtml(block.key)}"><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(block.venue)}</strong> · ${escapeHtml(block.title)}</span><button type="button" data-restore-complete>되돌리기</button></div>`;
     return `<section class="operation-agenda" aria-labelledby="operationAgendaTitle"><div class="operation-agenda-heading"><h3 id="operationAgendaTitle">오늘 남은 일정</h3><strong>${active.length}건</strong></div><div class="operation-agenda-list">${active.map(row).join("") || '<p class="operation-agenda-empty">남은 일정이 없습니다.</p>'}</div><details class="operation-completed-list"><summary>완료 ${completed.length}건 보기</summary>${completed.map(completedRow).join("") || '<p class="operation-agenda-empty">완료한 일정이 없습니다.</p>'}</details></section>`;
+  }
+  function renderDashboardAgendaWidget() {
+    const widget = document.getElementById("todayRemainingScheduleWidget"); if (!widget) return;
+    const today = seoulDateKey(); const active = agendaBlocks(allBlocks(today, currentEvents)).filter((block) => !block.completed); const visible = active.slice(0, 8); const remaining = active.length - visible.length;
+    const rows = visible.map((block) => `<label class="dashboard-agenda-row" data-dashboard-agenda-key="${escapeHtml(block.key)}"><input type="checkbox"><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(block.venue) || block.venue)}</strong> · ${escapeHtml(block.title)}</span></label>`).join("");
+    widget.innerHTML = `<div class="dashboard-agenda-heading"><div><span class="eyebrow">Today remaining</span><h2>오늘 남은 일정</h2></div><strong>${active.length}건</strong></div><div class="dashboard-agenda-list">${rows || '<p>남은 일정이 없습니다.</p>'}</div>${remaining > 0 ? `<button type="button" data-dashboard-agenda-more>+ ${remaining}건 더 보기</button>` : ""}`;
+    widget.querySelectorAll("[data-dashboard-agenda-key] input").forEach((input) => input.onchange = () => completeBoardItem(input.closest("[data-dashboard-agenda-key]").dataset.dashboardAgendaKey, true, today));
+    widget.querySelector("[data-dashboard-agenda-more]")?.addEventListener("click", () => { selectDate(today); render(); requestAnimationFrame(() => root?.scrollIntoView({ behavior: "smooth", block: "start" })); });
   }
   function renderSpaceGroups(groups) {
     const mobile = window.matchMedia?.("(max-width: 768px)").matches;
@@ -518,6 +529,12 @@
     saveState();
     if (item) syncItem(item);
     render();
+  }
+  function completeBoardItem(key, completed, boardDate = selectedDate) {
+    state.completions[key] = completed;
+    const block = allBlocks(boardDate, currentEvents).find((item) => item.key === key); if (block) block.completed = completed;
+    const manual = state.manual.find((item) => item.key === key); if (manual) manual.completed = completed;
+    saveState(); if (block) syncItem(block); render();
   }
   function updateSetupTask(key, changes) {
     state.setupOverrides[key] = { ...(state.setupOverrides[key] || {}), ...changes };
@@ -628,8 +645,8 @@
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
     weeklyRoot?.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
     weeklyRoot?.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
-    root.querySelectorAll("[data-complete]").forEach((control) => { const complete = () => { const checked = control.matches('input[type="checkbox"]') ? control.checked : true; const key = control.closest("[data-key]").dataset.key; state.completions[key] = checked; const block = allBlocks().find((x) => x.key === key); if (block) block.completed = checked; const manual = state.manual.find((x) => x.key === key); if (manual) manual.completed = checked; saveState(); if (block) syncItem(block); render(); }; if (control.matches('input[type="checkbox"]')) control.onchange = complete; else control.onclick = complete; });
-    root.querySelectorAll("[data-restore-complete]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; state.completions[key] = false; const block = allBlocks().find((x) => x.key === key); if (block) block.completed = false; const manual = state.manual.find((x) => x.key === key); if (manual) manual.completed = false; saveState(); if (block) syncItem(block); render(); });
+    root.querySelectorAll("[data-complete]").forEach((control) => { const complete = () => completeBoardItem(control.closest("[data-key]").dataset.key, control.matches('input[type="checkbox"]') ? control.checked : true); if (control.matches('input[type="checkbox"]')) control.onchange = complete; else control.onclick = complete; });
+    root.querySelectorAll("[data-restore-complete]").forEach((button) => button.onclick = () => completeBoardItem(button.closest("[data-key]").dataset.key, false));
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
     root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => deleteManual(button.closest("[data-key]").dataset.key));
     root.querySelectorAll("[data-setup-pin]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; setSetupPin(key, !state.pins[key]); });
@@ -654,5 +671,5 @@
     if (context) Object.entries(context).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value || ""; });
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.BANQUET_ERP_OPERATION_BOARD = { render, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, isOverdue, setSetupPin, updateSetupTask, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, isOverdue, setSetupPin, updateSetupTask, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; } };
 })();

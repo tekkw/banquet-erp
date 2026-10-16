@@ -8,6 +8,7 @@
     large: { colSpan: 12, rowSpan: 9 },
   };
   const definitions = [
+    { id: "today-remaining", name: "오늘 남은 일정", selector: "#todayRemainingScheduleWidget", colSpan: 4, rowSpan: 6, minColSpan: 4, minRowSpan: 4 },
     { id: "today-board", name: "운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6 },
     { id: "weekly-setup", name: "다음 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 4, rowSpan: 10, minColSpan: 4, minRowSpan: 5 },
     { id: "hall-current-states", name: "현재 세팅 상태", selector: "#hallCurrentStatesWidget", colSpan: 4, rowSpan: 8, minColSpan: 4, minRowSpan: 5 },
