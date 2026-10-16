@@ -11,6 +11,7 @@ const { chromium } = require("playwright");
     await page.setContent('<meta name="viewport" content="width=device-width, initial-scale=1"><main><section id="todayOperationBoard"></section><section id="weeklySetupWidget"></section></main>');
     await page.addStyleTag({ path: "outputs/src/styles/dashboard.css" });
     await page.addStyleTag({ path: "outputs/src/styles/dashboardWidgets.css" });
+    await page.addScriptTag({ path: "outputs/src/venueUtils.js" });
     await page.addScriptTag({ path: "outputs/src/operationBoard.js" });
 
     await page.evaluate(() => window.BANQUET_ERP_OPERATION_BOARD.render({ events: [
@@ -24,8 +25,8 @@ const { chromium } = require("playwright");
     await page.locator("[data-board-date]").fill("2026-09-29");
     await page.locator("[data-board-date]").dispatchEvent("change");
     assert.strictEqual(await page.locator(".operation-block h4").filter({ hasText: "커피브레이크" }).count(), 1);
-    assert.deepStrictEqual(await page.locator("[data-space-group-section]").evaluateAll((items) => items.map((item) => item.dataset.spaceGroupSection)), ["컨벤션", "페스타", "부라노", "카프리"]);
-    assert.strictEqual(await page.locator('[data-space-group-section="컨벤션"] .operation-block').filter({ hasText: "다음 세팅" }).count(), 1);
+    assert.deepStrictEqual(await page.locator("[data-space-group-section]").evaluateAll((items) => items.map((item) => item.dataset.spaceGroupSection)), ["컨벤션A", "부라노1", "카프리2", "페스타"]);
+    assert.strictEqual(await page.locator('[data-space-group-section="컨벤션A"] .operation-block').filter({ hasText: "다음 세팅" }).count(), 1);
     if (mobile) {
       assert.strictEqual(await page.locator('[data-space-group-toggle][aria-expanded="true"]').count(), 1);
       await page.locator('[data-space-group-toggle="페스타"]').click();

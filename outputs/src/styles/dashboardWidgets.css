@@ -322,7 +322,7 @@ body {
 .setup-editor-dialog footer { justify-content: flex-end; }
 
 @media (max-width: 768px) {
-  .setup-task-board { top: 6px; padding: 8px; }
+  .setup-task-board { position: static; z-index: auto; top: auto; padding: 8px; }
   .setup-task-card { grid-template-columns: 1fr; gap: 7px; }
   .setup-task-actions { justify-content: flex-start; }
   .setup-editor-child { grid-template-columns: auto minmax(100px, 1fr) 56px 52px auto; }

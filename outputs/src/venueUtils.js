@@ -15,6 +15,7 @@
       .replace(/^(부라노|카프리)III$/, (_, family) => `${family}3`).replace(/^(부라노|카프리)II$/, (_, family) => `${family}2`).replace(/^(부라노|카프리)I$/, (_, family) => `${family}1`);
     const name = comparable(romanName).replace(/CONVENTION/g, "컨벤션").replace(/컨벤션센터/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리");
     if (/^(컨벤션(?:전체|ALL|AB)|컨AB)$/.test(name) || /^컨벤션(?:1\+2\+3|123)$/.test(name)) return "CONVENTION_AB";
+    if (/^컨벤션$/.test(name)) return "CONVENTION_AB";
     if (/^(컨벤션A|컨A|컨벤션[12])$/.test(name)) return "CONVENTION_A";
     if (/^(컨벤션B|컨B|컨벤션3)$/.test(name)) return "CONVENTION_B";
     if (/^부라노(?:전체|ALL|1\+2\+3|123)?$/.test(name)) return "BURANO_ALL";

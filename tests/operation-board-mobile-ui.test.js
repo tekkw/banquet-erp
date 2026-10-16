@@ -3,6 +3,7 @@ const fs = require("fs");
 
 const board = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
 const styles = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
+const pageStyles = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8");
 
 assert(board.includes('class="operation-block-mobile-header"'), "모바일 카드 첫 줄에 시간/장소/유형 영역이 필요하다");
 assert(board.includes("data-mobile-reminder-toggle"), "모바일 알림 버튼이 필요하다");
@@ -14,5 +15,8 @@ assert(styles.includes("@media (max-width: 768px)"), "변경은 모바일 미디
 assert(styles.includes(".operation-reminder { display: none; }"), "모바일에서는 기존 select를 숨겨야 한다");
 assert(styles.includes("word-break: keep-all"), "한글이 한 글자씩 줄바꿈되지 않아야 한다");
 assert(styles.includes(".operation-block.next-setup-expanded .next-setup-detail { display: grid; }"), "상세 보기 시 다음 세팅 상세가 확장돼야 한다");
+assert(styles.includes(".setup-task-board { position: static; z-index: auto; top: auto;"), "모바일 고정 작업 영역은 스크롤을 따라오면 안 된다");
+assert(styles.includes(".setup-task-board { position: sticky; top: 8px;"), "PC의 기존 고정 영역 동작은 유지해야 한다");
+assert(pageStyles.includes("padding: 76px 10px calc(190px + env(safe-area-inset-bottom))"), "마지막 일정이 fixed AI 입력바 위까지 스크롤되도록 하단 여백이 필요하다");
 
 console.log("operation-board mobile UI tests passed");
