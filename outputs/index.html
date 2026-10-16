@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=manual-setup-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=event-overwrite-contrast-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -3115,7 +3115,7 @@
     function eventOverwriteSummary(eventItem) { const dates = eventOverwriteDates(eventItem).sort(); const period = dates.length > 1 ? `${dates[0].slice(5).replace("-", "/")}~${dates.at(-1).slice(5).replace("-", "/")}` : dates[0]?.slice(5).replace("-", "/") || "날짜 미확인"; return `${eventItem?.companyName || eventItem?.organizer || eventItem?.eventName || "행사명 미확인"}\n${period}\n${eventItem?.venue || "장소 미확인"}\n파일: ${eventItem?.originalFilename || "파일명 미확인"}`; }
     function chooseEventOverwrite(existing, incoming) {
       return new Promise((resolve) => {
-        const dialog = document.createElement("dialog"); dialog.className = "delete-choice-panel";
+        const dialog = document.createElement("dialog"); dialog.className = "delete-choice-panel event-overwrite-dialog";
         const title = document.createElement("h3"); title.textContent = "기존 행사와 유사한 이벤트오더가 있습니다.";
         const comparison = document.createElement("pre"); comparison.textContent = `기존:\n${eventOverwriteSummary(existing)}\n\n업로드:\n${eventOverwriteSummary(incoming)}`;
         const actions = document.createElement("div"); actions.className = "event-order-ai-review-actions";

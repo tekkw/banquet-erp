@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const html = fs.readFileSync("outputs/index.html", "utf8");
+const modalCss = fs.readFileSync("outputs/src/styles/modal.css", "utf8");
 function source(name) {
   const start = html.indexOf(`    function ${name}`); assert(start >= 0, `${name} missing`);
   let depth = 0; let opened = false;
@@ -21,6 +22,9 @@ assert.equal(context.find({ ...revision, originalFilename: "different.xlsx" }, [
 assert.equal(context.find({ ...revision, calendarDates: ["2026-11-15"] }, [existing]), null, "주최가 같아도 날짜가 다르면 후보가 아니어야 한다");
 assert.equal(context.score(existing, revision).duplicate, true);
 assert(html.includes("기존 행사와 유사한 이벤트오더가 있습니다."));
+assert(html.includes('delete-choice-panel event-overwrite-dialog'), "중복 감지 dialog에 전용 scope가 있어야 한다");
+assert(modalCss.includes(".event-overwrite-dialog h3") && modalCss.includes("color: #102033"), "제목은 밝은 배경용 dark text여야 한다");
+assert(modalCss.includes(".event-overwrite-dialog pre") && modalCss.includes("color: #526477"), "기존/업로드 행사 본문은 읽을 수 있는 secondary dark text여야 한다");
 for (const label of ["기존 행사 덮어쓰기", "새 행사로 등록", "취소"]) assert(html.includes(label));
 assert(html.includes('method: "PATCH"') && html.includes("return { ...eventItem, id: eventOrderId"));
 for (const table of ["event_calendar_dates", "event_schedules", "event_items"]) assert(html.includes(`${table}?event_order_id=eq.`));

@@ -134,6 +134,18 @@
   font-weight: 700;
 }
 
+.event-overwrite-dialog {
+  color: #102033;
+}
+
+.event-overwrite-dialog h3 {
+  color: #102033;
+}
+
+.event-overwrite-dialog pre {
+  color: #526477;
+}
+
 .floorplan-editor-backdrop {
   z-index: 40;
 }

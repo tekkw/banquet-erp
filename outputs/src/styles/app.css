@@ -12,7 +12,7 @@
 @import "./calendar.css";
 @import "./assets.css";
 @import "./ai.css";
-@import "./modal.css";
+@import "./modal.css?v=event-overwrite-contrast-v1";
 @import "./dashboardWidgets.css?v=manual-setup-v1";
 @import "./darkTheme.css";
 @import "./mobile.css";
