@@ -28,7 +28,7 @@ assert.deepStrictEqual(Array.from(active, (item) => item.key), ["manual:active"]
 assert.strictEqual(context.window.BANQUET_ERP_VENUE_UTILS.formatVenueShort(active[0].venue), "부1");
 assert(html.includes('id="todayRemainingScheduleWidget"') && !html.includes('id="todayRemainingScheduleWidget" class="operation-board"'), "위젯은 운영보드 DOM 밖에 있어야 한다");
 assert(widgets.includes('id: "today-remaining"') && widgets.includes('selector: "#todayRemainingScheduleWidget"'), "대시보드 위젯으로 등록해야 한다");
-assert(source.includes('window.matchMedia?.("(max-width: 768px)").matches ? renderTodayAgenda'), "PC에서만 내부 오늘 일정을 제거하고 모바일은 유지해야 한다");
+assert(source.includes('data-board-tab-panel="operations"') && source.includes("renderTodayAgenda(activeAgenda, completedAgenda)"), "운영 탭은 PC/모바일 공용 전체 목록을 제공해야 한다");
 assert(source.includes("const today = seoulDateKey()") && source.includes("active.slice(0, 8)"), "서울 실제 오늘 기준으로 최대 8건을 표시해야 한다");
 assert(source.includes("completeBoardItem") && source.includes("syncItem(block)"), "위젯과 운영보드가 같은 완료 저장 경로를 사용해야 한다");
 assert(source.includes("formatVenueShort(block.venue)"));

@@ -16,6 +16,7 @@
   const remoteLoadingDates = new Set();
   let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
   let mobileOpenGroups = loadOpenGroups();
+  let activeBoardTab = "operations";
 
   function dateKey(date = new Date()) {
     const offset = date.getTimezoneOffset() * 60000;
@@ -415,16 +416,24 @@
     const selectedEvents = currentEvents.filter((event) => eventDates(event).includes(selectedDate));
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
-    const agenda = agendaBlocks(blocks);
+    const operationBlocks = blocks.filter((block) => block.type !== "next_setup");
+    const setupBlocks = blocks.filter((block) => block.type === "next_setup");
+    const agenda = agendaBlocks(operationBlocks);
     const activeAgenda = agenda.filter((block) => !block.completed);
     const completedAgenda = agenda.filter((block) => block.completed);
-    const spaceGroups = groupBlocksBySpace(blocks.filter((block) => !block.completed));
+    const spaceGroups = groupBlocksBySpace(operationBlocks.filter((block) => !block.completed));
     root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label></div></div>
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      ${renderSetupTaskBoard(blocks)}
-      ${window.matchMedia?.("(max-width: 768px)").matches ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
-      <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<div class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br><button class="primary-button" type="button" data-general-board-add>일반 작업 추가</button></div>'}</div>
+      <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
+      <section class="operation-board-tab-panel" data-board-tab-panel="operations" ${activeBoardTab === "operations" ? "" : "hidden"}>
+        ${renderTodayAgenda(activeAgenda, completedAgenda)}
+        <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<div class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br><button class="primary-button" type="button" data-general-board-add>일반 작업 추가</button></div>'}</div>
+      </section>
+      <section class="operation-board-tab-panel" data-board-tab-panel="setup" ${activeBoardTab === "setup" ? "" : "hidden"}>
+        ${renderSetupTaskBoard(blocks)}
+        ${renderSetupCandidates(setupBlocks)}
+      </section>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><input name="eventOrderId" type="hidden"><input name="spaceId" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>
       <dialog class="operation-dialog operation-detail-dialog" data-operation-detail><div data-operation-detail-content></div></dialog>
       <dialog class="setup-editor-dialog" data-setup-editor></dialog>`;
@@ -450,6 +459,12 @@
       return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</span><div><strong>${escapeHtml(eventTitle)}</strong><small>${escapeHtml([eventDate && eventDate.slice(5).replace("-", "/"), item.next?.time || item.time].filter(Boolean).join(" "))}</small></div></div>${childSummary ? `<p class="setup-task-summary">${escapeHtml(childSummary)}</p>` : ""}<div class="setup-task-actions">${renderOriginalAction(item.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
     return `<section class="setup-task-board"><div class="setup-task-heading"><h3>다음 세팅 / 고정 작업</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${tasks.map((item) => card(item)).join("") || '<p>상단에 고정된 작업이 없습니다.</p>'}</div></section>`;
+  }
+  function renderSetupCandidates(blocks) {
+    const active = blocks.filter((item) => !item.completed);
+    const completed = blocks.filter((item) => item.completed);
+    const completedRow = (item) => `<div class="completed-setup-row" data-key="${escapeHtml(item.key)}"><span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</strong> · ${escapeHtml(item.next?.name || item.title)}</span><button type="button" data-restore-complete>복원</button></div>`;
+    return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(completedRow).join("") || '<p>완료된 세팅이 없습니다.</p>'}</details></section>`;
   }
   function renderTodayAgenda(active, completed) {
     const row = (block) => `<label class="operation-agenda-row" data-key="${escapeHtml(block.key)}"><input type="checkbox" data-complete><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(block.venue)}</strong> · ${escapeHtml(block.title)}</span>${isOverdue(block) ? '<small>지연</small>' : ""}</label>`;
@@ -592,6 +607,11 @@
     dialog.showModal();
   }
   function bindEvents() {
+    root.querySelectorAll("[data-board-tab]").forEach((button) => button.onclick = () => {
+      activeBoardTab = button.dataset.boardTab;
+      root.querySelectorAll("[data-board-tab]").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.boardTab === activeBoardTab)));
+      root.querySelectorAll("[data-board-tab-panel]").forEach((panel) => { panel.hidden = panel.dataset.boardTabPanel !== activeBoardTab; });
+    });
     [root, weeklyRoot].filter(Boolean).forEach((container) => {
       container.querySelectorAll("[data-setup-original]").forEach((button) => {
         button.onclick = () => {

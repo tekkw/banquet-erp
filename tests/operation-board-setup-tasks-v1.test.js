@@ -26,7 +26,8 @@ board._setStateForTest({ pins: { [setup.key]: true, "manual:pinned": true }, com
 setup.completed = true;
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([setup, manual]), (item) => item.key), [manual.key], "완료된 고정 작업은 상단에서 제거되어야 한다");
 
-assert(source.indexOf("renderSetupTaskBoard(blocks)") < source.indexOf("renderTodayAgenda(activeAgenda"), "세팅 보드는 오늘 일정 위에 있어야 한다");
+assert(source.includes('data-board-tab="operations"') && source.includes('data-board-tab="setup"'), "운영/다음 세팅 탭을 제공해야 한다");
+assert(source.includes("renderTodayAgenda(activeAgenda, completedAgenda)") && source.includes("renderSetupTaskBoard(blocks)"), "각 탭의 기존 기능을 계속 렌더링해야 한다");
 assert(source.includes('item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup"'), "setup task는 기존 operation_board_items를 사용해야 한다");
 assert(source.includes("operation_board_checklist_items"), "하위 항목은 기존 checklist 저장 구조를 사용해야 한다");
 assert(source.includes("pinned: !!state.pins[item.key]"));
