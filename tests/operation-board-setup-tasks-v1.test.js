@@ -56,6 +56,11 @@ assert(source.includes("eventOrderId: data.eventOrderId") && source.includes("se
 assert(source.includes("data-editor-child-add") && source.includes("data-editor-child-delete") && source.includes("data-editor-child-complete"), "modal에서 하위 항목을 관리할 수 있어야 한다");
 assert(source.includes('class="setup-venue-badge"') && source.includes('class="setup-task-summary"'), "상단 카드는 장소 badge와 하위 항목 요약을 표시해야 한다");
 assert(source.includes("setup-editor-dialog") && source.includes("showModal()"), "모바일도 공용 행사 선택 editor를 사용해야 한다");
+assert(source.includes('data-setup-create') && source.includes('data-setup-create-form'), "다음 세팅 탭에서 공용 setup editor로 수동 작업을 추가해야 한다");
+assert(source.includes('name="pinned" type="checkbox" checked'), "생성 시 상단 고정을 선택할 수 있어야 한다");
+assert(source.includes('metadataSource: "manual_setup_task"') && source.includes('type: "next_setup"'), "수동 작업도 공용 next_setup task 구조를 사용해야 한다");
+assert(source.includes('syncItem(item, { throwOnError: true })') && source.includes('syncChecklist(child, false, { throwOnError: true })'), "부모와 하위 항목을 공용 원격 저장소에 저장해야 한다");
+assert(source.includes('이미 다음 세팅 작업이 있습니다.') && source.includes('data-open-existing-setup'), "중복 안내에서 기존 작업을 열 수 있어야 한다");
 
 assert.deepStrictEqual({ ...board.setupCandidateDateRange("2026-10-15") }, { start: "2026-10-15", end: "2026-10-25" }, "오늘부터 다음 주 일요일까지 계산해야 한다");
 board._setEventsForTest([
@@ -69,8 +74,12 @@ board._setEventsForTest([
 const candidates = board.setupEventCandidates("부라노1", "2026-10-15");
 assert(!candidates.some((item) => item.event.id === "past") && !candidates.some((item) => item.event.id === "later"), "과거와 다음 주 일요일 이후 행사를 제외해야 한다");
 assert(candidates.some((item) => item.event.id === "today") && candidates.some((item) => item.event.id === "week") && candidates.some((item) => item.event.id === "sunday"), "오늘, 이번 주, 다음 주 일요일 행사를 포함해야 한다");
+assert.deepStrictEqual(Array.from(candidates, (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-20", "2026-10-25"], "공간과 무관하게 전체 후보를 날짜 오름차순으로 표시해야 한다");
 assert.deepStrictEqual(Array.from(candidates.filter((item) => item.overlap), (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-25"], "같은 공간 후보는 날짜 오름차순이어야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "today").details), "10/15 · 오늘 주최 · 부1 · 20명", "organizer와 compact venue만 기본 label에 표시해야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "fallback").details), "10/20 · 행사명 대체 · 카2 · 50명", "organizer가 없으면 event_name을 사용해야 한다");
+const duplicateBlocks = [{ key: "manual-setup:one", kind: "manual", type: "next_setup", date: "2026-10-15", venue: "부라노1", eventOrderId: "week", next: { date: "2026-10-18" } }];
+assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노1", "2026-10-18", duplicateBlocks)?.key, "manual-setup:one", "eventOrderId + venue + 예정 날짜 중복을 찾아야 한다");
+assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노2", "2026-10-18", duplicateBlocks), null, "공간이 다르면 별도 세팅 작업을 허용해야 한다");
 
 console.log("operation-board setup task V1 tests passed");

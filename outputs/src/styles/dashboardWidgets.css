@@ -279,12 +279,14 @@ body {
 
 .setup-task-board { position: sticky; top: 8px; z-index: 7; display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border: 1px solid rgba(198, 166, 103, .3); border-radius: 10px; background: rgba(11, 30, 47, .96); box-shadow: 0 7px 20px rgba(0, 0, 0, .2); }
 .setup-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.setup-tab-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .setup-task-board h3 { margin: 0; font-size: 15px; }
 .setup-task-board header span { color: var(--dash-muted); font-size: 11px; }
 .setup-task-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 9px; }
 .setup-task-card { display: grid; align-content: start; gap: 9px; padding: 11px; border: 1px solid rgba(150, 180, 205, .24); border-radius: 9px; background: rgba(6, 17, 31, .68); }
+.setup-source-badge { align-self: start; padding: 2px 6px; border: 1px solid rgba(198, 166, 103, .35); border-radius: 999px; color: #e6c77b; font-size: 9px; }
 .setup-task-card.completed { opacity: .72; }
-.setup-task-main { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; }
+.setup-task-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; }
 .setup-task-main > div { display: grid; min-width: 0; gap: 1px; }
 .setup-task-main span, .setup-task-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-task-main span { font-size: 12px; }
@@ -320,6 +322,8 @@ body {
 .setup-editor-child { display: grid; grid-template-columns: auto minmax(130px, 1fr) 70px 64px auto; gap: 5px; align-items: center; margin-top: 5px; }
 .setup-editor-dialog button { min-height: 30px; padding: 4px 9px; border: 1px solid var(--dash-border); border-radius: 7px; background: transparent; color: var(--dash-text); cursor: pointer; }
 .setup-editor-dialog footer { justify-content: flex-end; }
+.setup-pin-option { display: flex !important; grid-template-columns: auto 1fr; align-items: center; justify-content: start; }
+.setup-create-status { min-height: 1.4em; margin: 0; color: #f0c875; font-size: 11px; }
 
 @media (max-width: 768px) {
   .setup-task-board { position: static; z-index: auto; top: auto; padding: 8px; }
