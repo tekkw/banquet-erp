@@ -160,6 +160,18 @@
           <div class="operation-status-loading">운영 현황을 불러오는 중입니다.</div>
         </section>
 
+        <section id="beverageInventoryWidget" class="beverage-inventory-widget" aria-label="음주류 재고">
+          <header><div><span class="eyebrow">Beverage Stock</span><h3>음주류 재고</h3></div><span data-beverage-status>최신 재고 없음</span></header>
+          <div data-beverage-summary><p class="beverage-inventory-empty">재고 엑셀을 업로드해주세요.</p></div>
+          <details><summary>수요 상세</summary><ul data-beverage-details></ul></details>
+          <small data-beverage-filename></small>
+          <div class="beverage-inventory-actions">
+            <input type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-beverage-file hidden>
+            <button class="primary-button" type="button" data-beverage-upload>재고 엑셀 업로드</button>
+            <button class="secondary-button" type="button" data-beverage-original disabled>원본 보기</button>
+          </div>
+        </section>
+
         <section id="todayOperationBoard" class="operation-board" aria-label="오늘 운영 브리핑과 운영보드"></section>
         <section id="todayRemainingScheduleWidget" class="dashboard-agenda-widget" aria-label="오늘 남은 일정"></section>
         <section id="weeklySetupWidget" class="operation-board weekly-setup-widget" aria-label="다음 세팅 할 일"></section>
@@ -1106,6 +1118,7 @@
   <script src="./src/eventCalendar.js?v=venue-normalization-v1"></script>
   <script src="./src/erpActionRegistry.js?v=1"></script>
   <script src="./src/erpConversationAgent.js?v=1"></script>
+  <script src="./src/beverageInventory.js?v=beverage-inventory-v1"></script>
   <script src="./src/aiKnowledgeRules.js?v=ai-knowledge-execution-v1"></script>
   <script src="./src/eventOrder.js?v=correction-learning-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
@@ -1786,6 +1799,7 @@
       },
       state: {
         getAssets: () => banquetAssets,
+        getEvents: () => savedEvents,
         getPendingEvent: () => pendingEvent,
         getPageContext: () => ({ page: appMain.dataset.activePage || "home" }),
       },
@@ -3930,6 +3944,7 @@
       renderOperationStatusCards();
       renderDashboardMonthWidget();
       window.BANQUET_ERP_OPERATION_BOARD?.render({ events: savedEvents });
+      window.BANQUET_ERP_BEVERAGE_INVENTORY?.setEvents(savedEvents);
       renderDailyBriefing();
     }
 
@@ -5504,6 +5519,12 @@
       authController.updateCurrentUserBadge();
       applyAssetPermissionState();
       showErpPage("home");
+      window.BANQUET_ERP_BEVERAGE_INVENTORY?.init({
+        supabaseRequest,
+        uploadOriginalFile,
+        openStoredExcel,
+        getEvents: () => savedEvents,
+      });
       openRequestedExcelPreview();
       if (appInitialized) {
         renderBanquetAssets();

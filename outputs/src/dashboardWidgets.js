@@ -12,6 +12,7 @@
     { id: "today-board", name: "운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6 },
     { id: "weekly-setup", name: "다음 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 4, rowSpan: 10, minColSpan: 4, minRowSpan: 5 },
     { id: "hall-current-states", name: "현재 세팅 상태", selector: "#hallCurrentStatesWidget", colSpan: 4, rowSpan: 8, minColSpan: 4, minRowSpan: 5 },
+    { id: "beverage-inventory", name: "음주류 재고", selector: "#beverageInventoryWidget", colSpan: 4, rowSpan: 7, minColSpan: 4, minRowSpan: 5 },
     { id: "operations-status", name: "운영 현황", selector: ".operations-status-grid", colSpan: 6, rowSpan: 5, minColSpan: 4, minRowSpan: 5 },
     { id: "mini-calendar", name: "미니 캘린더", selector: ".dashboard-month-card", colSpan: 6, rowSpan: 6, minColSpan: 4, minRowSpan: 5 },
     { id: "today-operations", name: "오늘 운영 일정", selector: ".today-operations-card", colSpan: 8, rowSpan: 5, minColSpan: 5, minRowSpan: 5 },

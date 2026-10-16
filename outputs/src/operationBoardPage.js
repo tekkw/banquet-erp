@@ -86,6 +86,7 @@
     search_assets: (args) => erpTools.run("findAsset", args), get_asset_quantity: (args) => erpTools.run("getAssetQuantity", args), get_asset_location: (args) => erpTools.run("findAsset", args), get_asset_movement: (args) => erpTools.run("getAssetMovement", args), create_asset: (args) => erpTools.run("proposeAssetChange", args), increase_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), decrease_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), update_asset_location: (args) => erpTools.run("proposeAssetChange", args),
     get_current_setup: (args) => erpTools.run("getCurrentHallState", args), confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args),
     add_schedule: (args) => erpTools.run("proposeScheduleChange", args), update_schedule_time: (args) => erpTools.run("proposeScheduleChange", args), add_manual_task: (args) => erpTools.run("proposeManualTask", args),
+    get_beverage_inventory_status: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
   });
   function actionResultValue(result) { if (!result?.ok) throw new Error(result?.message || "ERP 작업을 실행하지 못했습니다."); return result.requiresApproval ? result.proposal : result.data; }
   let settingAdvisorRows = [];
@@ -113,7 +114,7 @@
   function storedUser() { try { const value = JSON.parse(localStorage.getItem(constants.authStorageKey) || "null"); return constants.loginAccounts.find((account) => account.id === value?.id && account.role === value?.role) || null; } catch { return null; } }
   function cachedEvents() { try { const value = JSON.parse(localStorage.getItem(cacheKey) || "null"); return Array.isArray(value?.events) ? value.events : []; } catch { return []; } }
   function formatDate(value) { return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(new Date(`${value}T00:00:00`)); }
-  function render() { board.render({ events }); dateLabel.textContent = formatDate(board.getSelectedDate()); }
+  function render() { window.BANQUET_ERP_BEVERAGE_INVENTORY?.setEvents(events); board.render({ events }); dateLabel.textContent = formatDate(board.getSelectedDate()); }
   function localDateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
   function moveBoardDate(step) {
     const current = board.getSelectedDate();
@@ -1099,7 +1100,7 @@
     const success = proposal.intent === "update_schedule_time" ? `${proposal.change.time}으로 변경했습니다.` : proposal.intent === "add_schedule" ? `${Number(proposal.change.time.slice(0, 2))}시${proposal.change.time.slice(3) === "00" ? "" : ` ${Number(proposal.change.time.slice(3))}분`} ${proposal.change.content}를 추가했습니다.` : proposal.intent === "update_guest_count" ? `${proposal.change.guestCount}명으로 변경했습니다.` : "현장 메모를 추가했습니다.";
     showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success, true); aiInput.value = "";
   }
-  function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; loadSpeechVenueAliases(); refresh(); }
+  function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); window.BANQUET_ERP_BEVERAGE_INVENTORY?.init({ getEvents: () => events }); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; loadSpeechVenueAliases(); refresh(); }
 
   voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
   ttsQualitySelect.value = ttsSettings.provider;
@@ -1123,6 +1124,12 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    if (!selectedAssetImageFile && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(text)) {
+      showTransientMessage("음주류 재고와 행사 수요를 계산하고 있습니다…");
+      try { const result = actionResultValue(await actionRegistry.executeAction("get_beverage_inventory_status", { question: text })); showMessage(result?.text || "음주류 재고를 확인하지 못했습니다.", true); aiInput.value = ""; }
+      catch (error) { console.error("beverage inventory query failed", error); showMessage(error.message || "음주류 재고를 확인하지 못했습니다."); }
+      return;
+    }
     const ttsProposal = ttsSettingsProposal(text);
     if (ttsProposal && !selectedAssetImageFile) { showTtsSettingsProposal(ttsProposal); return; }
     if (pendingProposal?.intent === "add_schedule" && /^(?:추가해|추가|응|네|예|확인|좋아|진행해)[.!\s]*$/i.test(text)) { const proposal = pendingProposal; showTransientMessage("승인된 일정을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board schedule add failed", error); showMessage(error.code === "schedule_duplicate" ? error.message : "일정 저장에 실패했습니다. 기존 일정은 유지됩니다.", true); } return; }

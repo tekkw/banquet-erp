@@ -194,7 +194,8 @@ body {
 .dashboard-widget-shell > .today-operations-card,
 .dashboard-widget-shell > .dashboard-month-card,
 .dashboard-widget-shell > .operations-status-grid,
-.dashboard-widget-shell > .operation-board {
+.dashboard-widget-shell > .operation-board,
+.dashboard-widget-shell > .beverage-inventory-widget {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -213,6 +214,7 @@ body {
 .dashboard-widget-shell[data-widget-id="operations-status"] > .operations-status-grid { border-top: 2px solid var(--dash-mint); }
 .dashboard-widget-shell[data-widget-id="mini-calendar"] > .dashboard-month-card { border-top: 2px solid var(--dash-indigo); }
 .dashboard-widget-shell[data-widget-id="quick"] > .dashboard-widget-grid { border-top: 2px solid rgba(214, 179, 90, .58); }
+.dashboard-widget-shell[data-widget-id="beverage-inventory"] > .beverage-inventory-widget { border-top: 2px solid #77dda3; }
 .dashboard-widget-shell[data-widget-id="ai-assistant"] > .dashboard-ai-widget { border-top: 2px solid rgba(96, 165, 250, .58); }
 .erp-shell[data-active-page="home"] .dashboard-widget-shell .dashboard-ai-widget { display: flex !important; flex-direction: column; min-height: 0; padding: 16px; background: var(--dash-widget); color: var(--dash-text); }
 .dashboard-ai-widget .ai-chat-header p { margin: 4px 0; color: var(--dash-muted); }
@@ -545,7 +547,8 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .dashboard-editing .dashboard-widget-shell > .today-operations-card,
 .dashboard-editing .dashboard-widget-shell > .dashboard-month-card,
 .dashboard-editing .dashboard-widget-shell > .operations-status-grid,
-.dashboard-editing .dashboard-widget-shell > .operation-board { border-radius: 0 0 11px 11px; }
+.dashboard-editing .dashboard-widget-shell > .operation-board,
+.dashboard-editing .dashboard-widget-shell > .beverage-inventory-widget { border-radius: 0 0 11px 11px; }
 .widget-add-panel { margin: 0 0 12px; padding: 9px; border: 1px solid var(--dash-border); border-radius: 9px; background: var(--dash-widget-secondary); color: var(--dash-muted); }
 .widget-add-panel button { margin: 3px; padding: 0 9px; cursor: pointer; }
 
@@ -580,6 +583,7 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .dashboard-widget-shell > .dashboard-month-card,
   .dashboard-widget-shell > .operations-status-grid,
   .dashboard-widget-shell > .operation-board { overflow: visible; }
+  .dashboard-widget-shell > .beverage-inventory-widget { overflow: visible; }
   .dashboard-widget-shell > .hall-current-states-widget { overflow: visible; }
   .dashboard-widget-shell > .operations-status-grid { grid-template-columns: 1fr; }
   .widget-edit-bar { flex-wrap: wrap; }
@@ -710,6 +714,26 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .hall-state-dialog-hint { margin: 0; color: var(--dash-muted); font-size: 11px; line-height: 1.5; }
 .hall-state-dialog-hint.is-error { color: #ff9b9b; }
 .hall-state-dialog footer { justify-content: flex-end; }
+
+.beverage-inventory-widget { display: flex; min-height: 100%; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-panel); color: var(--dash-text); }
+.beverage-inventory-widget > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.beverage-inventory-widget h3 { margin: 2px 0 0; font-size: 17px; }
+.beverage-inventory-widget [data-beverage-status] { padding: 4px 7px; border-radius: 999px; background: rgba(150, 180, 205, .12); color: var(--dash-muted); font-size: 10px; font-weight: 800; white-space: nowrap; }
+.beverage-inventory-widget [data-beverage-status][data-type="warning"] { background: rgba(255, 103, 103, .14); color: #ff9b9b; }
+.beverage-inventory-widget [data-beverage-status][data-type="ok"] { background: rgba(63, 185, 116, .14); color: #77dda3; }
+.beverage-inventory-widget [data-beverage-status][data-type="error"] { color: #ff9b9b; }
+.beverage-inventory-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(150, 180, 205, .1); font-size: 12px; }
+.beverage-inventory-row span { color: var(--dash-muted); font-variant-numeric: tabular-nums; }
+.beverage-inventory-row em { color: #77dda3; font-size: 11px; font-style: normal; font-weight: 800; }
+.beverage-inventory-row.is-short em { color: #ff9b9b; }
+.beverage-inventory-widget details { color: var(--dash-muted); font-size: 11px; }
+.beverage-inventory-widget details summary { cursor: pointer; }
+.beverage-inventory-widget details ul { max-height: 120px; margin: 8px 0 0; padding-left: 18px; overflow: auto; line-height: 1.6; }
+.beverage-inventory-widget > small { overflow: hidden; color: var(--dash-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.beverage-inventory-empty { margin: 12px 0; color: var(--dash-muted); font-size: 12px; }
+.beverage-inventory-actions { display: flex; gap: 7px; margin-top: auto; }
+.beverage-inventory-actions button { min-height: 34px; padding: 6px 9px; font-size: 11px; }
+.beverage-inventory-warning { margin: 10px 0; padding: 9px 11px; border: 1px solid rgba(255, 103, 103, .24); border-radius: 9px; background: rgba(255, 103, 103, .1); color: #ffc0c0; font-size: 12px; }
 
 @media (max-width: 768px) {
   .hall-confirmation-card { grid-template-columns: 1fr; }

@@ -95,7 +95,9 @@
     const CORRECTION_LOG_KEY = "banquetErp.eventOrderCorrections.v1";
     const CORRECTION_SUGGESTION_KEY = "banquetErp.aiCorrectionSuggestions.v1";
     const conversationAgent = window.erpConversationAgent?.create({ storage: window.sessionStorage, storageKey: "banquetErp.globalAiContext.v1", maxSteps: 4 });
-    const actionRegistry = window.erpActionRegistry?.create({});
+    const actionRegistry = window.erpActionRegistry?.create({
+      get_beverage_inventory_status: ({ question, events }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+    });
     const CORRECTION_FIELDS = new Map([
       ["guestcount", "guestCount"], ["venue", "venue"], ["place", "venue"],
       ["eventdate", "eventDate"], ["eventtype", "eventType"], ["mealtype", "mealType"],
@@ -144,7 +146,8 @@
       const pageContext = state.getPageContext?.() || { page: "home" };
       const pageRouteHint = { calendar: "event_query", assets: "asset_query", layouts: "recommend_layouts" }[pageContext.page] || "conversation_agent";
       const plan = conversationAgent?.plan(question, pageRouteHint) || null;
-      const actionId = plan?.route === "event_query" ? "search_events" : plan?.route === "asset_query" ? "search_assets" : plan?.route === "recommend_layouts" ? "recommend_layouts" : plan?.route === "hall_state_query" ? "get_current_setup" : "";
+      const beverageQuestion = window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(question);
+      const actionId = beverageQuestion ? "get_beverage_inventory_status" : plan?.route === "event_query" ? "search_events" : plan?.route === "asset_query" ? "search_assets" : plan?.route === "recommend_layouts" ? "recommend_layouts" : plan?.route === "hall_state_query" ? "get_current_setup" : "";
       chatMessages.dataset.pageContext = pageContext.page || "home";
       chatMessages.dataset.erpAction = actionRegistry?.getAction(actionId)?.id || "";
       appendChatMessage("user", question);
@@ -152,6 +155,12 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
+        if (beverageQuestion) {
+          const result = await actionRegistry.executeAction("get_beverage_inventory_status", { question, events: state.getEvents?.() || [] });
+          if (!result?.ok) throw new Error(result?.message || "음주류 재고를 확인하지 못했습니다.");
+          loadingMessage.querySelector(".chat-bubble").textContent = result.data?.text || "음주류 재고를 확인하지 못했습니다.";
+          return;
+        }
         const selectedBoardDate = sessionStorage.getItem("banquet-erp-operation-board-selected-date-v2") || "";
         const resolvedQuestion = window.erpConversationAgent.questionWithResolvedDate(question, { selectedBoardDate });
         const response = await fetch(supabaseConfig.functionUrl, {
@@ -684,6 +693,16 @@
       renderAiPageMessages();
       renderConversationList();
       try {
+        const beverageQuestion = !attachmentsToSend.length && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(question);
+        if (beverageQuestion) {
+          await persistAiMessage(conversation.id, "user", question, []);
+          await updateAiConversationMeta(conversation);
+          const result = await actionRegistry.executeAction("get_beverage_inventory_status", { question, events: state.getEvents?.() || [] });
+          if (!result?.ok) throw new Error(result?.message || "음주류 재고를 확인하지 못했습니다.");
+          conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: result.data?.text || "음주류 재고를 확인하지 못했습니다." };
+          await persistAiMessage(conversation.id, "assistant", conversation.messages[conversation.messages.length - 1].text, []);
+          return;
+        }
         const uploadedAttachments = attachmentsToSend.length
           ? await uploadAiAttachments(conversation.id, attachmentsToSend)
           : [];

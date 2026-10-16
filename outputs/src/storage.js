@@ -167,8 +167,9 @@
      * 실무 설계 이유:
      * - 원본 파일 보관 규칙을 한 곳에 두면 향후 버킷명, 파일명 정책, private URL 방식으로 바뀌어도 수정 범위가 작다.
      */
-    async function uploadOriginalFile(file) {
-      const storagePath = `event_${Date.now()}.xlsx`;
+    async function uploadOriginalFile(file, { pathPrefix = "event" } = {}) {
+      const safePrefix = String(pathPrefix || "event").replace(/[^a-z0-9_-]/gi, "_");
+      const storagePath = `${safePrefix}_${Date.now()}.xlsx`;
       const originalFilename = file.name;
       const encodedPath = encodeURIComponent(storagePath);
       const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${supabaseConfig.bucket}/${encodedPath}`;

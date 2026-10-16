@@ -6,6 +6,7 @@
     ["create_event", "event", "mutation", "not_implemented"], ["update_event", "event", "mutation", "not_implemented"],
     ["add_schedule", "schedule", "mutation"], ["update_schedule_time", "schedule", "mutation"], ["update_schedule_content", "schedule", "mutation", "not_implemented"], ["delete_schedule", "schedule", "mutation", "not_implemented"],
     ["search_assets", "asset", "query"], ["get_asset_quantity", "asset", "query"], ["get_asset_location", "asset", "query"], ["get_asset_movement", "asset", "query"], ["create_asset", "asset", "mutation"], ["increase_asset_quantity", "asset", "mutation"], ["decrease_asset_quantity", "asset", "mutation"], ["update_asset_location", "asset", "mutation"],
+    ["get_beverage_inventory_status", "inventory", "query"],
     ["get_current_setup", "hallState", "query"], ["confirm_current_setup", "hallState", "mutation"], ["record_field_setup", "hallState", "mutation"],
     ["search_layouts", "layout", "query"], ["recommend_layouts", "layout", "query"], ["open_layout_preview", "layout", "query", "read_only"], ["link_layout_to_current_state", "layout", "mutation", "read_only"], ["save_layout_draft", "layout", "mutation", "read_only"],
     ["add_manual_task", "board", "mutation"], ["update_manual_task", "board", "mutation", "read_only"], ["complete_manual_task", "board", "mutation", "read_only"], ["delete_manual_task", "board", "mutation", "read_only"],
