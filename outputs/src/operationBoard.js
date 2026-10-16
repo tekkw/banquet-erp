@@ -363,10 +363,11 @@
     } catch (error) { remoteStatus = "fallback"; console.info("운영보드 DB migration 적용 전: 브라우저 저장소를 사용합니다.", error.message); }
     finally { remoteLoadingDates.delete(boardDate); }
   }
-  function syncItem(item) {
+  function syncItem(item, options = {}) {
     const override = state.reminders[item.key]; const resolved = override == null || override === "default" ? defaultReminder : override;
     const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", boardDate: item.date || dateKey(), venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride: state.setupOverrides[item.key] || null, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved), ...(item.metadata || {}) } };
-    return remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) }).catch((error) => console.error("운영보드 저장 실패", error));
+    const pending = remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) });
+    return options.throwOnError ? pending : pending.catch((error) => console.error("운영보드 저장 실패", error));
   }
   function syncChecklist(item, removed = false) {
     if (removed) { remoteRequest(`operation_board_checklist_items?id=eq.${item.id}`, { method: "DELETE" }).catch(console.error); return; }
@@ -691,20 +692,32 @@
   }
   async function applyReminderValue(key, value) {
     const block = key === "default" ? null : allBlocks().find((item) => item.key === key);
+    let pushSubscription = null;
     if (value !== "none" && block && !reminderTriggerAt(block, value === "default" ? defaultReminder : value)) { alert("시간 미정 일정은 알림을 예약할 수 없습니다."); return; }
     if (value !== "none") {
-      try { await window.BANQUET_ERP_PUSH_NOTIFICATIONS?.ensureEnabled(); }
+      try {
+        if (!window.BANQUET_ERP_PUSH_NOTIFICATIONS) throw new Error("알림 서비스를 초기화하지 못했습니다.");
+        pushSubscription = await window.BANQUET_ERP_PUSH_NOTIFICATIONS.ensureEnabled();
+      }
       catch (error) { alert(error.message || "휴대폰 알림을 활성화하지 못했습니다."); return; }
     }
     if (key === "default") {
-      defaultReminder = value; localStorage.setItem(REMINDER_DEFAULT_KEY, value);
-      await Promise.all(allBlocks().map((item) => syncItem(item)));
+      const previous = defaultReminder;
+      defaultReminder = value;
+      try { await Promise.all(allBlocks().map((item) => syncItem(item, { throwOnError: true }))); }
+      catch (error) { defaultReminder = previous; console.error("[Operation Reminder] save failed", error); alert("알림 설정을 저장하지 못했습니다. 다시 시도해주세요."); return; }
+      localStorage.setItem(REMINDER_DEFAULT_KEY, value);
     } else {
+      const previous = state.reminders[key];
       state.reminders[key] = value; saveState();
       if (block) {
         const minutesBefore = value === "default" ? defaultReminder : value;
-        console.debug("[Operation Reminder] reminder saved", { key, eventTime: `${block.date} ${block.time}`, minutesBefore: Number(minutesBefore), triggerAt: reminderTriggerAt(block, minutesBefore)?.toISOString(), completed: block.completed });
-        await syncItem(block);
+        try { await syncItem(block, { throwOnError: true }); }
+        catch (error) {
+          if (previous == null) delete state.reminders[key]; else state.reminders[key] = previous;
+          saveState(); console.error("[Operation Reminder] save failed", error); alert("알림 설정을 저장하지 못했습니다. 다시 시도해주세요."); return;
+        }
+        console.debug("[Operation Reminder] reminder saved", { key, eventTime: `${block.date} ${block.time}`, minutesBefore: Number(minutesBefore), triggerAt: reminderTriggerAt(block, minutesBefore)?.toISOString(), permission: window.Notification?.permission || "unsupported", subscriptionExists: Boolean(pushSubscription), completed: block.completed });
       }
     }
     render();

@@ -1,6 +1,7 @@
 (function registerPushNotifications() {
   const config = window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
   const functionUrl = `${config?.url || ""}/functions/v1/send-operation-push`;
+  let deliveryHeartbeat = null;
 
   function decodeKey(value) {
     const padding = "=".repeat((4 - value.length % 4) % 4);
@@ -37,6 +38,22 @@
     return { worker, subscription: await worker.pushManager.getSubscription() };
   }
 
+  async function triggerDueReminders() {
+    try {
+      const response = await fetch(functionUrl, { method: "POST", headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}` } });
+      const result = await response.json().catch(() => ({}));
+      console.debug("[Push Notifications] push request/result", { ok: response.ok, status: response.status, ...result });
+      if (!response.ok) throw new Error(result.message || `발송 확인 실패 (${response.status})`);
+      return result;
+    } catch (error) { console.error("[Push Notifications] push request failed", error); return null; }
+  }
+
+  function startDeliveryHeartbeat() {
+    if (deliveryHeartbeat) return;
+    triggerDueReminders();
+    deliveryHeartbeat = window.setInterval(triggerDueReminders, 60000);
+  }
+
   async function enable() {
     if (Notification.permission === "denied") throw new Error("브라우저 알림 권한이 차단되어 있습니다.");
     const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
@@ -70,6 +87,7 @@
     }
     bind();
     console.debug("[Push Notifications] subscription ready", { permission, subscriptionExists: Boolean(subscription), endpoint: subscription.endpoint.slice(0, 32) });
+    startDeliveryHeartbeat();
     return subscription;
   }
 
@@ -86,6 +104,7 @@
       await request(`push_subscriptions?endpoint=eq.${encodeURIComponent(subscription.endpoint)}`, { method: "PATCH", body: JSON.stringify({ is_active: false, updated_at: new Date().toISOString() }) });
       await subscription.unsubscribe();
     }
+    if (deliveryHeartbeat) { window.clearInterval(deliveryHeartbeat); deliveryHeartbeat = null; }
     bind();
   }
 
@@ -95,6 +114,7 @@
     try {
       const { subscription } = await currentSubscription();
       const enabled = Notification.permission === "granted" && Boolean(subscription);
+      if (enabled) startDeliveryHeartbeat();
       button.textContent = enabled ? "🔔 알림 켜짐 · 끄기" : "🔔 휴대폰 알림 켜기";
       button.dataset.pushEnabled = String(enabled);
       button.onclick = async () => {
@@ -113,6 +133,7 @@
   }
 
   window.addEventListener("banquet:operation-board-rendered", bind);
-  window.BANQUET_ERP_PUSH_NOTIFICATIONS = { enable, disable, ensureEnabled, currentSubscription };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && window.Notification?.permission === "granted") triggerDueReminders(); });
+  window.BANQUET_ERP_PUSH_NOTIFICATIONS = { enable, disable, ensureEnabled, currentSubscription, triggerDueReminders };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true }); else bind();
 })();

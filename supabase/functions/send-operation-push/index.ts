@@ -27,6 +27,7 @@ function scheduledAt(date: string, time: string, offset: number) {
   const [year, month, day] = date.split("-").map(Number); const [hour, minute] = time.slice(0, 5).split(":").map(Number);
   return new Date(Date.UTC(year, month - 1, day, hour - 9, minute) - offset * 60000);
 }
+function nextKstDate(date: string) { return kstParts(new Date(new Date(`${date}T12:00:00+09:00`).getTime() + 86400000)).date; }
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -35,14 +36,15 @@ Deno.serve(async (request) => {
   if (!url || !serviceKey || !publicKey || !privateKey) return json({ message: "Push secrets are not configured" }, 503);
   webpush.setVapidDetails(subject, publicKey, privateKey);
   try {
-    const now = new Date(); const { date } = kstParts(now);
-    const items = await rest(`operation_board_items?select=*&board_date=eq.${date}&is_completed=eq.false`);
+    const now = new Date(); const { date } = kstParts(now); const nextDate = nextKstDate(date);
+    const items = await rest(`operation_board_items?select=*&board_date=in.(${date},${nextDate})&is_completed=eq.false`);
     const due = (items || []).filter((item: any) => {
       const metadata = item.metadata || {}; if (!metadata.reminderEnabled || !item.item_time) return false;
       const fireAt = scheduledAt(item.board_date, item.item_time, Number(metadata.reminderOffsetMinutes) || 0);
-      return fireAt <= now && now.getTime() - fireAt.getTime() < 90000;
+      return fireAt <= now && now.getTime() - fireAt.getTime() < 300000;
     });
     const subscriptions = await rest("push_subscriptions?select=*&is_active=eq.true"); let sent = 0;
+    console.log("[Operation Push] request", { now: now.toISOString(), dates: [date, nextDate], savedItems: items?.length || 0, due: due.length, subscriptions: subscriptions?.length || 0 });
     for (const item of due) for (const subscription of subscriptions || []) {
       const fireAt = scheduledAt(item.board_date, item.item_time, Number(item.metadata.reminderOffsetMinutes) || 0).toISOString();
       try {
@@ -55,6 +57,7 @@ Deno.serve(async (request) => {
         if ([404, 410].includes(Number((error as any)?.statusCode))) await rest(`push_subscriptions?id=eq.${subscription.id}`, { method: "PATCH", body: JSON.stringify({ is_active: false }) });
       }
     }
+    console.log("[Operation Push] result", { checked: due.length, sent });
     return json({ checked: due.length, sent });
-  } catch (error) { return json({ message: String(error) }, 500); }
+  } catch (error) { console.error("[Operation Push] failed", error); return json({ message: String(error) }, 500); }
 });

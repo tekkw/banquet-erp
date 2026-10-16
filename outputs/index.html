@@ -1113,8 +1113,8 @@
 <script src="./src/floorplanEditor.js?v=layout-ai-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
-  <script src="./src/operationBoard.js?v=mobile-preview-reminder-v1"></script>
-  <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v1"></script>
+  <script src="./src/operationBoard.js?v=mobile-preview-reminder-v2"></script>
+  <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
   <script src="./src/dashboardWidgets.js?v=pc-today-agenda-v1"></script>
   <script>
     /*
@@ -4957,11 +4957,18 @@
       excelViewerFrame.removeAttribute("src");
     }
 
-    function openRequestedExcelPreview() {
+    async function openRequestedExcelPreview() {
       const params = new URLSearchParams(window.location.search);
       const eventPreviewId = params.get("eventPreviewId");
-      const eventItem = eventPreviewId ? savedEvents.find((item) => String(item.id) === String(eventPreviewId)) : null;
-      const storagePath = eventItem?.storagePath || params.get("excelPreview");
+      let eventItem = eventPreviewId ? savedEvents.find((item) => String(item.id) === String(eventPreviewId)) : null;
+      if (eventPreviewId && !eventItem?.storagePath) {
+        try {
+          const rows = await supabaseRequest(`event_orders?select=id,storage_path,original_filename&id=eq.${encodeURIComponent(eventPreviewId)}&limit=1`);
+          const row = rows?.[0];
+          if (row) eventItem = { id: row.id, storagePath: row.storage_path || "", originalFilename: row.original_filename || "" };
+        } catch (error) { console.error("event original preview lookup failed", error); }
+      }
+      const storagePath = eventItem?.storagePath || (!eventPreviewId ? params.get("excelPreview") : "");
       if (!storagePath) return;
       openStoredExcel(storagePath);
       params.delete("excelPreview");

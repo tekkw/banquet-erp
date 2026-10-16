@@ -288,7 +288,7 @@
   }
   async function showEventAnswer(event, queryType, userText, period = null) {
     rememberActiveEvent(event); pendingEventQuery = null; let answer = ""; let details = ""; let sourceBadge = ""; let attachmentActions = "";
-    if (queryType === "open_event_original") { if (!event.storagePath && event.id) { const rows = await request(`event_orders?select=id,storage_path,original_filename&id=eq.${encodeURIComponent(event.id)}&limit=1`); event.storagePath = rows?.[0]?.storage_path || ""; event.originalFilename = rows?.[0]?.original_filename || event.originalFilename || ""; if (event.storagePath) rememberActiveEvent(event); } if (!event.storagePath) answer = "등록된 원본 파일이 없습니다."; else { answer = `${event.eventName || "선택한 행사"}의 원본 엑셀을 열었습니다.`; window.openStoredExcel(event.storagePath); } }
+    if (queryType === "open_event_original") { if (!event.storagePath && event.id) { const rows = await request(`event_orders?select=id,storage_path,original_filename&id=eq.${encodeURIComponent(event.id)}&limit=1`); event.storagePath = rows?.[0]?.storage_path || ""; event.originalFilename = rows?.[0]?.original_filename || event.originalFilename || ""; if (event.storagePath) rememberActiveEvent(event); } if (!event.storagePath) answer = "등록된 원본 파일이 없습니다."; else { answer = `${event.eventName || "선택한 행사"}의 원본 엑셀을 열었습니다.`; window.openStoredExcel(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" }); } }
     else if (queryType === "get_event_guest_count") answer = event.guestCount !== "" && event.guestCount != null ? `${event.eventName || "선택한 행사"}의 등록 인원은 ${event.guestCount}명입니다.` : "등록된 이벤오더에서 인원 정보를 찾지 못했습니다.";
     else if (queryType === "get_event_schedule") { const focused = /점심|중식|런치|lunch|커피\s*브레이크|커피브레이크/i.test(userText); if (focused) ({ answer, details } = sectionAnswer(event, userText, "schedule")); else { const rows = eventDocumentView(event).schedules; answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 일정입니다.` : "등록된 이벤오더에서 일정 정보를 찾지 못했습니다."; details = rows.map((row) => [row.date, row.time, row.content, row.venue].filter(Boolean).join(" · ")).join("\n"); } }
     else if (queryType === "get_event_items") { const rows = event.items || []; answer = rows.length ? `${event.eventName || "선택한 행사"}의 등록 품목입니다.` : "등록된 이벤오더에서 품목 정보를 찾지 못했습니다."; details = rows.slice(0, 20).map((row) => [row.item_name, row.quantity, row.amount].filter((value) => value !== "" && value != null).join(" · ")).join("\n"); }
@@ -456,7 +456,7 @@
     if (named && /부터\s*보자|상담/.test(text)) { await showSettingAdvisorDetail(named); return; }
     const row = named || currentSettingAdvisorRow();
     if (!row) { await showSettingAdvisorList(text); return; }
-    if (/원본|엑셀/.test(text)) { if (row.nextEvent.storagePath) { rememberActiveEvent(row.nextEvent); window.openStoredExcel(row.nextEvent.storagePath); showMessage(`${row.nextEvent.eventName || "다음 행사"} 원본 엑셀을 열었습니다.`, true); } else showMessage("다음 행사에 등록된 원본 파일이 없습니다."); return; }
+    if (/원본|엑셀/.test(text)) { if (row.nextEvent.storagePath) { rememberActiveEvent(row.nextEvent); window.openStoredExcel(row.nextEvent.storagePath, { eventOrderId: row.nextEvent.id, originalFilename: row.nextEvent.originalFilename || "" }); showMessage(`${row.nextEvent.eventName || "다음 행사"} 원본 엑셀을 열었습니다.`, true); } else showMessage("다음 행사에 등록된 원본 파일이 없습니다."); return; }
     let answer = "";
     if (/몇\s*명|인원/.test(text)) answer = row.nextEvent.guestCount !== "" ? `다음 행사 등록 인원은 ${row.nextEvent.guestCount}명입니다.` : "등록된 데이터에서 다음 행사 인원을 확인하지 못했습니다.";
     else if (/몇\s*시.*시작/.test(text)) answer = `다음 행사는 ${row.nextDate} ${row.nextStart}에 시작합니다.`;
@@ -1188,14 +1188,14 @@
     if (event.target.closest("[data-setting-plan-cancel]")) { pendingSettingExecutionPlan = null; showMessage("세팅 작업 추가를 취소했습니다."); return; }
     if (event.target.closest("[data-setting-plan-approve]")) { showTransientMessage("세팅 작업을 추가하고 있습니다…"); try { await approveSettingTasks(); } catch (error) { console.error("setting tasks add failed", error); showMessage(error.message || "세팅 작업을 추가하지 못했습니다."); } return; }
     if (event.target.closest("[data-setting-plan-layout]")) { const row = pendingSettingExecutionPlan?.row; if (row?.savedLayout?.id) window.open(`../index.html?layoutPreview=${encodeURIComponent(row.savedLayout.id)}`, "_blank", "noopener"); else showMessage("연결된 저장 레이아웃이 없습니다."); return; }
-    if (event.target.closest("[data-setting-plan-original]")) { const row = pendingSettingExecutionPlan?.row; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
+    if (event.target.closest("[data-setting-plan-original]")) { const row = pendingSettingExecutionPlan?.row; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath, { eventOrderId: row.nextEvent.id, originalFilename: row.nextEvent.originalFilename || "" }); return; }
     const settingSelect = event.target.closest("[data-setting-advisor-select]");
     if (settingSelect) { const row = settingAdvisorRows[Number(settingSelect.dataset.settingAdvisorSelect)]; if (row) await showSettingAdvisorDetail(row); return; }
     const settingEvent = event.target.closest("[data-setting-advisor-event]");
     if (settingEvent) { const row = settingAdvisorRows[Number(settingEvent.dataset.settingAdvisorEvent)]; if (row) await showEventAnswer(row.nextEvent, "find_events_by_period_space", "다음 행사 보기", { start: row.nextDate, end: row.nextDate }); return; }
     const settingOriginal = event.target.closest("[data-setting-advisor-original]");
-    if (settingOriginal) { const row = settingAdvisorRows[Number(settingOriginal.dataset.settingAdvisorOriginal)]; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
-    if (event.target.closest("[data-setting-advisor-current-original]")) { const row = currentSettingAdvisorRow(); if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath); return; }
+    if (settingOriginal) { const row = settingAdvisorRows[Number(settingOriginal.dataset.settingAdvisorOriginal)]; if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath, { eventOrderId: row.nextEvent.id, originalFilename: row.nextEvent.originalFilename || "" }); return; }
+    if (event.target.closest("[data-setting-advisor-current-original]")) { const row = currentSettingAdvisorRow(); if (row?.nextEvent.storagePath) window.openStoredExcel(row.nextEvent.storagePath, { eventOrderId: row.nextEvent.id, originalFilename: row.nextEvent.originalFilename || "" }); return; }
     if (event.target.closest("[data-setting-advisor-back]")) { await showSettingAdvisorList(settingAdvisorContext?.anchorDate || ""); return; }
     const layoutSelection = event.target.closest("[data-layout-recommend-select]");
     if (layoutSelection && pendingLayoutRecommendation) { const layout = pendingLayoutRecommendation.layouts.find((item) => String(item.id) === String(layoutSelection.dataset.layoutRecommendSelect)); if (layout) { try { pendingLayoutRecommendation.currentState = await currentHallState(pendingLayoutRecommendation.space); showLayoutSelectionProposal(layout); } catch (error) { console.error("layout current state lookup failed", error); showMessage("현재 세팅을 확인하지 못했습니다."); } } return; }
@@ -1246,8 +1246,9 @@
   document.querySelectorAll("[data-board-page-step]").forEach((button) => button.onclick = () => moveBoardDate(Number(button.dataset.boardPageStep)));
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
   document.getElementById("boardLoginForm").onsubmit = (event) => { event.preventDefault(); const id = document.getElementById("boardLoginId").value.trim(); const password = document.getElementById("boardLoginPassword").value; const account = constants.loginAccounts.find((item) => item.id === id && item.password === password); if (!account) { document.getElementById("boardLoginError").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; return; } localStorage.setItem(constants.authStorageKey, JSON.stringify({ id: account.id, role: account.role, label: account.label })); start(); };
-  window.openStoredExcel = (path, context = {}) => {
-    const route = context.eventOrderId ? `../index.html?eventPreviewId=${encodeURIComponent(String(context.eventOrderId))}` : `../index.html?excelPreview=${encodeURIComponent(String(path))}`;
+  window.openStoredExcel = (_path, context = {}) => {
+    if (!context.eventOrderId) { showMessage("원본 행사 ID를 확인하지 못했습니다."); return; }
+    const route = `../index.html?eventPreviewId=${encodeURIComponent(String(context.eventOrderId))}`;
     if (window.matchMedia?.("(max-width: 768px)").matches) { window.location.assign(route); return; }
     const opened = window.open(route, "_blank", "noopener");
     if (!opened) window.location.assign(route);
