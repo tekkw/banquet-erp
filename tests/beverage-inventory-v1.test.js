@@ -7,17 +7,40 @@ const window = {};
 vm.runInNewContext(source, { window, console, Date, Intl, URL, fetch: async () => { throw new Error("unexpected fetch"); } });
 const inventory = window.BANQUET_ERP_BEVERAGE_INVENTORY;
 
+const inventorySheet = (values = {}) => ({
+  A1: { v: values.title || "■ 26년 9월 연회장 재고 현황" },
+  BF1: { v: "실재고수" }, BB2: { v: "당월재고" },
+  A5: { v: "맥주" }, A8: { v: "소주" }, B11: { v: "펩시콜라 24EA" }, B14: { v: "칠성사이다 24EA" },
+  BE5: values.beer, BE8: values.soju, BE11: values.cola, BE14: values.cider,
+});
 const workbook = {
-  SheetNames: ["8월 (신규)", "9월 (신규)", "10월 (신규)"],
-  Workbook: { WBView: [{ activeTab: 1 }] },
+  SheetNames: ["3월 (예시)", "26.3월 (기존)", "8월 (신규)", "9월 (신규)", "10월 (신규)"],
+  Workbook: { WBView: [{ activeTab: 0 }] },
   Sheets: {
-    "8월 (신규)": { A5: { v: "맥주" }, A8: { v: "소주" }, B11: { v: "펩시콜라 24EA" }, B14: { v: "칠성사이다 24EA" }, BE5: { v: 1 }, BE8: { v: 2 }, BE11: { v: 3 }, BE14: { v: 4 } },
-    "9월 (신규)": { A5: { v: "맥주" }, A8: { v: "소주" }, B11: { v: "펩시콜라 24EA" }, B14: { v: "칠성사이다 24EA" }, BE5: { v: 254 }, BE8: { v: 223 }, BE11: { v: 203 }, BE14: { v: 179 } },
+    "3월 (예시)": inventorySheet({ title: "■ 26년 3월 연회장 재고 현황", beer: { v: 1 }, soju: { v: 2 }, cola: { v: 3 }, cider: { v: 4 } }),
+    "26.3월 (기존)": inventorySheet({ title: "■ 26년 3월 연회장 재고 현황", beer: { v: 11 }, soju: { v: 12 }, cola: { v: 13 }, cider: { v: 14 } }),
+    "8월 (신규)": inventorySheet({ title: "■ 26년 8월 연회장 재고 현황", beer: { v: 21 }, soju: { v: 22 }, cola: { v: 23 }, cider: { v: 24 } }),
+    "9월 (신규)": inventorySheet({ beer: { f: "SUM(A1:A2)", v: 254 }, soju: { v: "223 " }, cola: { v: "203" }, cider: { v: "179" } }),
     "10월 (신규)": {},
   },
 };
 const parsed = inventory.readStockWorkbook(workbook, "26년 연회장 음,주류 재고 현황 '26.09.30.xlsx");
 assert.deepEqual({ beer: parsed.beer, soju: parsed.soju, cola: parsed.cola, cider: parsed.cider, sheetName: parsed.sheetName }, { beer: 254, soju: 223, cola: 203, cider: 179, sheetName: "9월 (신규)" });
+assert.deepEqual(JSON.parse(JSON.stringify(parsed.sourceCells)), {
+  beer: { address: "BE5", value: 254, formula: true },
+  soju: { address: "BE8", value: 223, formula: false },
+  cola: { address: "BE11", value: 203, formula: false },
+  cider: { address: "BE14", value: 179, formula: false },
+});
+const fallbackSheet = inventorySheet({ beer: {}, soju: {}, cola: {}, cider: {} });
+delete fallbackSheet.A5; delete fallbackSheet.A8; delete fallbackSheet.B11; delete fallbackSheet.B14;
+fallbackSheet.BE20 = { v: "1,234 " }; fallbackSheet.BE21 = { v: 200 }; fallbackSheet.BE22 = { v: 300 }; fallbackSheet.BE23 = { v: 400 };
+fallbackSheet.A20 = { v: "맥주" }; fallbackSheet.A21 = { v: "소주" }; fallbackSheet.B22 = { v: "콜라" }; fallbackSheet.B23 = { v: "칠성사이다" };
+const fallbackParsed = inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": fallbackSheet } }, "2026-09-stock.xlsx");
+assert.deepEqual([fallbackParsed.beer, fallbackParsed.soju, fallbackParsed.cola, fallbackParsed.cider], [1234, 200, 300, 400], "고정 셀이 비면 품목 행과 실재고수 열로 읽어야 한다");
+assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["안내"], Sheets: { 안내: { A1: { v: "예시 안내" } } } }, "2026-09.xlsx"), /음주류 재고 시트를 찾지 못했습니다/);
+const missingValueSheet = inventorySheet({ beer: { f: "SUM(A1:A2)" }, soju: { v: 2 }, cola: { v: 3 }, cider: { v: 4 } });
+assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": missingValueSheet } }, "2026-09.xlsx"), /실재고수 값을 확인하지 못했습니다/);
 assert.deepEqual(JSON.parse(JSON.stringify(inventory.CELL_MAPPING)), {
   beer: { label: "맥주", labelCell: "A5", stockCell: "BE5" },
   soju: { label: "소주", labelCell: "A8", stockCell: "BE8" },

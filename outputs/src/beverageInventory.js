@@ -9,6 +9,7 @@
     cola: Object.freeze({ label: "콜라", labelCell: "B11", stockCell: "BE11" }),
     cider: Object.freeze({ label: "사이다", labelCell: "B14", stockCell: "BE14" }),
   });
+  const ITEM_PATTERNS = Object.freeze({ beer: /맥주/, soju: /소주/, cola: /콜라/, cider: /사이다/ });
   const DEMAND_RATES = Object.freeze({ beer: 1, soju: 0.5, cola: 0.3, cider: 0.3 });
   const LABELS = Object.freeze({ beer: "맥주", soju: "소주", cola: "콜라", cider: "사이다" });
   let snapshot = null;
@@ -29,24 +30,97 @@
     return { start: today, end: addDays(today, ((7 - day) % 7) + 7) };
   }
 
-  function cellValue(sheet, address) { return sheet?.[address]?.v ?? sheet?.[address]?.w ?? null; }
-  function numericCell(sheet, address) {
-    const value = Number(clean(cellValue(sheet, address)).replaceAll(",", ""));
-    if (!Number.isFinite(value) || value < 0) throw new Error(`${address} 재고수량을 확인해주세요.`);
-    return Math.round(value);
+  function sheetCells(sheet) { return Object.entries(sheet || {}).filter(([address]) => !address.startsWith("!")); }
+  function parseAddress(address) {
+    const match = /^([A-Z]+)(\d+)$/i.exec(address || "");
+    if (!match) return null;
+    return { column: match[1].toUpperCase().split("").reduce((sum, character) => (sum * 26) + character.charCodeAt(0) - 64, 0), row: Number(match[2]) };
   }
-  function isInventorySheet(sheet) {
-    return Object.values(CELL_MAPPING).every((mapping) => clean(cellValue(sheet, mapping.labelCell)).includes(mapping.label));
+  function columnName(number) {
+    let result = "";
+    for (let value = number; value > 0; value = Math.floor((value - 1) / 26)) result = String.fromCharCode(((value - 1) % 26) + 65) + result;
+    return result;
   }
-  function readStockWorkbook(workbook, originalFilename = "") {
-    if (!workbook?.SheetNames?.length) throw new Error("재고 엑셀 시트를 찾지 못했습니다.");
-    const activeIndex = Number(workbook.Workbook?.WBView?.[0]?.activeTab);
-    const activeName = Number.isInteger(activeIndex) ? workbook.SheetNames[activeIndex] : "";
-    const sheetName = [activeName, ...workbook.SheetNames.slice().reverse()].find((name, index, names) => name && names.indexOf(name) === index && isInventorySheet(workbook.Sheets?.[name]));
-    const sheet = workbook.Sheets?.[sheetName];
-    if (!sheet) throw new Error("활성 시트에서 고정 재고 셀을 확인하지 못했습니다.");
-    const stock = Object.fromEntries(Object.entries(CELL_MAPPING).map(([key, mapping]) => [key, numericCell(sheet, mapping.stockCell)]));
-    return { ...stock, uploadedAt: new Date().toISOString(), originalFilename: clean(originalFilename), sheetName };
+  function parsePeriod(value) {
+    const text = clean(value);
+    const dated = text.match(/(?:^|\D)((?:20)?\d{2})\s*(?:년|[._\-/])\s*(\d{1,2})(?:\s*월|[._\-/])/);
+    if (dated) return { year: Number(dated[1]) < 100 ? 2000 + Number(dated[1]) : Number(dated[1]), month: Number(dated[2]) };
+    const month = text.match(/(?:^|\D)(\d{1,2})\s*월/);
+    return month ? { year: null, month: Number(month[1]) } : null;
+  }
+  function inventoryStructure(sheet) {
+    const cells = sheetCells(sheet);
+    const findText = (pattern) => cells.find(([, cell]) => pattern.test(clean(cell?.v ?? cell?.w)));
+    const header = findText(/실재고수/);
+    const monthly = findText(/당월재고/);
+    const items = Object.fromEntries(Object.entries(ITEM_PATTERNS).map(([key, pattern]) => [key, findText(pattern)]));
+    const titleText = cells.slice(0, 40).map(([, cell]) => clean(cell?.v ?? cell?.w)).join(" ");
+    return { valid: Boolean(header && monthly && Object.values(items).every(Boolean)), headerCell: header?.[0] || "", items, period: parsePeriod(titleText) };
+  }
+  function normalizeStockNumber(value) {
+    const normalized = clean(value).replaceAll(",", "");
+    if (!normalized || !/^[+-]?\d+(?:\.\d+)?$/.test(normalized)) return null;
+    const number = Number(normalized);
+    return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
+  }
+  function readNumericCell(sheet, address, sheetName) {
+    const cell = sheet?.[address];
+    if (cell?.f && (cell.v == null || clean(cell.v) === "")) {
+      console.debug("[Beverage Inventory] formula cache missing", { sheetName, cell: address, formula: cell.f });
+      return null;
+    }
+    const value = normalizeStockNumber(cell?.v ?? (!cell?.f ? cell?.w : null));
+    return value == null ? null : { address, value, formula: Boolean(cell?.f) };
+  }
+  function readInventoryItem(sheet, sheetName, key, structure) {
+    const fixed = readNumericCell(sheet, CELL_MAPPING[key].stockCell, sheetName);
+    if (fixed) return fixed;
+    const itemAddress = structure.items[key]?.[0];
+    const itemPosition = parseAddress(itemAddress);
+    const headerPosition = parseAddress(structure.headerCell);
+    if (!itemPosition || !headerPosition) return null;
+    const columns = [...new Set([headerPosition.column, headerPosition.column - 1].filter((column) => column > 0))];
+    for (const column of columns) {
+      const address = `${columnName(column)}${itemPosition.row}`;
+      if (address === CELL_MAPPING[key].stockCell) continue;
+      const fallback = readNumericCell(sheet, address, sheetName);
+      if (fallback) return fallback;
+    }
+    return null;
+  }
+  function readStockWorkbook(workbook, originalFilename = "", now = new Date()) {
+    if (!workbook?.SheetNames?.length) throw new Error("음주류 재고 시트를 찾지 못했습니다.");
+    console.debug("[Beverage Inventory] workbook sheets", { sheetNames: workbook.SheetNames.slice() });
+    const currentKey = seoulDateKey(now);
+    const filenamePeriod = parsePeriod(originalFilename);
+    const target = filenamePeriod || { year: Number(currentKey.slice(0, 4)), month: Number(currentKey.slice(5, 7)) };
+    const candidates = workbook.SheetNames.map((sheetName, index) => {
+      const sheet = workbook.Sheets?.[sheetName];
+      const structure = inventoryStructure(sheet);
+      const namePeriod = parsePeriod(sheetName);
+      const period = structure.period || namePeriod;
+      let score = index;
+      if (period?.month === target.month) score += 1000;
+      if (period?.year && target.year && period.year === target.year) score += 100;
+      if (/신규/.test(sheetName)) score += 30;
+      else if (/기존/.test(sheetName)) score += 20;
+      else if (/예시/.test(sheetName)) score += 10;
+      return { sheetName, sheet, structure, score };
+    }).filter((candidate) => candidate.structure.valid).sort((left, right) => right.score - left.score);
+    const selected = candidates[0];
+    if (!selected) throw new Error("음주류 재고 시트를 찾지 못했습니다.");
+    const sourceCells = Object.fromEntries(Object.keys(CELL_MAPPING).map((key) => [key, readInventoryItem(selected.sheet, selected.sheetName, key, selected.structure)]));
+    console.debug("[Beverage Inventory] workbook selection", {
+      selectedSheet: selected.sheetName,
+      headerCell: selected.structure.headerCell,
+      beerCell: sourceCells.beer?.address || "", beerValue: sourceCells.beer?.value ?? null, beerFormula: sourceCells.beer?.formula || false,
+      sojuCell: sourceCells.soju?.address || "", sojuValue: sourceCells.soju?.value ?? null, sojuFormula: sourceCells.soju?.formula || false,
+      colaCell: sourceCells.cola?.address || "", colaValue: sourceCells.cola?.value ?? null, colaFormula: sourceCells.cola?.formula || false,
+      ciderCell: sourceCells.cider?.address || "", ciderValue: sourceCells.cider?.value ?? null, ciderFormula: sourceCells.cider?.formula || false,
+    });
+    if (Object.values(sourceCells).some((cell) => !cell)) throw new Error("실재고수 값을 확인하지 못했습니다.");
+    const stock = Object.fromEntries(Object.entries(sourceCells).map(([key, cell]) => [key, cell.value]));
+    return { ...stock, uploadedAt: new Date().toISOString(), originalFilename: clean(originalFilename), sheetName: selected.sheetName, sourceCells };
   }
 
   function eventDates(event) {
