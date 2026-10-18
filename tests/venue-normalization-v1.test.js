@@ -32,6 +32,13 @@ assert.strictEqual(venue.formatVenueShort("카프리"), "카ALL");
 assert.strictEqual(venue.formatVenueShortList(["카프리1", "카프리2", "카프리3"]), "카ALL");
 assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1"]), "컨A+부1");
 assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1", "카프리1"]), "컨A 외 2");
+assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 부라노 I")), ["BURANO_1"]);
+assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 페스타, 부라노 I+II+III")), ["FESTA", "BURANO_ALL"]);
+assert.strictEqual(venue.venueLabel(venue.normalizeVenue("카프리")), "카프리전체");
+assert.deepStrictEqual(Array.from(venue.buildVenueOptions("부"), (item) => item.label), ["부라노1", "부라노2", "부라노3", "부라노전체"]);
+assert.deepStrictEqual(Array.from(venue.buildVenueOptions("카2"), (item) => item.label), ["카프리2"]);
+assert.deepStrictEqual(Array.from(venue.buildVenueOptions("컨A"), (item) => item.label), ["컨벤션A"]);
+assert.deepStrictEqual(Array.from(venue.buildVenueOptions("3F 부라노 I"), (item) => item.label), ["부라노1"]);
 
 const today = "2026-10-15";
 const event = (id, day, hall) => ({ id, eventName: id, calendarDates: [day], venue: hall, schedule: [{ date: day, time: day === today ? "18:00" : "09:00", content: day === today ? "행사 종료" : "행사 시작", venue: hall }] });

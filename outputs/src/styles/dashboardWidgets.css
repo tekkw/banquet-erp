@@ -318,6 +318,7 @@ body {
 .setup-editor-dialog h3 { margin: 2px 0 0; }
 .setup-editor-dialog label { display: grid; gap: 5px; color: #c7d3dc; font-size: 11px; }
 .setup-editor-dialog input, .setup-editor-dialog select, .setup-editor-dialog textarea { min-width: 0; padding: 8px; border: 1px solid var(--dash-border); border-radius: 7px; background: rgba(6, 17, 31, .7); color: var(--dash-text); font: inherit; }
+.setup-venue-picker { padding: 9px; border: 1px solid var(--dash-border); border-radius: 9px; }
 .setup-editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .setup-event-secondary { min-height: 1.4em; margin: -7px 0 0; color: var(--dash-muted); font-size: 10px; }
 .setup-editor-items { display: grid; gap: 7px; padding-top: 4px; border-top: 1px solid var(--dash-border); }

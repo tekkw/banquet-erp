@@ -61,6 +61,15 @@ assert(source.includes('name="pinned" type="checkbox" checked'), "생성 시 상
 assert(source.includes('metadataSource: "manual_setup_task"') && source.includes('type: "next_setup"'), "수동 작업도 공용 next_setup task 구조를 사용해야 한다");
 assert(source.includes('syncItem(item, { throwOnError: true })') && source.includes('syncChecklist(child, false, { throwOnError: true })'), "부모와 하위 항목을 공용 원격 저장소에 저장해야 한다");
 assert(source.includes('이미 다음 세팅 작업이 있습니다.') && source.includes('data-open-existing-setup'), "중복 안내에서 기존 작업을 열 수 있어야 한다");
+assert(source.includes('data-setup-venue-search') && source.includes('renderSetupVenueOptions'), "PC/모바일 공용 editor가 검색 가능한 canonical 공간 목록을 사용해야 한다");
+assert(!source.includes('const venues = [...new Set([item.venue'), "원본 venue 문자열을 공간 option으로 직접 만들면 안 된다");
+assert.deepStrictEqual(Array.from(board.setupVenueCodes({ venue: "3F 페스타, 부라노 I+II+III" })), ["FESTA", "BURANO_ALL"], "복합 venue는 canonical 공간으로 분해해야 한다");
+assert.deepStrictEqual(Array.from(board.setupVenueCodes({ venue: "3F 부라노 I" })), ["BURANO_1"], "단일 venue는 자동 선택 가능한 canonical 공간이어야 한다");
+const pcOptions = board.renderSetupVenueOptions("카프리2");
+context.window.matchMedia = () => ({ matches: false });
+const mobileOptions = board.renderSetupVenueOptions("카프리2");
+assert.strictEqual(pcOptions, mobileOptions, "PC/모바일은 동일한 공간 후보 builder를 사용해야 한다");
+assert(pcOptions.includes('<optgroup label="컨벤션">') && pcOptions.includes('<optgroup label="부라노">') && pcOptions.includes('<optgroup label="카프리">') && pcOptions.includes('<optgroup label="기타">'));
 
 assert.deepStrictEqual({ ...board.setupCandidateDateRange("2026-10-15") }, { start: "2026-10-15", end: "2026-10-25" }, "오늘부터 다음 주 일요일까지 계산해야 한다");
 board._setEventsForTest([
