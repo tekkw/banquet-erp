@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
   <link rel="stylesheet" href="./src/styles/app.css?v=event-overwrite-contrast-v1">
+  <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -195,6 +196,7 @@
           <label class="upload-button" for="excelInput">엑셀 업로드</label>
         </div>
         <div id="fileName" class="file-name">아직 업로드된 파일이 없습니다.</div>
+        <div id="eventAttachmentPicker" class="event-attachment-picker" aria-label="행사 첨부자료"></div>
       </section>
 
       <div id="status" class="status">.xlsx 파일을 선택해주세요.</div>
@@ -1114,6 +1116,7 @@
   <script src="./src/eventDisplayUtils.js?v=event-display-v1"></script>
   <script src="./src/venueUtils.js?v=venue-normalization-v1"></script>
   <script src="./src/storage.js"></script>
+  <script src="./src/eventAttachments.js?v=event-attachments-v1"></script>
   <script src="./src/auth.js"></script>
   <script src="./src/eventCalendar.js?v=venue-normalization-v1"></script>
   <script src="./src/erpActionRegistry.js?v=1"></script>
@@ -1148,6 +1151,7 @@
      */
 
     const input = document.querySelector("#excelInput");
+    window.BANQUET_ERP_EVENT_ATTACHMENTS?.mountPendingPicker(document.querySelector("#eventAttachmentPicker"));
     const loginScreen = document.querySelector("#loginScreen");
     const loginForm = document.querySelector("#loginForm");
     const loginIdInput = document.querySelector("#loginId");
@@ -3198,6 +3202,20 @@
         return;
       }
 
+      let attachmentUploadFailed = false;
+      const pendingAttachments = window.BANQUET_ERP_EVENT_ATTACHMENTS?.getPendingFiles() || [];
+      if (pendingAttachments.length) {
+        try {
+          setStatus(`행사 첨부자료 ${pendingAttachments.length}개를 저장하는 중입니다...`);
+          await window.BANQUET_ERP_EVENT_ATTACHMENTS.uploadEventAttachments(savedEvent.id, pendingAttachments);
+        } catch (error) {
+          console.error("event attachment upload failed", error);
+          attachmentUploadFailed = true;
+        } finally {
+          window.BANQUET_ERP_EVENT_ATTACHMENTS.clearPendingFiles();
+        }
+      }
+
       let verifiedEvent;
       try {
         const verifiedRows = await fetchEventRowsFromSupabase([savedEvent.id]);
@@ -3228,8 +3246,9 @@
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
       renderCalendar();
-      setStatus(overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다.");
-      showToast(overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다.");
+      const savedMessage = overwriteChoice === "overwrite" ? "기존 행사를 수정본으로 업데이트했습니다." : "이벤트오더가 저장되었습니다.";
+      setStatus(attachmentUploadFailed ? `${savedMessage} 일부 첨부자료는 저장하지 못했습니다.` : savedMessage, attachmentUploadFailed ? "warn" : "success");
+      showToast(attachmentUploadFailed ? `${savedMessage} 첨부자료를 확인해주세요.` : savedMessage);
       await loadEventsFromSupabase();
       showErpPage("home");
     }
@@ -4568,6 +4587,16 @@
         : "Supabase Storage 연결 후 사용 가능";
       fileCard.append(fileLabel, fileNameValue, fileActions, fileNote);
 
+      const attachmentsCard = document.createElement("article");
+      attachmentsCard.className = "info-card wide-card event-attachments-card";
+      attachmentsCard.innerHTML = '<div class="info-label">첨부자료</div><div data-event-attachments></div>';
+      window.BANQUET_ERP_EVENT_ATTACHMENTS?.renderEventAttachments(attachmentsCard.querySelector("[data-event-attachments]"), eventItem.id, true);
+
+      const fieldNotesCard = document.createElement("article");
+      fieldNotesCard.className = "info-card wide-card field-notes-card";
+      fieldNotesCard.innerHTML = '<div class="info-label">현장 특이사항</div><div data-event-field-notes></div>';
+      window.BANQUET_ERP_EVENT_ATTACHMENTS?.renderFieldNotes(fieldNotesCard.querySelector("[data-event-field-notes]"), eventItem.id, true);
+
       const scheduleCard = document.createElement("article");
       scheduleCard.className = `info-card schedule-card${eventItem.schedule.length ? "" : " missing"}`;
       const scheduleLabel = document.createElement("div");
@@ -4599,7 +4628,7 @@
       deleteButton.addEventListener("click", () => requestDelete(eventItem));
       actions.append(editButton, deleteButton);
 
-      modalBody.append(detailGrid, fileCard, scheduleCard, memoField, reviewNotesCard, actions);
+      modalBody.append(detailGrid, fileCard, attachmentsCard, fieldNotesCard, scheduleCard, memoField, reviewNotesCard, actions);
       eventModal.classList.add("visible");
     }
 
@@ -4729,6 +4758,10 @@
       const othersField = createFormField("Others", "others", (eventItem.others || []).join("\n"), true);
       const memoField = createFormField("내부 메모", "internalMemo", eventItem.internalMemo || "", true);
       const eventTypeEditor = createEventTypeEditor(eventItem);
+      const attachmentsEditor = document.createElement("article");
+      attachmentsEditor.className = "info-card wide-card event-attachments-card";
+      attachmentsEditor.innerHTML = '<div class="info-label">첨부자료</div><div data-event-attachments></div>';
+      window.BANQUET_ERP_EVENT_ATTACHMENTS?.renderEventAttachments(attachmentsEditor.querySelector("[data-event-attachments]"), eventItem.id, true);
 
       const actions = document.createElement("div");
       actions.className = "modal-actions";
@@ -4744,7 +4777,7 @@
       saveButton.addEventListener("click", () => saveEditedEvent(eventItem.id));
       actions.append(cancelButton, saveButton);
 
-      modalBody.append(baseGrid, eventTypeEditor, scheduleEditor, itemsEditor, layoutField, othersField, memoField, actions);
+      modalBody.append(baseGrid, eventTypeEditor, scheduleEditor, itemsEditor, layoutField, othersField, memoField, attachmentsEditor, actions);
     }
 
     function createEditableTable(title, collectionName, headers, keys, rows) {

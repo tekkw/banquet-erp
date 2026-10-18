@@ -1260,6 +1260,7 @@
     const opened = window.open(route, "_blank", "noopener");
     if (!opened) window.location.assign(route);
   };
+  window.addEventListener("banquet:field-note-saved", () => refresh());
   window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }

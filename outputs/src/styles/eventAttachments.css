@@ -1,0 +1,22 @@
+.event-attachments-card, .field-notes-card { display: grid; gap: 10px; }
+.event-attachment-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid rgba(140,170,195,.22); border-radius: 8px; }
+.event-attachment-row > div, .field-note-file-actions, .field-note-editor footer { display: flex; gap: 7px; flex-wrap: wrap; }
+.event-attachment-row button, .field-note-file-actions label { min-height: 32px; padding: 6px 9px; border: 1px solid rgba(140,170,195,.35); border-radius: 7px; background: transparent; color: inherit; cursor: pointer; }
+.attachment-empty, .pending-attachment-summary { margin: 0; color: #8fa5b7; font-size: 12px; }
+.attachment-viewer { width: min(92vw, 1100px); max-height: 92vh; padding: 42px 12px 12px; border: 0; border-radius: 12px; background: #071522; }
+.attachment-viewer::backdrop, .field-note-editor::backdrop { background: rgba(0,7,15,.8); }
+.attachment-viewer img { display: block; max-width: 100%; max-height: calc(92vh - 54px); margin: auto; object-fit: contain; }
+.attachment-viewer > button { position: absolute; top: 8px; right: 10px; border: 0; background: transparent; color: white; font-size: 26px; }
+.field-note-row { display: grid; gap: 5px; padding: 9px; border: 1px solid rgba(140,170,195,.2); border-radius: 8px; }
+.field-note-row time { color: #9db1c1; font-size: 11px; }
+.field-note-row p { margin: 0; }
+.field-note-images { display: flex; gap: 7px; overflow-x: auto; }
+.field-note-images img { width: 82px; height: 82px; border-radius: 7px; object-fit: cover; cursor: pointer; }
+.field-note-editor { width: min(520px, calc(100vw - 24px)); padding: 0; border: 1px solid rgba(140,170,195,.35); border-radius: 14px; background: #102438; color: #f4f7fa; }
+.field-note-editor form { display: grid; gap: 12px; padding: 16px; }
+.field-note-editor h3 { margin: 0; }
+.field-notes-viewer-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 16px 16px 0; }
+.field-notes-viewer > [data-event-field-notes] { display: grid; gap: 8px; padding: 16px; }
+.field-note-editor textarea { box-sizing: border-box; width: 100%; padding: 9px; border: 1px solid rgba(140,170,195,.35); border-radius: 8px; background: #071a2b; color: inherit; }
+.field-note-editor footer { justify-content: flex-end; }
+@media (max-width: 768px) { .event-attachment-row { align-items: flex-start; flex-direction: column; } .field-note-editor { inset: auto 0 0; width: 100%; max-width: none; margin: 0; border-radius: 16px 16px 0 0; } }
