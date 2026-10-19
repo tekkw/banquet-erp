@@ -91,4 +91,26 @@ const duplicateBlocks = [{ key: "manual-setup:one", kind: "manual", type: "next_
 assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노1", "2026-10-18", duplicateBlocks)?.key, "manual-setup:one", "eventOrderId + venue + 예정 날짜 중복을 찾아야 한다");
 assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노2", "2026-10-18", duplicateBlocks), null, "공간이 다르면 별도 세팅 작업을 허용해야 한다");
 
+const persistent = { key: "manual-setup:persistent", kind: "manual", type: "next_setup", date: "2026-10-19", time: "08:00", venue: "페스타", eventOrderId: "week", title: "콘텐츠랩", completed: false };
+board._setStateForTest({ manual: [persistent], pins: { [persistent.key]: true }, setupOverrides: { [persistent.key]: { eventDate: "2026-10-20", time: "08:00" } } });
+assert(Array.from(board.allBlocks("2026-10-19", [])).some((item) => item.key === persistent.key), "A. 등록일에도 미완료 setup task를 표시해야 한다");
+assert(Array.from(board.allBlocks("2026-10-20", [])).some((item) => item.key === persistent.key), "B. 예정일에도 미완료 setup task를 표시해야 한다");
+const nextDayBlocks = Array.from(board.allBlocks("2026-10-21", []));
+assert(nextDayBlocks.some((item) => item.key === persistent.key), "C. 예정일 다음 날에도 미완료 setup task를 유지해야 한다");
+assert(board.isSetupOverdue(nextDayBlocks.find((item) => item.key === persistent.key), "2026-10-21"), "C. 예정일이 지난 미완료 task는 지연이어야 한다");
+persistent.completed = true;
+assert(!Array.from(board.allBlocks("2026-10-21", [])).filter((item) => !item.completed).some((item) => item.key === persistent.key), "D. 완료한 task는 active 목록에서 제거되어야 한다");
+persistent.completed = false;
+assert.deepStrictEqual(Array.from(board.setupBoardTasks(board.allBlocks("2026-10-21", [])), (item) => item.key), [persistent.key], "E. pinned 미완료 task는 날짜가 지나도 상단에 유지해야 한다");
+const ordering = [
+  { ...persistent, key: "future", next: { date: "2026-10-22", time: "09:00" } },
+  { ...persistent, key: "overdue", next: { date: "2026-10-20", time: "09:00" } },
+  { ...persistent, key: "today", next: { date: "2026-10-21", time: "09:00" } },
+];
+assert.deepStrictEqual(Array.from(board.sortSetupTasks(ordering, "2026-10-21"), (item) => item.key), ["overdue", "today", "future"], "지연, 오늘, 미래 순으로 정렬해야 한다");
+context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
+context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
+assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");
+assert(source.includes('item_kind=eq.manual&order=board_date.asc') && source.includes('x.date === boardDate || x.type === "next_setup"'), "원격과 로컬 날짜 필터 모두 setup task를 예외 처리해야 한다");
+
 console.log("operation-board setup task V1 tests passed");

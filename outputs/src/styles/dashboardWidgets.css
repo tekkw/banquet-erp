@@ -303,6 +303,7 @@ body {
 .setup-task-actions .setup-original-action { flex-basis: auto; }
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
+.setup-overdue-badge { color: #fecaca; border-color: rgba(248, 113, 113, .45); background: rgba(127, 29, 29, .35); }
 .dashboard-agenda-widget { display: grid; align-content: start; gap: 10px; height: 100%; padding: 14px; box-sizing: border-box; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-panel); color: var(--dash-text); }
 .dashboard-agenda-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .dashboard-agenda-heading h2 { margin: 2px 0 0; font-size: 17px; }
