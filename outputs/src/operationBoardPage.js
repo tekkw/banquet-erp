@@ -1037,8 +1037,8 @@
   function showMobileDailyBriefing(force = false) {
     if (briefingActionInProgress) return;
     if (board.isDailyBriefingReady && !board.isDailyBriefingReady()) return;
-    const briefing = board.dailyBriefingConversation(events, undefined, force);
-    const signature = briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|");
+    const briefing = board.dailyBriefingConversation(events, undefined, true);
+    const signature = briefing.candidates.map((item) => `${item.id || item.key}:${item.nextEventOrderId || item.eventOrderId || ""}:${item.scheduledDate || ""}:${item.summary || item.setupSummary}`).join("|");
     const seenKey = `banquet-erp-mobile-daily-briefing-seen:${briefing.date}`;
     if (!force && sessionStorage.getItem(seenKey) === signature) return;
     sessionStorage.setItem(seenKey, signature);
@@ -1046,7 +1046,7 @@
   }
   function markMobileDailyBriefingSeen() {
     const briefing = board.buildProactiveAlerts(events);
-    sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|"));
+    sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.id || item.key}:${item.nextEventOrderId || item.eventOrderId || ""}:${item.scheduledDate || ""}:${item.summary || item.setupSummary}`).join("|"));
   }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {

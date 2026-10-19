@@ -17,6 +17,7 @@
   let persistentSetupLoaded = false;
   let persistentSetupLoading = false;
   let activeBriefingCandidateKey = "";
+  let activeBriefingOverride = null;
   let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
   let mobileOpenGroups = loadOpenGroups();
   let activeBoardTab = "operations";
@@ -198,6 +199,32 @@
     const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
     return knowledgeResult ?? existingResult;
   }
+  function seoulNowParts(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(now);
+    const value = (type) => parts.find((part) => part.type === type)?.value || "";
+    return { date: `${value("year")}-${value("month")}-${value("day")}`, time: `${value("hour")}:${value("minute")}` };
+  }
+  function nextEventAfterParts(afterDateTime) {
+    if (afterDateTime && typeof afterDateTime === "object") return { date: normalize(afterDateTime.date), time: timeValue(afterDateTime.time) || "00:00" };
+    const text = normalize(afterDateTime); const match = text.match(/(\d{4}-\d{2}-\d{2})(?:[T\s](\d{1,2}:\d{2}))?/);
+    return match ? { date: match[1], time: match[2] || "00:00" } : seoulNowParts();
+  }
+  function resolveNextEventForVenue({ venue, afterDateTime, events = currentEvents, excludeEventOrderId = null } = {}) {
+    const venueUtils = window.BANQUET_ERP_VENUE_UTILS; const normalizedVenue = venueUtils?.normalizeVenue(venue) || normalize(venue);
+    const venueSet = venueUtils?.normalizeVenueSet(normalizedVenue); if (!normalizedVenue || !venueSet?.size) return null;
+    const after = nextEventAfterParts(afterDateTime); const afterKey = `${after.date}T${after.time}`; const candidates = [];
+    (events || []).forEach((event) => {
+      if (excludeEventOrderId != null && String(event.id) === String(excludeEventOrderId)) return;
+      const rows = normalizedScheduleRows(event).filter(({ row, day }) => day && !isHiddenHotelSchedule(row, event) && venueUtils.normalizeVenueSet(venueName(row, event)).size && spacesOverlap({ venue: normalizedVenue }, { venue: venueName(row, event) }));
+      rows.forEach(({ row, day, time }) => { const candidateTime = time || "23:59"; if (`${day}T${candidateTime}` > afterKey) candidates.push({ event, row, date: day, time, venue: venueName(row, event), dateTime: `${day}T${candidateTime}` }); });
+      if (rows.length) return;
+      const candidateVenue = normalize(event.venue); const candidateSet = venueUtils.normalizeVenueSet(venueUtils.normalizeVenue(candidateVenue) || candidateVenue);
+      if (!candidateSet.size || !spacesOverlap({ venue: normalizedVenue }, { venue: candidateVenue })) return;
+      eventDates(event).forEach((day) => { const time = timeValue(event.eventDateTime); const candidateTime = time || "23:59"; if (`${day}T${candidateTime}` > afterKey) candidates.push({ event, row: null, date: day, time, venue: candidateVenue, dateTime: `${day}T${candidateTime}` }); });
+    });
+    candidates.sort((left, right) => left.dateTime.localeCompare(right.dateTime) || String(left.event.id).localeCompare(String(right.event.id)));
+    return candidates[0] || null;
+  }
   function getVenueGroup(rawVenue) {
     const canonical = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(rawVenue) || "";
     return VENUE_GROUP_LABELS[canonical] || "기타";
@@ -286,27 +313,10 @@
       return (codes.length ? codes : [""]).map((code) => ({ ended, key: `${ended.spaceId}${codes.length > 1 ? `:${code}` : ""}`, scopeVenue: code || ended.venue }));
     });
     endedBySpace.forEach(({ ended, key, scopeVenue }) => {
-      const candidates = [];
-      events.forEach((event) => {
-        if (event.id === ended.eventOrderId) return;
-        normalizedScheduleRows(event).forEach(({ row, day }) => {
-          if (isHiddenHotelSchedule(row, event)) return;
-          const candidateSpaces = nextSetupPhysicalSpaceKeys(event, row);
-          const existingOverlap = spacesOverlap({ venue: scopeVenue }, { venue: venueName(row, event) });
-          const knowledgeOverlap = null;
-          if (window.BANQUET_ERP_DEBUG_NEXT_SETUP === true) console.debug("next_setup overlap check", {
-            endedVenue: scopeVenue, endedSpaceId: ended.spaceId, endedPhysicalSpaces: ended.physicalSpaces,
-            endedNextSetupSpaces: ended.nextSetupSpaces, candidateVenue: venueName(row, event), candidatePhysicalSpaceKeys: candidateSpaces,
-            existingOverlap, knowledgeOverlap,
-          });
-          if (day > today && day <= addDays(today, 30) && existingOverlap) candidates.push({ day, event, row });
-        });
-      });
-      candidates.sort((a, b) => a.day.localeCompare(b.day) || timeValue(a.row.time).localeCompare(timeValue(b.row.time)));
-      const next = candidates[0];
+      const next = resolveNextEventForVenue({ venue: scopeVenue, afterDateTime: { date: today, time: ended.time }, events, excludeEventOrderId: ended.eventOrderId });
       const itemKey = `next:${today}:${key}`;
       const displayVenue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel(scopeVenue) || ended.venue;
-      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: displayVenue, spaceId: key, physicalSpaces: ended.physicalSpaces, eventOrderId: next?.event.id || ended.eventOrderId, title: "다음 세팅", eventName: ended.eventName, eventSubtitle: ended.eventSubtitle, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, time: timeValue(next.row.time), name: eventDisplayTitle(next.event), subtitle: eventSecondaryTitle(next.event), people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
+      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: displayVenue, spaceId: key, physicalSpaces: ended.physicalSpaces, eventOrderId: next?.event.id || ended.eventOrderId, sourceEventOrderId: ended.eventOrderId, afterDateTime: `${today}T${ended.time}`, title: "다음 세팅", eventName: ended.eventName, eventSubtitle: ended.eventSubtitle, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.date, time: next.time, name: eventDisplayTitle(next.event), subtitle: eventSecondaryTitle(next.event), people: next.row?.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row?.people || next.event.guestCount) } : null });
     });
     return blocks;
   }
@@ -376,7 +386,7 @@
   }
   function setupAlert(item, today) {
     const overdue = isSetupOverdue(item, today);
-    return { ...item, id: `next_setup:${item.key}`, type: overdue ? "overdue_setup" : "next_setup", priority: overdue ? "high" : "normal", title: `${item.venue} 다음 세팅 확인`, summary: item.setupSummary, createdAt: item.scheduledDate || today, acknowledged: false, completed: false, sourceMetadata: { source: item.source, setupKey: item.key }, actions: ["complete", "later", "original", "attachments", "notes", "next"] };
+    return { ...item, id: `next_setup:${item.key}`, type: overdue ? "overdue_setup" : "next_setup", priority: overdue ? "high" : "normal", title: `${item.venue} 다음 세팅 확인`, summary: item.setupSummary, createdAt: item.scheduledDate || today, acknowledged: false, completed: false, sourceMetadata: { source: item.source, setupKey: item.key, sourceEventOrderId: item.sourceEventOrderId || null, afterDateTime: item.afterDateTime || null }, actions: ["complete", "later", "original", "attachments", "notes", "next"] };
   }
   function beverageShortageAlert(events, today) {
     const comparison = window.BANQUET_ERP_BEVERAGE_INVENTORY?.getComparison(events, today);
@@ -397,6 +407,7 @@
     });
     const beverage = beverageShortageAlert(events, today); if (beverage) alerts.push(beverage);
     (state.proactiveAlerts || []).filter((item) => !item.acknowledged && !item.completed && !isAlertAcknowledged(item.id)).forEach((item) => alerts.push(item));
+    if (activeBriefingOverride && !alerts.some((item) => String(item.nextEventOrderId || item.eventOrderId) === String(activeBriefingOverride.nextEventOrderId) && ["next_setup", "overdue_setup"].includes(item.type))) alerts.push(activeBriefingOverride);
     const deduped = [...new Map(alerts.map((item) => [item.id, item])).values()].sort((left, right) => (ALERT_PRIORITY[left.priority] ?? 9) - (ALERT_PRIORITY[right.priority] ?? 9) || String(left.createdAt || "").localeCompare(String(right.createdAt || "")));
     return { date: today, todayEvents: briefing.todayEvents, alerts: deduped, candidates: deduped, count: deduped.length, prompt: deduped[0]?.summary || "확인할 proactive alert가 없습니다." };
   }
@@ -415,6 +426,7 @@
     return `${venue} 다음 행사는 ${eventTitle}입니다.\n${detail}\n세팅 완료하셨나요?`;
   }
   function dailyBriefingConversation(events = currentEvents, today = seoulDateKey(), reset = false) {
+    if (reset) activeBriefingOverride = null;
     const briefing = buildProactiveAlerts(events, today);
     let current = !reset && briefing.candidates.find((item) => item.key === activeBriefingCandidateKey);
     if (!current) current = briefing.candidates[0] || null;
@@ -430,7 +442,7 @@
     return next;
   }
   function activeDailyBriefingItem(events = currentEvents, today = seoulDateKey()) {
-    return buildProactiveAlerts(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey) || null;
+    return buildProactiveAlerts(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey) || (activeBriefingOverride?.key === activeBriefingCandidateKey ? activeBriefingOverride : null);
   }
   function openBriefingResource(action, item, events = currentEvents) {
     const event = events.find((entry) => String(entry.id) === String(item?.nextEventOrderId || item?.eventOrderId));
@@ -470,8 +482,32 @@
     const prefix = action === "later" ? `${current.venue} 세팅은 미완료 상태로 유지합니다.` : `${current.venue} 세팅은 건너뜁니다.`;
     return { message: next ? `${prefix}\n${proactiveAlertSummary(next)}` : `${prefix}\n이번 briefing에서 더 확인할 항목이 없습니다.`, current: next };
   }
+  function correctionDateFromText(text, today) {
+    if (/내일/.test(text)) return addDays(today, 1);
+    const full = text.match(/(20\d{2})[.\/-](\d{1,2})[.\/-](\d{1,2})/); if (full) return `${full[1]}-${String(Number(full[2])).padStart(2, "0")}-${String(Number(full[3])).padStart(2, "0")}`;
+    const monthDay = text.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일?/); if (monthDay) return `${today.slice(0, 4)}-${String(Number(monthDay[1])).padStart(2, "0")}-${String(Number(monthDay[2])).padStart(2, "0")}`;
+    const day = text.match(/(?:^|\D)(\d{1,2})\s*일(?:\D|$)/); if (!day) return "";
+    const date = new Date(`${today}T12:00:00+09:00`); date.setUTCDate(Number(day[1])); if (date.toISOString().slice(0, 10) < today) date.setUTCMonth(date.getUTCMonth() + 1); return date.toISOString().slice(0, 10);
+  }
+  function correctBriefingNextEvent(question, events = currentEvents, today = seoulDateKey()) {
+    const text = normalize(question); if (!/(?:있잖아|먼저(?:야|인데|지)|다음\s*행사\s*아니|그거\s*다음\s*행사)/i.test(text)) return "";
+    const venueUtils = window.BANQUET_ERP_VENUE_UTILS; const active = activeDailyBriefingItem(events, today); const explicitCode = venueUtils?.parseVenueCodes(text)?.[0];
+    const venue = explicitCode ? venueUtils.venueLabel(explicitCode) : active?.venue || ""; if (!venue) return "";
+    const requestedDate = correctionDateFromText(text, today); const now = seoulNowParts(); const threshold = requestedDate ? { date: addDays(requestedDate, -1), time: "23:59" } : now;
+    const resolved = resolveNextEventForVenue({ venue, afterDateTime: threshold, events }); if (!resolved || (requestedDate && resolved.date !== requestedDate)) return "";
+    const queue = buildProactiveAlerts(events, today); let corrected = queue.candidates.find((item) => ["next_setup", "overdue_setup"].includes(item.type) && String(item.nextEventOrderId) === String(resolved.event.id) && spacesOverlap({ venue }, { venue: item.venue }));
+    if (!corrected) {
+      const setupSummary = setupDocumentSummary(resolved.event); const key = `corrected-next:${venueUtils.normalizeVenue(venue) || normalize(venue)}:${resolved.event.id}`;
+      corrected = { key, id: `next_setup:${key}`, kind: "next_setup", type: "next_setup", priority: "normal", venue: venueUtils.venueLabel(venue) || venue, eventOrderId: resolved.event.id, nextEventOrderId: resolved.event.id, organizer: normalize(resolved.event.companyName || resolved.event.organizer), eventName: normalize(resolved.event.eventName), eventTitle: eventDisplayTitle(resolved.event), scheduledDate: resolved.date, scheduledTime: resolved.time, setupSummary, summary: setupSummary, source: "automatic", sourceLabel: "자동", createdAt: resolved.date, acknowledged: false, completed: false, sourceMetadata: { source: "user_correction" }, actions: ["complete", "later", "original", "attachments", "notes", "next"] };
+      activeBriefingOverride = corrected;
+    } else activeBriefingOverride = null;
+    activeBriefingCandidateKey = corrected.key;
+    const label = venueUtils.venueLabel(venue) || venue; const title = corrected.organizer || corrected.eventName || corrected.eventTitle;
+    return `맞습니다. ${label}의 다음 행사는 ${Number(resolved.date.slice(5, 7))}월${Number(resolved.date.slice(8, 10))}일 ${title}입니다.\n다음 세팅 대상을 수정했습니다.`;
+  }
   function dailyBriefingAnswer(question, events = currentEvents, today = seoulDateKey()) {
     const text = String(question || "");
+    const correction = correctBriefingNextEvent(text, events, today); if (correction) return correction;
     const active = activeDailyBriefingItem(events, today);
     if (active && /원본|엑셀/.test(text)) return openBriefingResource("original", active, events);
     if (active && /첨부/.test(text)) return openBriefingResource("attachments", active, events);
@@ -1063,5 +1099,5 @@
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
 })();
