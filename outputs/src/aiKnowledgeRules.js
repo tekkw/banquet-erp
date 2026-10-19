@@ -21,7 +21,7 @@
   }
   function matchesVenue(value, venue) {
     const venueUtils = global.BANQUET_ERP_VENUE_UTILS;
-    if (venueUtils?.normalizeVenue(value) && venueUtils?.normalizeVenue(venue)) return venueUtils.spacesOverlap(value, venue);
+    if (venueUtils?.normalizeVenueSet(value).size && venueUtils?.normalizeVenueSet(venue).size) return venueUtils.spacesOverlap(value, venue);
     const name = comparable(value); const target = comparable(venue);
     if (!target) return false;
     return /^(피렌체|florence|firenze)$/.test(target) ? /피렌체|florence|firenze/.test(name) : name.includes(target);

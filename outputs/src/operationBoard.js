@@ -192,7 +192,7 @@
   function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
     const venueUtils = window.BANQUET_ERP_VENUE_UTILS;
     const currentVenue = venueName(currentRow, currentEvent); const futureVenue = venueName(futureRow, futureEvent);
-    if (venueUtils?.normalizeVenue(currentVenue) && venueUtils?.normalizeVenue(futureVenue)) return venueUtils.spacesOverlap(currentVenue, futureVenue);
+    if (venueUtils?.normalizeVenueSet(currentVenue).size && venueUtils?.normalizeVenueSet(futureVenue).size) return venueUtils.spacesOverlap(currentVenue, futureVenue);
     const existingResult = physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
     const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
     return knowledgeResult ?? existingResult;
@@ -280,18 +280,21 @@
         });
       }
     });
-    const endedBySpace = new Map(blocks.filter((b) => b.type === "end").map((b) => [b.spaceId, b]));
-    endedBySpace.forEach((ended, key) => {
+    const endedBySpace = blocks.filter((block) => block.type === "end").flatMap((ended) => {
+      const codes = window.BANQUET_ERP_VENUE_UTILS?.parseVenueCodes(ended.venue) || [];
+      return (codes.length ? codes : [""]).map((code) => ({ ended, key: `${ended.spaceId}${codes.length > 1 ? `:${code}` : ""}`, scopeVenue: code || ended.venue }));
+    });
+    endedBySpace.forEach(({ ended, key, scopeVenue }) => {
       const candidates = [];
       events.forEach((event) => {
         if (event.id === ended.eventOrderId) return;
         normalizedScheduleRows(event).forEach(({ row, day }) => {
           if (isHiddenHotelSchedule(row, event)) return;
           const candidateSpaces = nextSetupPhysicalSpaceKeys(event, row);
-          const existingOverlap = spacesOverlap({ venue: ended.venue }, { venue: venueName(row, event) });
+          const existingOverlap = spacesOverlap({ venue: scopeVenue }, { venue: venueName(row, event) });
           const knowledgeOverlap = null;
           if (window.BANQUET_ERP_DEBUG_NEXT_SETUP === true) console.debug("next_setup overlap check", {
-            endedVenue: ended.venue, endedSpaceId: ended.spaceId, endedPhysicalSpaces: ended.physicalSpaces,
+            endedVenue: scopeVenue, endedSpaceId: ended.spaceId, endedPhysicalSpaces: ended.physicalSpaces,
             endedNextSetupSpaces: ended.nextSetupSpaces, candidateVenue: venueName(row, event), candidatePhysicalSpaceKeys: candidateSpaces,
             existingOverlap, knowledgeOverlap,
           });
@@ -301,7 +304,8 @@
       candidates.sort((a, b) => a.day.localeCompare(b.day) || timeValue(a.row.time).localeCompare(timeValue(b.row.time)));
       const next = candidates[0];
       const itemKey = `next:${today}:${key}`;
-      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: ended.venue, spaceId: key, physicalSpaces: ended.physicalSpaces, eventOrderId: next?.event.id || ended.eventOrderId, title: "다음 세팅", eventName: ended.eventName, eventSubtitle: ended.eventSubtitle, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, time: timeValue(next.row.time), name: eventDisplayTitle(next.event), subtitle: eventSecondaryTitle(next.event), people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
+      const displayVenue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel(scopeVenue) || ended.venue;
+      blocks.push({ key: itemKey, kind: "next_setup", type: "next_setup", date: today, time: ended.time, venue: displayVenue, spaceId: key, physicalSpaces: ended.physicalSpaces, eventOrderId: next?.event.id || ended.eventOrderId, title: "다음 세팅", eventName: ended.eventName, eventSubtitle: ended.eventSubtitle, completed: !!state.completions[itemKey], next: next ? { eventOrderId: next.event.id, date: next.day, time: timeValue(next.row.time), name: eventDisplayTitle(next.event), subtitle: eventSecondaryTitle(next.event), people: next.row.people || next.event.guestCount || "", layoutType: inferLayoutType(next.event), recommendation: recommendLayout(next.event.venueLayouts || [], inferLayoutType(next.event), next.row.people || next.event.guestCount) } : null });
     });
     return blocks;
   }
@@ -363,8 +367,8 @@
       return next ? `${current.venue} 완료 처리했습니다.\n${next.venue}은 ${next.summary}입니다. 완료하셨나요?` : `${current.venue} 완료 처리했습니다. 남은 다음 세팅이 없습니다.`;
     }
     if (!/(오늘\s*(?:뭐|무엇).*해야|다음\s*세팅.*(?:뭐|남)|어떻게\s*세팅|레이아웃.*(?:뭐|적)|재인폼)/i.test(String(question || ""))) return "";
-    const briefing = buildDailyBriefing(events, today); const venue = window.BANQUET_ERP_VENUE_UTILS?.parseVenueCodes(question)?.[0];
-    const rows = venue ? briefing.candidates.filter((item) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(item.venue) === venue) : /재인폼/.test(question) ? briefing.candidates.filter((item) => /재인폼/.test(item.summary)) : briefing.candidates;
+    const briefing = buildDailyBriefing(events, today); const venueSet = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(question);
+    const rows = venueSet?.size ? briefing.candidates.filter((item) => window.BANQUET_ERP_VENUE_UTILS.spacesOverlap(item.venue, question)) : /재인폼/.test(question) ? briefing.candidates.filter((item) => /재인폼/.test(item.summary)) : briefing.candidates;
     if (!rows.length) return "남은 다음 세팅이 없습니다.";
     activeBriefingCandidateKey = rows[0].key;
     return rows.map((item) => `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel(item.venue) || item.venue} · ${item.eventTitle}\n${item.summary}`).join("\n");

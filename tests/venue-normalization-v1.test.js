@@ -14,6 +14,10 @@ assert.strictEqual(venue.normalizeVenue("카프리"), "CAPRI_ALL");
 assert.strictEqual(venue.normalizeVenue("카프리 전체"), "CAPRI_ALL");
 assert.strictEqual(venue.normalizeVenue("카프리ALL"), "CAPRI_ALL");
 assert.strictEqual(venue.normalizeVenue("카프리 1+2+3"), "CAPRI_ALL");
+assert.deepStrictEqual(Array.from(venue.normalizeVenueSet("카프리")), ["CAPRI_1", "CAPRI_2", "CAPRI_3"]);
+assert(venue.spacesOverlap("카프리ALL", "카프리1"), "A. 카프리ALL은 카프리1과 겹쳐야 한다");
+assert(venue.spacesOverlap("카프리1", "카프리ALL"), "B. overlap은 양방향이어야 한다");
+assert(!venue.spacesOverlap("카프리1", "카프리2"), "C. 카프리 개별홀끼리는 겹치지 않아야 한다");
 assert(venue.spacesOverlap("컨벤션A", "컨벤션AB"));
 assert(venue.spacesOverlap("컨벤션센터 A", "컨벤션AB"));
 assert.strictEqual(venue.normalizeVenue("3F 컨벤션센터"), "CONVENTION_AB");
@@ -34,6 +38,14 @@ assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1"]), "�
 assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1", "카프리1"]), "컨A 외 2");
 assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 부라노 I")), ["BURANO_1"]);
 assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 페스타, 부라노 I+II+III")), ["FESTA", "BURANO_ALL"]);
+for (const raw of ["부라노", "부라노ALL", "부라노123", "부라노1+2+3", "부라노 I+II+III"]) assert.strictEqual(venue.normalizeVenue(raw), "BURANO_ALL", `D. ${raw}는 부라노전체여야 한다`);
+for (const raw of ["컨벤션AB", "컨벤션 A+B", "컨벤션1+2+3", "컨벤션 I+II+III"]) assert.strictEqual(venue.normalizeVenue(raw), "CONVENTION_AB", `${raw}는 컨벤션AB여야 한다`);
+assert.deepStrictEqual(Array.from(venue.parseVenueCodes("컨벤션AB + 페스타")), ["CONVENTION_AB", "FESTA"]);
+assert.deepStrictEqual(Array.from(venue.normalizeVenueSet("컨벤션AB + 페스타")), ["CONVENTION_1", "CONVENTION_2", "CONVENTION_3", "FESTA"]);
+assert(venue.spacesOverlap("컨벤션AB + 페스타", "컨벤션A"), "E. 복합 장소는 컨벤션A와 겹쳐야 한다");
+assert(venue.spacesOverlap("컨벤션AB + 페스타", "페스타"), "F. 복합 장소는 페스타와 겹쳐야 한다");
+assert(!venue.spacesOverlap("컨벤션AB + 페스타", "부라노1"), "G. 관계없는 공간과 겹치면 안 된다");
+assert.strictEqual(venue.formatVenueShort("컨벤션AB + 페스타"), "컨AB+페스타");
 assert.strictEqual(venue.venueLabel(venue.normalizeVenue("카프리")), "카프리전체");
 assert.deepStrictEqual(Array.from(venue.buildVenueOptions("부"), (item) => item.label), ["부라노1", "부라노2", "부라노3", "부라노전체"]);
 assert.deepStrictEqual(Array.from(venue.buildVenueOptions("카2"), (item) => item.label), ["카프리2"]);
@@ -49,5 +61,15 @@ next = board.buildAutoBlocks([event("current", today, "카프리"), event("right
 assert.strictEqual(next.next.name, "right", "카프리 전체는 개별 카프리와 겹쳐야 한다");
 next = board.buildAutoBlocks([event("current", today, "카프리1"), event("wrong", "2026-10-16", "카프리2")], today).find((item) => item.type === "next_setup");
 assert.strictEqual(next.next, null, "카프리 개별홀끼리는 겹치지 않아야 한다");
+next = board.buildAutoBlocks([event("all-current", today, "카프리1+2+3"), event("one-next", "2026-10-16", "카프리1")], today).find((item) => item.type === "next_setup");
+assert.strictEqual(next.next.name, "one-next", "H. 현재 카프리ALL에서 다음 카프리1을 연결해야 한다");
+next = board.buildAutoBlocks([event("one-current", today, "카프리1"), event("all-next", "2026-10-16", "카프리1+2+3")], today).find((item) => item.type === "next_setup");
+assert.strictEqual(next.next.name, "all-next", "I. 현재 카프리1에서 다음 카프리ALL을 연결해야 한다");
+const compoundNext = board.buildAutoBlocks([
+  event("compound-current", today, "컨벤션AB + 페스타"),
+  event("convention-next", "2026-10-16", "컨벤션A"),
+  event("festa-next", "2026-10-17", "페스타"),
+], today).filter((item) => item.type === "next_setup" && item.next);
+assert.deepStrictEqual(Array.from(compoundNext, (item) => item.next.name).sort(), ["convention-next", "festa-next"], "J. 복합 venue의 양쪽 공간에서 각각 next setup을 계산해야 한다");
 
 console.log("venue normalization V1 tests passed");

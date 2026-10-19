@@ -56,7 +56,7 @@
     const numeric = value.match(/(\d+)번째/); if (numeric) return Number(numeric[1]) - 1;
     const word = Object.keys(ORDINALS).find((key) => value.includes(key)); return word ? ORDINALS[word] : -1;
   }
-  function venueIn(text) { return compact(text).match(/(?:컨벤션(?:A|B|C|[123])?|부라노(?:[123])?|카프리(?:[123](?:\+[123])*)?|페스타|포이어)/i)?.[0] || ""; }
+  function venueIn(text) { const utils = global.BANQUET_ERP_VENUE_UTILS; const codes = utils?.parseVenueCodes(text) || []; return codes.length ? codes.map((code) => utils.venueLabel(code)).join("+") : compact(text).match(/(?:컨벤션(?:A|B|C|[123])?|부라노(?:[123])?|카프리(?:[123](?:\+[123])*)?|페스타|포이어)/i)?.[0] || ""; }
   function eventDocumentTool(text) { const value = String(text || ""); if (/(?:점심|중식|런치|lunch)|커피\s*브레이크|커피브레이크/i.test(value)) return "getEventSchedule"; if (/(?:첨부|별도\s*파일|레이아웃\s*파일).*(?:있|보여|열어|목록)|(?:보여|열어).*(?:첨부|파일)/i.test(value)) return "getEventAttachments"; if (/(?:요청\s*사항|요청사항|비고|others?|다른\s*요청|특이\s*사항|이벤\s*오더.*(?:뭐라고|써\s*있|적혀))/i.test(value)) return "getEventRequests"; if (/(?:레이아웃|lay\s*&?\s*out|재인폼|re-?inform|세팅.*어떻게.*(?:해달|하래)|음료|bev(?:erage)?|마이크|단상|장비|품목)/i.test(value)) return "getEventDocumentSection"; return ""; }
   function createToolRegistry(tools) {
     const registry = { ...tools };
@@ -68,7 +68,7 @@
     function save(context) { const next = { ...DEFAULT_CONTEXT, ...context, lastResults: Array.isArray(context?.lastResults) ? context.lastResults.slice(0, 20) : [] }; try { storage?.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ } return next; }
     function plan(text, fastRoute = "") {
       const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+번째|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
-      const contextVenue = venueIn(context.event?.venue || ""); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)));
+      const contextVenue = venueIn(context.event?.venue || ""); const venueMatchesContext = global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(venue).size && global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(contextVenue).size ? global.BANQUET_ERP_VENUE_UTILS.spacesOverlap(venue, contextVenue) : compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || venueMatchesContext);
       const explicitEventTarget = Boolean(venue || /(?:오늘|내일|어제|이번|다음|지난)\s*(?:주|달)?|\d{1,2}\s*월|\d{4}[-./년]/.test(value));
       const selectedEventQuery = context.event?.eventOrderId && !explicitEventTarget && !/(추가|변경|수정|등록|메모\s*남겨)/.test(value);
       if (selectedEventQuery && /(?:원본|원본\s*엑셀|엑셀|이벤\s*오더|원본\s*파일|파일).*(?:보여|띄워|열어)|(?:보여|띄워|열어).*(?:원본|엑셀|이벤\s*오더|파일)/.test(value)) return { route: "event_query", tool: "openEventOriginal", selectedResultId: context.event.eventOrderId, text: value, usesContext: true, actions: [{ type: "open_event_original", eventOrderId: context.event.eventOrderId, storagePath: context.event.storagePath || "" }], maxSteps };
