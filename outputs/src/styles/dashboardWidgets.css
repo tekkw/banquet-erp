@@ -304,6 +304,18 @@ body {
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
 .setup-overdue-badge { color: #fecaca; border-color: rgba(248, 113, 113, .45); background: rgba(127, 29, 29, .35); }
+.daily-operations-briefing { display: grid; gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid rgba(198, 166, 103, .32); border-radius: 12px; background: rgba(198, 166, 103, .08); }
+.daily-operations-briefing-heading strong, .daily-operations-briefing-heading small { display: block; }
+.daily-operations-briefing-heading small { margin-top: 3px; color: var(--dash-muted, #94a3b8); font-size: 11px; }
+.daily-operations-briefing-list { display: grid; gap: 8px; }
+.daily-operations-briefing-list article { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px 10px; padding: 10px; border-radius: 9px; background: rgba(6, 17, 31, .42); }
+.daily-operations-briefing-list label { display: flex; align-items: flex-start; gap: 8px; }
+.daily-operations-briefing-list label span, .daily-operations-briefing-list label small { display: block; }
+.daily-operations-briefing-list label small { margin-top: 3px; color: var(--dash-muted, #94a3b8); }
+.daily-operations-briefing-list article > em { color: #f2c76e; font-size: 10px; font-style: normal; font-weight: 800; }
+.daily-operations-briefing-list article > div { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.daily-operations-briefing-list button { min-height: 30px; padding: 4px 8px; border: 1px solid var(--dash-border, rgba(148, 163, 184, .25)); border-radius: 7px; background: transparent; color: inherit; font: inherit; font-size: 10px; cursor: pointer; }
+.daily-operations-briefing > p { margin: 0; color: #f2c76e; font-size: 12px; font-weight: 700; }
 .dashboard-agenda-widget { display: grid; align-content: start; gap: 10px; height: 100%; padding: 14px; box-sizing: border-box; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-panel); color: var(--dash-text); }
 .dashboard-agenda-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .dashboard-agenda-heading h2 { margin: 2px 0 0; font-size: 17px; }

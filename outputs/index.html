@@ -1128,8 +1128,8 @@
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=layout-ai-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
-  <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
-  <script src="./src/operationBoard.js?v=manual-setup-v1"></script>
+  <script src="./src/aiAssistant.js?v=daily-briefing-v1"></script>
+  <script src="./src/operationBoard.js?v=daily-briefing-v1"></script>
   <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
   <script src="./src/dashboardWidgets.js?v=pc-today-agenda-v1"></script>
   <script>
@@ -4089,13 +4089,13 @@
       const dialog = document.querySelector("#dailyBriefingDialog");
       const content = document.querySelector("#dailyBriefingContent");
       if (!dialog || !content || dialog.open || (!force && !eventsLoaded)) return;
-      const today = new Date(); const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-      const todayKey = formatDateKey(today); const tomorrowEvents = getEventsForDate(formatDateKey(tomorrow));
-      const setupBlocks = window.BANQUET_ERP_OPERATION_BOARD?.buildAutoBlocks(savedEvents, todayKey).filter((block) => block.type === "next_setup") || [];
+      const today = new Date(); const todayKey = window.erpConversationAgent?.seoulTodayKey() || formatDateKey(today);
+      const briefing = window.BANQUET_ERP_OPERATION_BOARD?.buildDailyBriefing(savedEvents, todayKey) || { todayEvents: [], candidates: [] };
       const userKey = currentUser?.id || currentUser?.label || "user";
       const seenKey = `banquet-erp-daily-briefing:${userKey}:${todayKey}`;
       if (!force && localStorage.getItem(seenKey)) return;
-      content.innerHTML = `<span class="eyebrow">Daily Banquet Briefing</span><h2 id="dailyBriefingTitle">${today.getMonth() + 1}월 ${today.getDate()}일 오늘의 연회 브리핑</h2><p class="daily-briefing-count">오늘 등록 행사: <strong>${getEventsForDate(todayKey).length}건</strong></p><section><h3>내일 주요 일정</h3><ul>${tomorrowEvents.length ? tomorrowEvents.slice(0, 6).map((eventItem) => `<li title="${escapeHtml(getDashboardEventVenueDetails(eventItem))}">${escapeHtml(getDashboardEventVenue(eventItem, true))} ${escapeHtml(getDashboardEventTime(eventItem))} / ${escapeHtml(eventItem.guestCount || "-")}명</li>`).join("") : "<li>등록된 일정이 없습니다.</li>"}</ul></section><section><h3>오늘 준비할 사항</h3><ul>${setupBlocks.length ? setupBlocks.map((block) => `<li>${escapeHtml(block.venue)} · ${block.next ? `${escapeHtml(block.next.name)} 사전 세팅` : "다음 세팅 확인"}</li>`).join("") : "<li>추가 준비 사항이 없습니다.</li>"}</ul></section><section><h3>운영 체크</h3><p>세팅 변경 ${setupBlocks.length}건</p></section>`;
+      content.innerHTML = `<span class="eyebrow">Daily Operations Briefing</span><h2 id="dailyBriefingTitle">오늘 운영 브리핑</h2><p class="daily-briefing-count">오늘 행사는 <strong>${briefing.todayEvents.length}건</strong>입니다. 다음 세팅 확인은 <strong>${briefing.candidates.length}건</strong>입니다.</p><section><ul>${briefing.candidates.length ? briefing.candidates.map((item) => `<li data-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-briefing-complete> ${escapeHtml(item.venue)} · ${escapeHtml(item.eventTitle)} <small>${escapeHtml(item.summary)}</small></label> <em>${item.sourceLabel}</em></li>`).join("") : "<li>확인할 다음 세팅이 없습니다.</li>"}</ul>${briefing.candidates.length ? `<p>${escapeHtml(briefing.prompt)}</p>` : ""}</section>`;
+      content.querySelectorAll("[data-briefing-complete]").forEach((input) => input.onchange = () => window.BANQUET_ERP_OPERATION_BOARD.completeBoardItem(input.closest("[data-key]").dataset.key, true, todayKey));
       localStorage.setItem(seenKey, "shown");
       dialog.showModal();
     }

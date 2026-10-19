@@ -155,6 +155,11 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
+        const briefingAnswer = window.BANQUET_ERP_OPERATION_BOARD?.dailyBriefingAnswer(question, state.getEvents?.() || []);
+        if (briefingAnswer) {
+          loadingMessage.querySelector(".chat-bubble").textContent = briefingAnswer;
+          return;
+        }
         if (beverageQuestion) {
           const result = await actionRegistry.executeAction("get_beverage_inventory_status", { question, events: state.getEvents?.() || [] });
           if (!result?.ok) throw new Error(result?.message || "음주류 재고를 확인하지 못했습니다.");

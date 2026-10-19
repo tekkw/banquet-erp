@@ -1124,6 +1124,8 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : "";
+    if (briefingAnswer) { showMessage(briefingAnswer, true); aiInput.value = ""; return; }
     if (!selectedAssetImageFile && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(text)) {
       showTransientMessage("음주류 재고와 행사 수요를 계산하고 있습니다…");
       try { const result = actionResultValue(await actionRegistry.executeAction("get_beverage_inventory_status", { question: text })); showMessage(result?.text || "음주류 재고를 확인하지 못했습니다.", true); aiInput.value = ""; }
