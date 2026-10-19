@@ -4,6 +4,7 @@ const vm = require("vm");
 
 const context = { window: {}, console };
 vm.createContext(context);
+vm.runInContext(fs.readFileSync("outputs/src/venueUtils.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("outputs/src/eventOrder.js", "utf8"), context);
 
 const cleanValue = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
@@ -38,6 +39,20 @@ assert.deepStrictEqual(
   ]
 );
 assert.strictEqual(wedding.place, "1F 피렌체, 3F 컨벤션센터, 올리비아");
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(service.deriveEventSpaces({ place: "페스타, 부라노 I+II+III", schedule: [] }))),
+  [
+    { spaceName: "페스타", role: "unspecified", roleLabel: "사용 공간" },
+    { spaceName: "부라노전체", role: "unspecified", roleLabel: "사용 공간" },
+  ]
+);
+assert.deepStrictEqual(
+  JSON.parse(JSON.stringify(service.deriveEventSpaces({ place: "3F 컨벤션AB + 페스타", schedule: [] }))),
+  [
+    { spaceName: "컨벤션AB", role: "unspecified", roleLabel: "사용 공간" },
+    { spaceName: "페스타", role: "unspecified", roleLabel: "사용 공간" },
+  ]
+);
 
 const rows = Array.from({ length: 16 }, () => []);
 rows[0] = ["행사명(Name of Event)", "", "", "일반 세미나"];

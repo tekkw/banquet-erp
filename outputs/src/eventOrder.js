@@ -664,10 +664,15 @@
     }
 
     function splitVenueNames(value) {
-      return cleanValue(value)
-        .split(/\s*(?:,|，|\+|&|·|ㆍ|\/|\n)\s*/)
-        .map((item) => cleanValue(item))
-        .filter(Boolean);
+      const utils = window.BANQUET_ERP_VENUE_UTILS;
+      return cleanValue(value).split(/\s*(?:,|，|&|·|ㆍ|\/|\n)\s*/).flatMap((part) => {
+        const canonical = utils?.normalizeVenue(part);
+        if (canonical) return [utils.venueLabel(canonical)];
+        return part.split(/\s*\+\s*/).map((item) => {
+          const code = utils?.normalizeVenue(item);
+          return code ? utils.venueLabel(code) : cleanValue(item);
+        });
+      }).filter(Boolean);
     }
 
     function normalizeDerivedSpaceName(value) {
@@ -675,6 +680,9 @@
         .replace(/^\s*(?:B\d+|지하\s*\d+층?|\d+\s*(?:F|층))\s*/i, "")
         .trim();
       if (!name) return "";
+      if (/^컨벤션센터\s*[AB]$/i.test(name)) return name.replace(/\s+/g, " ");
+      const canonical = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(name);
+      if (canonical) return window.BANQUET_ERP_VENUE_UTILS.venueLabel(canonical);
       if (/^부라노\s*(?:1|I|Ⅰ)$/i.test(name)) return "부라노1";
       if (/^(?:피렌체|florence)$/i.test(name)) return "피렌체";
       if (/^올리비아$/i.test(name)) return "올리비아";

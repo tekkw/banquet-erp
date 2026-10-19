@@ -28,31 +28,40 @@
     { code: "OLIVIA", label: "올리비아", shortLabel: "올리", group: "기타", aliases: ["OLIVIA"] },
   ];
 
+  function prepareVenueText(value) {
+    return String(value || "").trim().toUpperCase()
+      .replace(/^\s*[123]\s*(?:F|층)\s*/i, "")
+      .replace(/(^|[\s,，/&·ㆍ])(?:[123]\s*(?:F|층))(?=$|[\s,，/+&·ㆍ])/gi, "$1")
+      .replace(/[Ⅲⅲ]/g, "3").replace(/[Ⅱⅱ]/g, "2").replace(/[Ⅰⅰ]/g, "1")
+      .replace(/\bIII\b/g, "3").replace(/\bII\b/g, "2").replace(/\bI\b/g, "1")
+      .replace(/\s+/g, " ").trim();
+  }
   function comparable(value) {
-    return String(value || "").toUpperCase().replace(/[Ⅰⅰ]/g, "1").replace(/[Ⅱⅱ]/g, "2").replace(/[Ⅲⅲ]/g, "3")
-      .replace(/^\s*\d+\s*F\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
+    return prepareVenueText(value).replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "");
   }
   function normalizeVenue(value) {
     const canonicalCode = String(value || "").trim().toUpperCase();
     if (VENUE_MASTER.some((item) => item.code === canonicalCode)) return canonicalCode;
-    const romanName = String(value || "").toUpperCase().replace(/^\s*\d+\s*F\s*/i, "").replace(/[\s()[\]{}<>｜|/\\.,·ㆍ∙･_-]/g, "")
-      .replace(/^(부라노|카프리)III$/, (_, family) => `${family}3`).replace(/^(부라노|카프리)II$/, (_, family) => `${family}2`).replace(/^(부라노|카프리)I$/, (_, family) => `${family}1`);
-    const name = comparable(romanName).replace(/CONVENTION/g, "컨벤션").replace(/컨벤션센터/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리");
-    if (/^(컨벤션(?:전체|ALL|AB)|컨AB)$/.test(name) || /^컨벤션(?:A\+B|1\+2\+3|I\+II\+III|123)$/.test(name)) return "CONVENTION_AB";
+    const name = comparable(value).replace(/CONVENTION/g, "컨벤션").replace(/컨벤션센터/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타").replace(/OLIVIA/g, "올리비아");
+    if (/^(컨벤션(?:전체|ALL|AB)|컨AB)$/.test(name) || /^컨벤션(?:A\+B|1\+2\+3|123)$/.test(name)) return "CONVENTION_AB";
     if (/^컨벤션$/.test(name)) return "CONVENTION_AB";
     if (/^(컨벤션A|컨A|컨벤션[12])$/.test(name)) return "CONVENTION_A";
     if (/^(컨벤션B|컨B|컨벤션3)$/.test(name)) return "CONVENTION_B";
-    if (/^부라노(?:전체|ALL|1\+2\+3|I\+II\+III|123)?$/.test(name)) return "BURANO_ALL";
+    if (/^부라노(?:전체|ALL|1\+2\+3|123)?$/.test(name)) return "BURANO_ALL";
     if (/^부라노1$/.test(name)) return "BURANO_1";
     if (/^부라노2$/.test(name)) return "BURANO_2";
     if (/^부라노3$/.test(name)) return "BURANO_3";
-    if (/^카프리(?:전체|ALL|1\+2\+3|I\+II\+III|123)?$/.test(name)) return "CAPRI_ALL";
+    if (/^카프리(?:전체|ALL|1\+2\+3|123)?$/.test(name)) return "CAPRI_ALL";
     if (/^카프리1$/.test(name)) return "CAPRI_1";
     if (/^카프리2$/.test(name)) return "CAPRI_2";
     if (/^카프리3$/.test(name)) return "CAPRI_3";
-    if (/페스타/.test(name)) return "FESTA";
-    if (/올리비아/.test(name)) return "OLIVIA";
+    if (/^페스타$/.test(name)) return "FESTA";
+    if (/^올리비아$/.test(name)) return "OLIVIA";
     return "";
+  }
+  function normalizeVenueResult(value) {
+    const raw = String(value ?? "");
+    return { canonical: normalizeVenue(raw) || null, raw };
   }
   function atoms(code) { return new Set(ATOMIC_MEMBERS[code] || (code ? [code] : [])); }
   function collapseCodes(values) {
@@ -65,17 +74,18 @@
     }
     return codes;
   }
-  function parseVenueCodes(value) {
-    const text = String(value || "");
+  function normalizeVenueList(value) {
+    const text = prepareVenueText(value);
     const canonicalCode = text.trim().toUpperCase();
     if (VENUE_MASTER.some((item) => item.code === canonicalCode)) return [canonicalCode];
-    const pattern = /(?:컨벤션(?:센터)?|CONVENTION)\s*(?:A\s*\+\s*B|1\s*\+\s*2\s*\+\s*3|I\s*\+\s*II\s*\+\s*III|AB|전체|ALL|A|B|1|2|3)?|(?:부라노|BURANO)\s*(?:I\s*\+\s*II\s*\+\s*III|1\s*\+\s*2\s*\+\s*3|123|전체|ALL|III|II|I|1|2|3)?|(?:카프리|CAPRI)\s*(?:I\s*\+\s*II\s*\+\s*III|1\s*\+\s*2\s*\+\s*3|123|전체|ALL|III|II|I|1|2|3)?|(?:페스타|FESTA)|(?:올리비아|OLIVIA)/gi;
+    const pattern = /CONVENTION_(?:AB|A|B)|BURANO_(?:ALL|1|2|3)|CAPRI_(?:ALL|1|2|3)|(?:컨벤션(?:센터)?|CONVENTION)\s*(?:A\s*\+\s*B|1\s*\+\s*2\s*\+\s*3|AB|전체|ALL|A|B|1|2|3)?|컨\s*(?:AB|A|B)|(?:부라노|BURANO)\s*(?:1\s*\+\s*2\s*\+\s*3|123|전체|ALL|1|2|3)?|(?:카프리|CAPRI)\s*(?:1\s*\+\s*2\s*\+\s*3|123|전체|ALL|1|2|3)?|(?:페스타|FESTA)|(?:올리비아|OLIVIA)/gi;
     const codes = [...text.matchAll(pattern)].map((match) => normalizeVenue(match[0])).filter(Boolean);
     return collapseCodes(codes.length ? codes : [normalizeVenue(text)].filter(Boolean));
   }
+  function parseVenueCodes(value) { return normalizeVenueList(value); }
   function normalizeVenueSet(value) {
     const result = new Set();
-    parseVenueCodes(value).forEach((code) => atoms(code).forEach((atom) => result.add(atom)));
+    normalizeVenueList(value).forEach((code) => atoms(code).forEach((atom) => result.add(atom)));
     return result;
   }
   function spacesOverlap(left, right) {
@@ -94,7 +104,7 @@
       .map(({ item }) => ({ ...item, aliases: [...item.aliases] }));
   }
   function venueLabel(value) { const code = VENUE_MASTER.some((item) => item.code === value) ? value : normalizeVenue(value); return VENUE_MASTER.find((item) => item.code === code)?.label || ""; }
-  function formatVenueShort(value) { const codes = parseVenueCodes(value); if (codes.length > 1) return codes.map((code) => SHORT_LABELS[code]).filter(Boolean).join("+"); const code = codes[0] || normalizeVenue(value); return SHORT_LABELS[code] || String(value || "").replace(/^\s*\d+\s*F\s*/i, "").trim() || "장소 미정"; }
+  function formatVenueShort(value) { const codes = normalizeVenueList(value); if (codes.length > 1) return codes.map((code) => SHORT_LABELS[code]).filter(Boolean).join("+"); const code = codes[0] || normalizeVenue(value); return SHORT_LABELS[code] || String(value || "").replace(/^\s*\d+\s*(?:F|층)\s*/i, "").trim() || "장소 미정"; }
   function formatVenueShortList(values) {
     const labels = collapseCodes(values).map((code) => SHORT_LABELS[code]);
     if (!labels.length) return formatVenueShort((values || [])[0]);
@@ -103,5 +113,5 @@
     return `${labels[0]} 외 ${labels.length - 1}`;
   }
 
-  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueSet, spacesOverlap, formatVenueShort, formatVenueShortList, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
+  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, formatVenueShort, formatVenueShortList, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -38,6 +38,16 @@ assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1"]), "�
 assert.strictEqual(venue.formatVenueShortList(["컨벤션A", "부라노1", "카프리1"]), "컨A 외 2");
 assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 부라노 I")), ["BURANO_1"]);
 assert.deepStrictEqual(Array.from(venue.parseVenueCodes("3F 페스타, 부라노 I+II+III")), ["FESTA", "BURANO_ALL"]);
+for (const raw of ["3F 부라노", "부라노", "3F 부라노 ALL", "부라노 1+2+3", "부라노 I+II+III"]) assert.strictEqual(venue.normalizeVenue(raw), "BURANO_ALL", `${raw}는 BURANO_ALL이어야 한다`);
+assert.strictEqual(venue.normalizeVenue("3F 부라노 I"), "BURANO_1");
+for (const raw of ["2F 카프리", "카프리 1+2+3"]) assert.strictEqual(venue.normalizeVenue(raw), "CAPRI_ALL", `${raw}는 CAPRI_ALL이어야 한다`);
+assert.strictEqual(venue.normalizeVenue("카프리 II"), "CAPRI_2");
+assert.strictEqual(venue.normalizeVenue("1층 컨벤션 A"), "CONVENTION_A");
+assert.strictEqual(venue.normalizeVenue("2F 컨벤션"), "CONVENTION_AB");
+assert.deepStrictEqual(Array.from(venue.normalizeVenueList("3F 컨벤션AB + 페스타")), ["CONVENTION_AB", "FESTA"]);
+assert.deepStrictEqual(Array.from(venue.normalizeVenueList("페스타, 부라노 I+II+III")), ["FESTA", "BURANO_ALL"]);
+assert.deepStrictEqual(Array.from(venue.normalizeVenueList("컨벤션A / 올리비아")), ["CONVENTION_A", "OLIVIA"]);
+assert.strictEqual(JSON.stringify(venue.normalizeVenueResult("미확인 홀")), JSON.stringify({ canonical: null, raw: "미확인 홀" }));
 for (const raw of ["부라노", "부라노ALL", "부라노123", "부라노1+2+3", "부라노 I+II+III"]) assert.strictEqual(venue.normalizeVenue(raw), "BURANO_ALL", `D. ${raw}는 부라노전체여야 한다`);
 for (const raw of ["컨벤션AB", "컨벤션 A+B", "컨벤션1+2+3", "컨벤션 I+II+III"]) assert.strictEqual(venue.normalizeVenue(raw), "CONVENTION_AB", `${raw}는 컨벤션AB여야 한다`);
 assert.deepStrictEqual(Array.from(venue.parseVenueCodes("컨벤션AB + 페스타")), ["CONVENTION_AB", "FESTA"]);

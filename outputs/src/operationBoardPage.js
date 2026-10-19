@@ -237,8 +237,8 @@
     if (direct) { const key = `${direct[1] || today.slice(0, 4)}-${String(direct[2]).padStart(2, "0")}-${String(direct[3]).padStart(2, "0")}`; return { start: key, end: key, label: `${Number(direct[2])}/${Number(direct[3])}` }; }
     return null;
   }
-  function normalizedVenue(value) { const normalized = String(value || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리"); return normalized.replace(/카프리(I{1,3}(?:\+I{1,3})*)/g, (_, units) => `카프리${units.split("+").map((unit) => ({ I: "1", II: "2", III: "3" })[unit] || unit).join("+")}`); }
-  function venueTerm(text) { const utils = window.BANQUET_ERP_VENUE_UTILS; const codes = utils?.parseVenueCodes(text) || []; if (codes.length) return codes.map((code) => utils.venueLabel(code)).join(" + "); const normalized = normalizedVenue(text); const capri = normalized.match(/카프리(?:[123](?:\+[123])*)?/); if (capri) return capri[0]; return ["컨벤션", "부라노", "페스타", "포이어"].find((name) => normalized.includes(name)) || ""; }
+  function normalizedVenue(value) { const codes = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueList(value) || []; return codes.length ? codes.join("+") : String(value || "").toUpperCase().replace(/\s+/g, ""); }
+  function venueTerm(text) { const utils = window.BANQUET_ERP_VENUE_UTILS; const codes = utils?.normalizeVenueList(text) || []; if (codes.length) return codes.map((code) => utils.venueLabel(code)).join(" + "); const normalized = normalizedVenue(text); return normalized.includes("포이어") ? "포이어" : ""; }
   function eventVenueMatches(event, term) { if (!term) return true; const values = [event.venue, ...(event.schedule || []).map((row) => row.venue)]; const utils = window.BANQUET_ERP_VENUE_UTILS; const termSet = utils?.normalizeVenueSet(term); if (termSet?.size) return values.some((value) => utils.spacesOverlap(value, term)); return values.map(normalizedVenue).some((value) => value.includes(normalizedVenue(term))); }
   function eventDateKeys(event) { return [...new Set([...(event.calendarDates || []), event.startDate, event.endDate, String(event.eventDateTime || "").slice(0, 10), ...(event.schedule || []).map((row) => row.date)].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort(); }
   function eventInPeriod(event, period) {
@@ -331,8 +331,8 @@
     return { layoutType: hallStateLayout(value) || null, tables: tables == null ? null : Number(tables), seats: seats == null ? null : Number(seats), rows: rows == null ? null : Number(rows), columns: columns == null ? null : Number(columns), seatsPerTable: seatsPerTable == null ? null : Number(seatsPerTable), isCorrection: Boolean(correction || /아니고|정정|수정/.test(value)) };
   }
   function fieldSetupObservationText(space, facts) { return `현장 확인: ${[space, facts.layoutType, facts.tables != null ? `${facts.tables}T` : "", facts.seats != null ? `${facts.seats}석` : "", facts.rows != null ? `${facts.rows}줄` : "", facts.columns != null ? `${facts.columns}열` : "", facts.seatsPerTable != null ? `테이블당 ${facts.seatsPerTable}석` : ""].filter(Boolean).join(" / ")}`; }
-  function normalizeHallName(text) { return String(text || "").toUpperCase().replace(/\s+/g, "").replace(/CONVENTION/g, "컨벤션").replace(/BURANO/g, "부라노").replace(/CAPRI/g, "카프리").replace(/FESTA/g, "페스타"); }
-  function currentStateConventionUnit(value) { const text = normalizeHallName(value).replace(/센터/g, ""); if (/컨벤션(?:AB|전체|ALL)/i.test(text)) return "AB"; if (/컨벤션(?:A|1|2)(?:$|[^0-9])/i.test(text)) return "A"; if (/컨벤션(?:B|3)(?:$|[^0-9])/i.test(text)) return "B"; return ""; }
+  function normalizeHallName(text) { return normalizedVenue(text); }
+  function currentStateConventionUnit(value) { const code = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value); if (code === "CONVENTION_AB") return "AB"; if (code === "CONVENTION_A") return "A"; if (code === "CONVENTION_B") return "B"; return ""; }
   function operationalHallMatches(spaces, text) {
     const unit = currentStateConventionUnit(text); if (unit) {
       const convention = spaces.filter((space) => /^컨벤션(?:센터)?\s*[123]$/i.test(String(space.space_name || "").replace(/\s+/g, ""))); const member = (number) => convention.find((space) => new RegExp(`${number}$`).test(String(space.space_name || ""))); const one = member(1); const two = member(2); const three = member(3);

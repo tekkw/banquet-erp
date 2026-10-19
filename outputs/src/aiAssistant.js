@@ -672,13 +672,14 @@
       if (!text) return "새 대화";
 
       const compact = text.replace(/\s+/g, "");
-      const venueMatch = text.match(/(카프리\s*[ⅠⅡⅢI]{1,3}|카프리\s*\d|부라노\s*[ⅠⅡⅢI]{1,3}|부라노\s*\d|컨벤션\s*[AB]|피렌체|페스타|올리비아)/i);
+      const venueCode = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueList(text)?.[0] || "";
+      const venueMatch = venueCode ? window.BANQUET_ERP_VENUE_UTILS.venueLabel(venueCode) : text.match(/피렌체/i)?.[0] || "";
       const assetMatch = text.match(/([가-힣A-Za-z0-9+ ]{2,18}(?:테이블|의자|이젤|스탠드|냉온수기|마이크|포디움|단상|잔|기물))/i);
 
       if (/오늘/.test(text) && /(행사|일정|요약|정리)/.test(text)) return "오늘 행사 요약";
       if (/내일/.test(text) && /(인력|배치|직원|스태프)/.test(text)) return "내일 인력 추천";
       if (assetMatch && /(재고|수량|몇|있어|확인)/.test(text)) return limitConversationTitle(`${assetMatch[1].trim()} 재고`);
-      if (venueMatch && /(몇\s*명|수용|가능|세미나|배치)/.test(text)) return limitConversationTitle(`${normalizeTitleVenue(venueMatch[1])} 수용인원`);
+      if (venueMatch && /(몇\s*명|수용|가능|세미나|배치)/.test(text)) return limitConversationTitle(`${normalizeTitleVenue(venueMatch)} 수용인원`);
       if (/(인력|직원|스태프|배치)/.test(text)) return "인력 추천";
       if (/(비슷|유사|과거)/.test(text)) return "유사 행사 조회";
       if (/(자산|재고|기물|장비)/.test(text)) return "자산 재고 확인";
