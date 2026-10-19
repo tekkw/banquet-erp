@@ -103,6 +103,7 @@
   let speechNormalization = { matchedVenue: "", confidence: 0 };
   let fieldAiAutoSubmit = false;
   let fieldAiAwaitingAnswer = false;
+  let briefingActionInProgress = false;
   let voiceReplyEnabled = false;
   let lastSpokenText = "";
   let ttsSettings = loadTtsSettings();
@@ -1024,6 +1025,28 @@
     showMessage(auditSaved ? actionLabel : proposal.intent === "update_asset_location" ? "위치는 변경했지만 이동 기록 저장은 실패했습니다." : `${actionLabel} 변경 기록 저장은 실패했습니다.`, true);
   }
   function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak || fieldAiAwaitingAnswer) speakBoardReply(message); finishFieldAiAnswer(); }
+  function briefingActionsHtml(item) {
+    if (!item) return "";
+    return `<div class="board-ai-actions">${[["complete", "완료"], ["later", "아직"], ["original", "원본 보기"], ["attachments", "첨부자료"], ["notes", "특이사항"], ["next", "다음"]].map(([action, label]) => `<button type="button" data-briefing-action="${action}">${label}</button>`).join("")}</div>`;
+  }
+  function showBriefingResult(message, item = board.activeDailyBriefingItem(events)) {
+    aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>${briefingActionsHtml(item)}`;
+    speakBoardReply(message); finishFieldAiAnswer();
+  }
+  function showMobileDailyBriefing(force = false) {
+    if (briefingActionInProgress) return;
+    if (board.isDailyBriefingReady && !board.isDailyBriefingReady()) return;
+    const briefing = board.dailyBriefingConversation(events, undefined, force);
+    const signature = briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|");
+    const seenKey = `banquet-erp-mobile-daily-briefing-seen:${briefing.date}`;
+    if (!force && sessionStorage.getItem(seenKey) === signature) return;
+    sessionStorage.setItem(seenKey, signature);
+    showBriefingResult(`${briefing.summary}\n\n${briefing.question}`, briefing.current);
+  }
+  function markMobileDailyBriefingSeen() {
+    const briefing = board.buildDailyBriefing(events);
+    sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|"));
+  }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
@@ -1119,8 +1142,8 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
-    const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : "";
-    if (briefingAnswer) { showMessage(briefingAnswer, true); aiInput.value = ""; return; }
+    briefingActionInProgress = true; const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : ""; briefingActionInProgress = false;
+    if (briefingAnswer) { markMobileDailyBriefingSeen(); showBriefingResult(briefingAnswer); aiInput.value = ""; return; }
     if (!selectedAssetImageFile && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(text)) {
       showTransientMessage("음주류 재고와 행사 수요를 계산하고 있습니다…");
       try { const result = actionResultValue(await actionRegistry.executeAction("get_beverage_inventory_status", { question: text })); showMessage(result?.text || "음주류 재고를 확인하지 못했습니다.", true); aiInput.value = ""; }
@@ -1186,6 +1209,8 @@
   });
   aiInput.addEventListener("input", resizeAiInput);
   aiResult.addEventListener("click", async (event) => {
+    const briefingButton = event.target.closest("[data-briefing-action]");
+    if (briefingButton) { briefingActionInProgress = true; const result = board.dailyBriefingAction(briefingButton.dataset.briefingAction, events); briefingActionInProgress = false; markMobileDailyBriefingSeen(); showBriefingResult(result.message, result.current); return; }
     if (event.target.closest("[data-tts-settings-cancel]")) { pendingTtsSettingsProposal = null; showMessage("음성 설정 변경을 취소했습니다."); return; }
     if (event.target.closest("[data-tts-settings-approve]") && pendingTtsSettingsProposal) { const proposal = pendingTtsSettingsProposal; pendingTtsSettingsProposal = null; saveTtsSettings(proposal.settings); showMessage(`${proposal.summary} 설정을 적용했습니다.`, true); return; }
     if (event.target.closest("[data-setting-plan-propose]")) { showSettingTaskProposal(); return; }
@@ -1258,6 +1283,7 @@
     if (!opened) window.location.assign(route);
   };
   window.addEventListener("banquet:field-note-saved", () => refresh());
+  window.addEventListener("banquet:operation-board-rendered", () => showMobileDailyBriefing());
   window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }

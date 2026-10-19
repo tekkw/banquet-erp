@@ -246,6 +246,10 @@ body {
   box-shadow: 0 16px 40px rgba(2, 8, 23, .38);
   cursor: pointer;
 }
+.global-ai-launcher [data-ai-briefing-badge] { display: inline-grid; min-width: 20px; height: 20px; margin-left: 3px; padding: 0 5px; border-radius: 999px; background: #f97316; color: #fff; font-size: 11px; place-items: center; }
+.global-ai-launcher [data-ai-briefing-badge][hidden] { display: none; }
+.ai-briefing-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ai-briefing-actions button { min-height: 30px; padding: 4px 9px; border: 1px solid rgba(147, 197, 253, .38); border-radius: 999px; background: #102a40; color: #dbeafe; font: inherit; font-size: 11px; cursor: pointer; }
 
 .overlay-root .global-ai-drawer {
   position: fixed;

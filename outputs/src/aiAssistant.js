@@ -129,6 +129,40 @@
       return row;
     }
 
+    const briefingActions = [["complete", "완료"], ["later", "아직"], ["original", "원본 보기"], ["attachments", "첨부자료"], ["notes", "특이사항"], ["next", "다음"]];
+    function appendBriefingActions(row, item) {
+      if (!row || !item) return;
+      const actions = document.createElement("div"); actions.className = "ai-briefing-actions";
+      briefingActions.forEach(([action, label]) => { const button = document.createElement("button"); button.type = "button"; button.dataset.briefingAction = action; button.textContent = label; actions.append(button); });
+      row.querySelector(".chat-bubble")?.append(actions);
+    }
+    function showDailyBriefing({ force = false } = {}) {
+      const board = window.BANQUET_ERP_OPERATION_BOARD; const events = state.getEvents?.() || [];
+      if (!board?.dailyBriefingConversation) return null;
+      if (board.isDailyBriefingReady && !board.isDailyBriefingReady()) return null;
+      const briefing = board.dailyBriefingConversation(events, undefined, force);
+      const signature = briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|");
+      const seenKey = `banquet-erp-daily-briefing-seen:${briefing.date}`;
+      if (!force && sessionStorage.getItem(seenKey) === signature) return briefing;
+      sessionStorage.setItem(seenKey, signature);
+      appendChatMessage("assistant", briefing.summary);
+      const question = appendChatMessage("assistant", briefing.question); appendBriefingActions(question, briefing.current);
+      callbacks.onBriefingChange?.(briefing);
+      return briefing;
+    }
+    function markDailyBriefingSeen() {
+      const briefing = window.BANQUET_ERP_OPERATION_BOARD?.buildDailyBriefing(state.getEvents?.() || []); if (!briefing) return;
+      sessionStorage.setItem(`banquet-erp-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|"));
+    }
+    chatMessages.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-briefing-action]"); if (!button) return;
+      const result = window.BANQUET_ERP_OPERATION_BOARD?.dailyBriefingAction(button.dataset.briefingAction, state.getEvents?.() || []);
+      if (!result) return;
+      const row = appendChatMessage("assistant", result.message); appendBriefingActions(row, result.current);
+      markDailyBriefingSeen();
+      callbacks.onBriefingChange?.();
+    });
+
     /*
      * 왜 이 함수를 만들었는지:
      * - 사용자의 자연어 질문을 Supabase Edge Function으로 보내고 답변을 채팅창에 표시하기 위해 만들었다.
@@ -158,6 +192,9 @@
         const briefingAnswer = window.BANQUET_ERP_OPERATION_BOARD?.dailyBriefingAnswer(question, state.getEvents?.() || []);
         if (briefingAnswer) {
           loadingMessage.querySelector(".chat-bubble").textContent = briefingAnswer;
+          appendBriefingActions(loadingMessage, window.BANQUET_ERP_OPERATION_BOARD?.activeDailyBriefingItem(state.getEvents?.() || []));
+          markDailyBriefingSeen();
+          callbacks.onBriefingChange?.();
           return;
         }
         if (beverageQuestion) {
@@ -3261,6 +3298,7 @@
 
     return {
       handleChatSubmit,
+      showDailyBriefing,
       handleAiPageChatSubmit,
       handleAiPageInputKeydown,
       handleAiAttachmentSelect,

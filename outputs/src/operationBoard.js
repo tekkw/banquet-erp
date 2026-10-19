@@ -347,31 +347,87 @@
   }
   function buildDailyBriefing(events = currentEvents, today = seoulDateKey()) {
     const automatic = buildAutoBlocks(events, today).filter((item) => item.type === "next_setup" && item.next && !item.completed);
-    const persistent = state.manual.filter((item) => item.type === "next_setup" && !item.completed).map((item) => ({ ...item, completed: !!state.completions[item.key] || !!item.completed })).filter((item) => !item.completed);
-    const manualMatches = (candidate) => persistent.some((item) => String(item.eventOrderId || "") === String(candidate.next?.eventOrderId || candidate.eventOrderId || "") && spacesOverlap({ venue: item.venue }, { venue: candidate.venue }));
+    const manualItems = state.manual.filter((item) => item.type === "next_setup").map((item) => ({ ...item, completed: !!state.completions[item.key] || !!item.completed }));
+    const persistent = manualItems.filter((item) => !item.completed);
+    const manualMatches = (candidate) => manualItems.some((item) => String(item.eventOrderId || "") === String(candidate.next?.eventOrderId || candidate.eventOrderId || "") && spacesOverlap({ venue: item.venue }, { venue: candidate.venue }));
     const candidates = sortSetupTasks([...persistent, ...automatic.filter((item) => !manualMatches(item))], today).map((item) => {
       const eventOrderId = item.next?.eventOrderId || item.eventOrderId; const event = events.find((entry) => String(entry.id) === String(eventOrderId));
       const automaticSource = item.kind !== "manual" || item.metadataSource === "daily_briefing";
-      return { ...item, eventOrderId, source: automaticSource ? "automatic" : "manual", sourceLabel: automaticSource ? "자동" : "수동", summary: setupDocumentSummary(event), eventTitle: item.next?.name || item.title || (event ? eventDisplayTitle(event) : "행사") };
+      const summary = setupDocumentSummary(event);
+      return { ...item, eventOrderId, nextEventOrderId: eventOrderId, organizer: normalize(event?.companyName || event?.organizer), eventName: normalize(event?.eventName), scheduledDate: setupScheduledDate(item), scheduledTime: item.next?.time || item.time || "", setupSummary: summary, completed: false, source: automaticSource ? "automatic" : "manual", sourceLabel: automaticSource ? "자동" : "수동", summary, eventTitle: item.next?.name || item.title || (event ? eventDisplayTitle(event) : "행사") };
     });
     const todayEventIds = new Set(buildAutoBlocks(events, today).filter((item) => item.type !== "next_setup" && window.BANQUET_ERP_VENUE_UTILS?.parseVenueCodes(item.venue).length).map((item) => String(item.eventOrderId)));
     const todayEvents = events.filter((event) => todayEventIds.has(String(event.id)));
     return { date: today, todayEvents, candidates, count: candidates.length, prompt: candidates[0] ? `${candidates[0].venue} 세팅은 완료하셨나요?` : "확인할 다음 세팅이 없습니다." };
   }
-  function dailyBriefingAnswer(question, events = currentEvents, today = seoulDateKey()) {
-    if (/^(?:했어|했어요|완료|완료했어|끝냈어|응|네)[.!\s]*$/i.test(String(question || "")) && activeBriefingCandidateKey) {
-      const current = buildDailyBriefing(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey);
-      if (!current) { activeBriefingCandidateKey = ""; return "남은 다음 세팅이 없습니다."; }
+  function briefingItemPrompt(item) {
+    if (!item) return "확인할 다음 세팅이 없습니다.";
+    const venue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel(item.venue) || item.venue;
+    const eventTitle = item.organizer || item.eventName || item.eventTitle;
+    const detail = item.setupSummary === "등록된 세팅 정보 없음" ? "등록된 세팅 정보는 없습니다." : item.setupSummary === "레이아웃 재인폼 예정" ? "레이아웃은 재인폼 예정입니다." : `${item.setupSummary}으로 적혀 있습니다.`;
+    return `${venue} 다음 행사는 ${eventTitle}입니다.\n${detail}\n세팅 완료하셨나요?`;
+  }
+  function dailyBriefingConversation(events = currentEvents, today = seoulDateKey(), reset = false) {
+    const briefing = buildDailyBriefing(events, today);
+    let current = !reset && briefing.candidates.find((item) => item.key === activeBriefingCandidateKey);
+    if (!current) current = briefing.candidates[0] || null;
+    activeBriefingCandidateKey = current?.key || "";
+    return { ...briefing, current, summary: `오늘 행사는 ${briefing.todayEvents.length}건입니다.\n다음 세팅 확인이 필요한 공간은 ${briefing.count}곳입니다.`, question: briefingItemPrompt(current) };
+  }
+  function nextBriefingCandidate(events = currentEvents, today = seoulDateKey()) {
+    const candidates = buildDailyBriefing(events, today).candidates;
+    const index = candidates.findIndex((item) => item.key === activeBriefingCandidateKey);
+    const next = candidates[index >= 0 ? index + 1 : 0] || null;
+    activeBriefingCandidateKey = next?.key || "";
+    return next;
+  }
+  function activeDailyBriefingItem(events = currentEvents, today = seoulDateKey()) {
+    return buildDailyBriefing(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey) || null;
+  }
+  function openBriefingResource(action, item, events = currentEvents) {
+    const event = events.find((entry) => String(entry.id) === String(item?.nextEventOrderId));
+    if (!item || !event) return "현재 확인 중인 다음 행사를 찾지 못했습니다.";
+    if (action === "original") {
+      if (!event.storagePath) return "등록된 원본 파일이 없습니다.";
+      window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" });
+      return `${item.eventTitle} 원본 엑셀을 열었습니다.`;
+    }
+    if (action === "attachments") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openEventAttachments(event.id, item.eventTitle); return `${item.eventTitle} 첨부자료를 열었습니다.`; }
+    if (action === "notes") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openFieldNotes(event.id, item.eventTitle); return `${item.eventTitle} 특이사항을 열었습니다.`; }
+    return "";
+  }
+  function dailyBriefingAction(action, events = currentEvents, today = seoulDateKey()) {
+    const current = activeDailyBriefingItem(events, today) || dailyBriefingConversation(events, today).current;
+    if (!current) return { message: "남은 다음 세팅이 없습니다.", current: null };
+    if (["original", "attachments", "notes"].includes(action)) return { message: openBriefingResource(action, current, events), current };
+    if (action === "complete") {
       completeBoardItem(current.key, true, today);
-      const next = buildDailyBriefing(events, today).candidates[0]; activeBriefingCandidateKey = next?.key || "";
-      return next ? `${current.venue} 완료 처리했습니다.\n${next.venue}은 ${next.summary}입니다. 완료하셨나요?` : `${current.venue} 완료 처리했습니다. 남은 다음 세팅이 없습니다.`;
+      const next = buildDailyBriefing(events, today).candidates[0] || null;
+      activeBriefingCandidateKey = next?.key || "";
+      return { message: next ? `${current.venue} 완료 처리했습니다.\n${briefingItemPrompt(next)}` : `${current.venue} 완료 처리했습니다. 남은 다음 세팅이 없습니다.`, current: next };
+    }
+    const next = nextBriefingCandidate(events, today);
+    const prefix = action === "later" ? `${current.venue} 세팅은 미완료 상태로 유지합니다.` : `${current.venue} 세팅은 건너뜁니다.`;
+    return { message: next ? `${prefix}\n${briefingItemPrompt(next)}` : `${prefix}\n이번 briefing에서 더 확인할 항목이 없습니다.`, current: next };
+  }
+  function dailyBriefingAnswer(question, events = currentEvents, today = seoulDateKey()) {
+    const text = String(question || "");
+    const active = activeDailyBriefingItem(events, today);
+    if (active && /원본|엑셀/.test(text)) return openBriefingResource("original", active, events);
+    if (active && /첨부/.test(text)) return openBriefingResource("attachments", active, events);
+    if (active && /특이사항|현장\s*메모/.test(text)) return openBriefingResource("notes", active, events);
+    if (active && /레이아웃|lay\s*&?\s*out/i.test(text)) return active.setupSummary;
+    if (active && /^(?:아직|안\s*했어|미완료)[.!\s]*$/i.test(text)) return dailyBriefingAction("later", events, today).message;
+    if (active && /^(?:다음|넘겨|건너뛰어)[.!\s]*$/i.test(text)) return dailyBriefingAction("next", events, today).message;
+    if (/^(?:했어|했어요|완료|완료했어|끝냈어|응|네)[.!\s]*$/i.test(String(question || "")) && activeBriefingCandidateKey) {
+      return dailyBriefingAction("complete", events, today).message;
     }
     if (!/(오늘\s*(?:뭐|무엇).*해야|다음\s*세팅.*(?:뭐|남)|어떻게\s*세팅|레이아웃.*(?:뭐|적)|재인폼)/i.test(String(question || ""))) return "";
     const briefing = buildDailyBriefing(events, today); const venueSet = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(question);
     const rows = venueSet?.size ? briefing.candidates.filter((item) => window.BANQUET_ERP_VENUE_UTILS.spacesOverlap(item.venue, question)) : /재인폼/.test(question) ? briefing.candidates.filter((item) => /재인폼/.test(item.summary)) : briefing.candidates;
     if (!rows.length) return "남은 다음 세팅이 없습니다.";
     activeBriefingCandidateKey = rows[0].key;
-    return rows.map((item) => `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel(item.venue) || item.venue} · ${item.eventTitle}\n${item.summary}`).join("\n");
+    return briefingItemPrompt(rows[0]);
   }
   function loadState() {
     try { return { completions: {}, plans: {}, reminders: {}, pins: {}, setupOverrides: {}, manual: [], checklist: [], fieldNotes: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
@@ -513,13 +569,10 @@
     const spaceGroups = groupBlocksBySpace(operationBlocks.filter((block) => !block.completed));
     const showStandaloneMobileAgenda = window.location?.pathname?.includes("/board/");
     const beverageWarning = window.BANQUET_ERP_BEVERAGE_INVENTORY?.warningHtml(currentEvents) || "";
-    const dailyBriefing = buildDailyBriefing(currentEvents, actualToday);
-    activeBriefingCandidateKey = dailyBriefing.candidates[0]?.key || "";
     root.innerHTML = `<div class="operation-board-heading"><div><span class="eyebrow">Daily Operations</span><h2>운영보드</h2></div><div class="operation-board-actions"><button class="secondary-button" type="button" data-push-toggle>🔔 휴대폰 알림 켜기</button><label>운영 알림 기본값 ${reminderSelect("default", defaultReminder, true)}</label></div></div>
       ${beverageWarning}
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      <section class="daily-operations-briefing" aria-label="오늘 운영 브리핑"><div class="daily-operations-briefing-heading"><div><strong>오늘 확인할 운영 브리핑 ${dailyBriefing.count}건</strong><small>오늘 행사 ${dailyBriefing.todayEvents.length}건 · 다음 세팅 ${dailyBriefing.count}곳</small></div></div><div class="daily-operations-briefing-list">${dailyBriefing.candidates.map((item) => `<article data-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-complete><span><strong>${escapeHtml(item.venue)} · ${escapeHtml(item.eventTitle)}</strong><small>${escapeHtml(item.summary)}</small></span></label><em>${item.sourceLabel}</em><div>${renderOriginalAction(item.eventOrderId)}<button type="button" data-event-attachments="${escapeHtml(item.eventOrderId)}">첨부자료</button><button type="button" data-field-notes="${escapeHtml(item.eventOrderId)}">특이사항</button>${item.source === "automatic" ? '<button type="button" data-briefing-add>작업으로 추가</button>' : ""}<button type="button" data-setup-pin>${state.pins[item.key] ? "고정 해제" : "상단 고정"}</button></div></article>`).join("") || "<p>확인할 다음 세팅이 없습니다.</p>"}</div>${dailyBriefing.candidates.length ? `<p>${escapeHtml(dailyBriefing.prompt)}</p>` : ""}</section>
       <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
       <section class="operation-board-tab-panel" data-board-tab-panel="operations" ${activeBoardTab === "operations" ? "" : "hidden"}>
         ${showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
@@ -835,7 +888,7 @@
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
     weeklyRoot?.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
     weeklyRoot?.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
-    root.querySelectorAll("[data-complete]").forEach((control) => { const complete = () => completeBoardItem(control.closest("[data-key]").dataset.key, control.matches('input[type="checkbox"]') ? control.checked : true, control.closest(".daily-operations-briefing") ? seoulDateKey() : selectedDate); if (control.matches('input[type="checkbox"]')) control.onchange = complete; else control.onclick = complete; });
+    root.querySelectorAll("[data-complete]").forEach((control) => { const complete = () => completeBoardItem(control.closest("[data-key]").dataset.key, control.matches('input[type="checkbox"]') ? control.checked : true, selectedDate); if (control.matches('input[type="checkbox"]')) control.onchange = complete; else control.onclick = complete; });
     root.querySelectorAll("[data-restore-complete]").forEach((button) => button.onclick = () => completeBoardItem(button.closest("[data-key]").dataset.key, false));
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
     root.querySelectorAll("[data-delete]").forEach((button) => button.onclick = () => deleteManual(button.closest("[data-key]").dataset.key));
@@ -896,5 +949,5 @@
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, dailyBriefingAnswer, setupDocumentSummary, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, setupDocumentSummary, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; activeBriefingCandidateKey = ""; } };
 })();

@@ -4,11 +4,11 @@ const vm = require("vm");
 
 const memory = new Map();
 const context = {
-  window: {},
+  window: { BANQUET_ERP_CONSTANTS: { supabaseConfig: { url: "https://example.test", anonKey: "test" } } },
   localStorage: { getItem: (key) => memory.get(key) || null, setItem: (key, value) => memory.set(key, value) },
   sessionStorage: { getItem: () => null, setItem: () => {} },
   document: { getElementById: () => null },
-  crypto: { randomUUID: () => "test-id" },
+  crypto: { randomUUID: () => "test-id" }, fetch: async () => ({ ok: true, text: async () => "" }),
   console, Date, Intl, Set, Map,
 };
 vm.createContext(context);
@@ -19,7 +19,7 @@ const board = context.window.BANQUET_ERP_OPERATION_BOARD;
 const today = "2026-10-19";
 const events = [
   { id: "current", eventName: "오늘 행사", companyName: "오늘 주최", calendarDates: [today], venue: "페스타", schedule: [{ date: today, time: "09:00~18:00", content: "본 행사", venue: "페스타" }] },
-  { id: "next", eventName: "긴 행사명", companyName: "콘텐츠랩", calendarDates: ["2026-10-20"], venue: "페스타", layoutText: "Class Type 40석", othersText: "등록테이블 2T / 마이크 2EA", schedule: [{ date: "2026-10-20", time: "08:00", content: "행사 시작", venue: "페스타" }] },
+  { id: "next", eventName: "긴 행사명", companyName: "콘텐츠랩", calendarDates: ["2026-10-20"], venue: "페스타", storagePath: "orders/next.xlsx", layoutText: "Class Type 40석", othersText: "등록테이블 2T / 마이크 2EA", schedule: [{ date: "2026-10-20", time: "08:00", content: "행사 시작", venue: "페스타" }] },
   { id: "front", eventName: "체크인", calendarDates: [today], venue: "Front", schedule: [{ date: today, time: "15:00", content: "CHECK IN", venue: "Front" }] },
 ];
 
@@ -41,12 +41,29 @@ board._setStateForTest({ completions: {}, manual: [overdue], checklist: [], pins
 briefing = board.buildDailyBriefing(events, today);
 assert(briefing.candidates.some((item) => item.key === overdue.key), "H. 미완료 overdue 작업을 계속 표시해야 한다");
 assert.strictEqual(briefing.candidates.filter((item) => item.eventOrderId === "next").length, 1, "I. 수동 task와 자동 후보를 중복 표시하면 안 된다");
-assert.strictEqual(board.dailyBriefingAnswer("오늘 뭐 해야 돼?", events, today), briefing.candidates.map((item) => `${item.venue} · ${item.eventTitle}\n${item.summary}`).join("\n"), "J. AI 질문은 동일 briefing source를 사용해야 한다");
+assert.match(board.dailyBriefingAnswer("오늘 뭐 해야 돼?", events, today), /페스타 다음 행사는 콘텐츠랩.*클래스 40석.*세팅 완료/s, "J. AI 질문은 동일 briefing source의 첫 항목만 대화형으로 물어야 한다");
+
+const nextTwo = { id: "next-two", eventName: "두 번째 행사", companyName: "두 번째 주최", calendarDates: ["2026-10-21"], venue: "카프리1", layoutText: "Round Type 60석", schedule: [{ date: "2026-10-21", time: "09:00", content: "행사 시작", venue: "카프리1" }] };
+const second = { key: "manual-second", kind: "manual", type: "next_setup", date: "2026-10-19", time: "10:00", venue: "카프리1", eventOrderId: "next-two", title: "두 번째 주최", completed: false };
+board._setStateForTest({ completions: {}, manual: [overdue, second], checklist: [], pins: {}, setupOverrides: { [overdue.key]: { eventDate: "2026-10-18", time: "08:00" }, [second.key]: { eventDate: "2026-10-21", time: "10:00" } } });
+context.window.openStoredExcel = (path, options) => { context.openedOriginal = { path, options }; };
+const conversation = board.dailyBriefingConversation([...events, nextTwo], today, true);
+assert.strictEqual(conversation.count, 2, "미완료 2건은 AI badge/queue count 2가 되어야 한다");
+assert.deepStrictEqual(JSON.parse(JSON.stringify(Object.fromEntries(["venue", "nextEventOrderId", "organizer", "eventName", "scheduledDate", "scheduledTime", "setupSummary", "completed", "source"].map((key) => [key, conversation.current[key]])))), { venue: "페스타", nextEventOrderId: "next", organizer: "콘텐츠랩", eventName: "긴 행사명", scheduledDate: "2026-10-18", scheduledTime: "08:00", setupSummary: "클래스 40석 · 등록 2T · 마이크 2EA", completed: false, source: "manual" });
+board.dailyBriefingAction("original", [...events, nextTwo], today);
+assert.strictEqual(context.openedOriginal.options.eventOrderId, "next", "원본 보기는 현재 briefing item의 eventOrderId를 사용해야 한다");
+assert.match(board.dailyBriefingAnswer("레이아웃은?", [...events, nextTwo], today), /클래스 40석/, "현재 briefing item이 대화 context로 유지되어야 한다");
+const progressed = board.dailyBriefingAction("complete", [...events, nextTwo], today);
+assert.strictEqual(progressed.current.key, second.key, "완료 후 다음 미완료 항목으로 진행해야 한다");
+assert.strictEqual(board.buildDailyBriefing([...events, nextTwo], today).count, 1, "완료 항목은 queue/badge에서 제외해야 한다");
 
 const source = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
 const mobile = fs.readFileSync("outputs/src/operationBoardPage.js", "utf8");
 const pc = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 assert(source.includes('kind: "manual", metadataSource: "daily_briefing"'), "자동 후보를 체크/고정할 때 기존 공용 setup task로 승격해야 한다");
 assert(mobile.includes("board.dailyBriefingAnswer(text, events)") && pc.includes("dailyBriefingAnswer(question, state.getEvents?.() || [])"), "PC/모바일 AI 질문이 공용 briefing source를 사용해야 한다");
+assert(!source.includes('class="daily-operations-briefing"'), "A. 운영보드 상단 큰 briefing card를 제거해야 한다");
+assert(pc.includes("showDailyBriefing") && pc.includes("data-briefing-action"), "C/D. PC drawer는 briefing 첫 메시지와 progression action을 사용해야 한다");
+assert(mobile.includes("showMobileDailyBriefing") && mobile.includes("data-briefing-action"), "H. 모바일도 동일 queue와 completion action을 사용해야 한다");
 
 console.log("daily operations briefing V1 tests passed");
