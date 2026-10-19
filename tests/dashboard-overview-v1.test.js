@@ -21,7 +21,7 @@ assert(operationBoard.includes('<button type="button" data-board-cancel>취소</
 assert(!operationBoard.includes('<button value="cancel">취소</button>'));
 assert(html.includes('id="weeklySetupWidget"'));
 assert(html.includes('dashboardWidgets.js?v='));
-assert(html.includes('operationBoard.js?v=daily-briefing-v2'));
+assert(html.includes('operationBoard.js?v=proactive-alerts-v1'));
 assert(dashboardWidgets.includes('banquet-erp-dashboard-layout-v1'));
 assert(dashboardWidgets.includes('data-widget-hide'));
 assert(dashboardWidgets.includes('widget-resize-handle'));

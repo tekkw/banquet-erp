@@ -129,11 +129,11 @@
       return row;
     }
 
-    const briefingActions = [["complete", "완료"], ["later", "아직"], ["original", "원본 보기"], ["attachments", "첨부자료"], ["notes", "특이사항"], ["next", "다음"]];
+    const briefingActionLabels = { complete: "완료", later: "아직", original: "원본 보기", attachments: "첨부자료", notes: "특이사항", next: "다음", acknowledge: "확인", inventory: "재고 보기", demand: "수요 상세", candidates: "후보 확인", changes: "변경 내용 보기" };
     function appendBriefingActions(row, item) {
       if (!row || !item) return;
       const actions = document.createElement("div"); actions.className = "ai-briefing-actions";
-      briefingActions.forEach(([action, label]) => { const button = document.createElement("button"); button.type = "button"; button.dataset.briefingAction = action; button.textContent = label; actions.append(button); });
+      (item.actions || ["acknowledge", "next"]).forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.dataset.briefingAction = action; button.textContent = briefingActionLabels[action] || action; actions.append(button); });
       row.querySelector(".chat-bubble")?.append(actions);
     }
     function showDailyBriefing({ force = false } = {}) {
@@ -141,7 +141,7 @@
       if (!board?.dailyBriefingConversation) return null;
       if (board.isDailyBriefingReady && !board.isDailyBriefingReady()) return null;
       const briefing = board.dailyBriefingConversation(events, undefined, force);
-      const signature = briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|");
+      const signature = briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|");
       const seenKey = `banquet-erp-daily-briefing-seen:${briefing.date}`;
       if (!force && sessionStorage.getItem(seenKey) === signature) return briefing;
       sessionStorage.setItem(seenKey, signature);
@@ -151,8 +151,8 @@
       return briefing;
     }
     function markDailyBriefingSeen() {
-      const briefing = window.BANQUET_ERP_OPERATION_BOARD?.buildDailyBriefing(state.getEvents?.() || []); if (!briefing) return;
-      sessionStorage.setItem(`banquet-erp-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|"));
+      const briefing = window.BANQUET_ERP_OPERATION_BOARD?.buildProactiveAlerts(state.getEvents?.() || []); if (!briefing) return;
+      sessionStorage.setItem(`banquet-erp-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|"));
     }
     chatMessages.addEventListener("click", (event) => {
       const button = event.target.closest("[data-briefing-action]"); if (!button) return;

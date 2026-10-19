@@ -17,7 +17,7 @@ assert(index.includes('id="eventAttachmentPicker"') && index.includes('uploadEve
 assert(index.includes('data-event-attachments') && index.includes('data-event-field-notes'), "행사 상세에서 첨부자료와 현장 특이사항을 분리 표시해야 한다");
 const overwrite = index.slice(index.indexOf("async function overwriteEventInSupabase"), index.indexOf("async function deleteEventFromSupabase"));
 assert(!/file_links[^\n]+DELETE|files[^\n]+DELETE/.test(overwrite), "이벤트오더 덮어쓰기에서 기존 첨부를 삭제하면 안 된다");
-assert(index.includes('eventAttachments.js?v=event-attachments-v1') && boardHtml.includes('eventAttachments.js?v=event-attachments-v1'), "PC/모바일은 같은 첨부 모듈을 사용해야 한다");
+assert(index.includes('eventAttachments.js?v=proactive-alerts-v1') && boardHtml.includes('eventAttachments.js?v=proactive-alerts-v1'), "PC/모바일은 같은 첨부 모듈을 사용해야 한다");
 assert(board.includes('data-event-attachments') && board.includes('data-field-notes') && board.includes('특이사항${fieldNoteCount'), "운영보드 카드에서 첨부와 특이사항 건수에 접근할 수 있어야 한다");
 assert(boardPage.includes('window.addEventListener("banquet:field-note-saved", () => refresh())'), "모바일 저장 결과가 공용 행사 데이터로 다시 동기화되어야 한다");
 assert(manager.includes('entity_id=eq.${encodeURIComponent(entityId)}'), "다른 행사의 첨부가 섞이지 않도록 entity id로 조회해야 한다");

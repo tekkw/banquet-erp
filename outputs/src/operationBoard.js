@@ -47,6 +47,7 @@
     try { sessionStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify([...mobileOpenGroups])); } catch { /* session storage unavailable */ }
   }
   function normalize(value) { return String(value || "").trim().replace(/\s+/g, " "); }
+  function valueList(value) { return Array.isArray(value) ? value : value == null || value === "" ? [] : [value]; }
   function timeValue(value) {
     const match = normalize(value).match(/(\d{1,2})\s*[:시]\s*(\d{0,2})/);
     return match ? `${String(Number(match[1])).padStart(2, "0")}:${String(Number(match[2] || 0)).padStart(2, "0")}` : "";
@@ -329,8 +330,8 @@
     const notes = event.notes || []; const items = event.items || [];
     const linkedLayout = (event.venueLayouts || []).find((layout) => String(layout.id) === String(event.sourceLayoutId || event.source_layout_id || ""));
     const savedLayout = [event.savedLayout?.layout_name, event.savedLayout?.name, event.sourceLayout?.layout_name, event.sourceLayout?.name, linkedLayout?.layout_name, linkedLayout?.name].find(Boolean);
-    const layout = [event.layoutText, ...(event.layoutEqp || []), ...notes.filter((row) => row.note_type === "layout_eqp").map((row) => row.content)].find((value) => normalize(value));
-    const others = [event.othersText, ...notes.filter((row) => ["others", "event_notes", "special_requests"].includes(row.note_type)).map((row) => row.content)].find((value) => normalize(value));
+    const layout = [event.layoutText, ...valueList(event.layoutEqp), ...notes.filter((row) => row.note_type === "layout_eqp").map((row) => row.content)].find((value) => normalize(value));
+    const others = [event.othersText, ...valueList(event.others), ...notes.filter((row) => ["others", "event_notes", "special_requests"].includes(row.note_type)).map((row) => row.content)].find((value) => normalize(value));
     const itemText = items.map((row) => normalize(row.item_name || row.name || row.content || row.memo)).filter(Boolean).join(" · ");
     const source = [savedLayout, layout, others, itemText].map(normalize).filter(Boolean).join(" · ");
     if (!source) return "등록된 세팅 정보 없음";
@@ -341,8 +342,10 @@
     if (classType) facts.push(`클래스 ${classType[1]}석`); else if (layoutType) facts.push(layoutType[1].replace(/\s+/g, ""));
     const registration = source.match(/(?:등록\s*테이블|등록대|registration\s*table)[^\d]{0,10}(\d+)\s*(?:T|EA|개)?/i);
     if (registration) facts.push(`등록 ${registration[1]}T`);
-    const equipmentPatterns = [[/(?:마이크|mic)[^\d]{0,8}(\d+)\s*(?:EA|개)?/i, "마이크", "EA"], [/(?:스크린|screen)[^\d]{0,8}(\d+)\s*(?:EA|개)?/i, "스크린", "EA"], [/(?:무대|stage)[^\d]{0,8}(\d+)?/i, "무대", ""], [/(?:뷔페|buffet)/i, "뷔페", ""], [/(?:커피\s*브레이크|coffee\s*break)/i, "커피브레이크", ""]];
-    equipmentPatterns.forEach(([pattern, label, unit]) => { const match = source.match(pattern); if (match) facts.push(`${label}${match[1] ? ` ${match[1]}${unit}` : ""}`); });
+    const roundType = source.match(/(?:round\s*type|라운드)[^\d]{0,12}(\d+)\s*(?:T|석)?/i);
+    if (roundType) facts.push(`라운드 ${roundType[1]}${/석/i.test(roundType[0]) ? "석" : "T"}`);
+    const equipmentPatterns = [[/(?:무선\s*마이크)[^\d]{0,8}(\d+)\s*(?:EA|개)?/i, "무선마이크", "EA"], [/(?:유선\s*마이크)[^\d]{0,8}(\d+)?\s*(?:EA|개)?/i, "유선마이크", "EA"], [/(?:마이크|mic)[^\d]{0,8}(\d+)\s*(?:EA|개)?/i, "마이크", "EA"], [/(?:스크린|screen)[^\d]{0,8}(\d+)?\s*(?:EA|개)?/i, "스크린", "EA"], [/(?:빔\s*프로젝터|projector)[^\d]{0,8}(\d+)?\s*(?:EA|개)?/i, "빔프로젝터", "EA"], [/(?:무대|stage)[^\d]{0,8}(\d+)?/i, "무대", ""], [/(?:뷔페|buffet)/i, "뷔페", ""], [/(?:커피\s*브레이크|coffee\s*break)/i, "커피브레이크", ""]];
+    equipmentPatterns.forEach(([pattern, label, unit]) => { if (label === "마이크" && /(?:무선|유선)\s*마이크/i.test(source)) return; const match = source.match(pattern); if (match) facts.push(`${label}${match[1] ? ` ${match[1]}${unit}` : ""}`); });
     return [...new Set(facts)].slice(0, 4).join(" · ") || source.slice(0, 90);
   }
   function buildDailyBriefing(events = currentEvents, today = seoulDateKey()) {
@@ -360,6 +363,50 @@
     const todayEvents = events.filter((event) => todayEventIds.has(String(event.id)));
     return { date: today, todayEvents, candidates, count: candidates.length, prompt: candidates[0] ? `${candidates[0].venue} 세팅은 완료하셨나요?` : "확인할 다음 세팅이 없습니다." };
   }
+  const ALERT_PRIORITY = { high: 0, medium: 1, normal: 2 };
+  function alertHash(value) {
+    let hash = 2166136261;
+    for (const character of JSON.stringify(value ?? null)) { hash ^= character.charCodeAt(0); hash = Math.imul(hash, 16777619); }
+    return (hash >>> 0).toString(36);
+  }
+  function isAlertAcknowledged(id) { return Boolean(state.alertAcknowledgements?.[id]); }
+  function layoutReinformText(event = {}) {
+    const values = [event.layoutText, ...valueList(event.layoutEqp), event.othersText, ...valueList(event.others), ...(event.notes || []).filter((row) => ["layout_eqp", "others", "event_notes"].includes(row.note_type)).map((row) => row.content)];
+    return values.map(normalize).find((value) => /re[- ]?inform|재인폼|추후\s*(?:재인폼|안내)|별도\s*안내/i.test(value)) || "";
+  }
+  function setupAlert(item, today) {
+    const overdue = isSetupOverdue(item, today);
+    return { ...item, id: `next_setup:${item.key}`, type: overdue ? "overdue_setup" : "next_setup", priority: overdue ? "high" : "normal", title: `${item.venue} 다음 세팅 확인`, summary: item.setupSummary, createdAt: item.scheduledDate || today, acknowledged: false, completed: false, sourceMetadata: { source: item.source, setupKey: item.key }, actions: ["complete", "later", "original", "attachments", "notes", "next"] };
+  }
+  function beverageShortageAlert(events, today) {
+    const comparison = window.BANQUET_ERP_BEVERAGE_INVENTORY?.getComparison(events, today);
+    if (!comparison?.snapshot || !comparison.shortageCount) return null;
+    const shortages = Object.values(comparison.items).filter((item) => item.shortage > 0);
+    const signature = alertHash({ uploadedAt: comparison.snapshot.uploadedAt, required: comparison.demand.required, details: comparison.demand.details, shortage: shortages.map((item) => [item.key, item.shortage]) });
+    const id = `beverage_shortage:${signature}`;
+    if (isAlertAcknowledged(id)) return null;
+    return { id, key: id, type: "beverage_shortage", priority: "high", title: "음주류 발주 필요", summary: shortages.map((item) => `${item.label} ${item.shortage}개`).join(", ") + " 부족", eventOrderId: null, venue: "", createdAt: comparison.snapshot.uploadedAt || new Date().toISOString(), acknowledged: false, completed: false, sourceMetadata: { signature, comparison }, actions: ["inventory", "demand", "acknowledge", "next"] };
+  }
+  function buildProactiveAlerts(events = currentEvents, today = seoulDateKey()) {
+    const briefing = buildDailyBriefing(events, today); const alerts = [];
+    briefing.candidates.forEach((item) => {
+      alerts.push(setupAlert(item, today));
+      const event = events.find((entry) => String(entry.id) === String(item.nextEventOrderId)); const reinform = layoutReinformText(event);
+      const id = `layout_reinform:${item.nextEventOrderId}:${alertHash(reinform)}`;
+      if (reinform && !isAlertAcknowledged(id)) alerts.push({ id, key: id, type: "layout_reinform", priority: "medium", title: `${item.venue} 레이아웃 확인 필요`, summary: `${item.organizer || item.eventName || item.eventTitle} 행사는 LAY & OUT이 재인폼 상태입니다.`, eventOrderId: item.nextEventOrderId, venue: item.venue, eventTitle: item.eventTitle, setupSummary: item.setupSummary, createdAt: item.scheduledDate || today, acknowledged: false, completed: false, sourceMetadata: { text: reinform, setupKey: item.key }, actions: ["original", "next", "acknowledge"] });
+    });
+    const beverage = beverageShortageAlert(events, today); if (beverage) alerts.push(beverage);
+    (state.proactiveAlerts || []).filter((item) => !item.acknowledged && !item.completed && !isAlertAcknowledged(item.id)).forEach((item) => alerts.push(item));
+    const deduped = [...new Map(alerts.map((item) => [item.id, item])).values()].sort((left, right) => (ALERT_PRIORITY[left.priority] ?? 9) - (ALERT_PRIORITY[right.priority] ?? 9) || String(left.createdAt || "").localeCompare(String(right.createdAt || "")));
+    return { date: today, todayEvents: briefing.todayEvents, alerts: deduped, candidates: deduped, count: deduped.length, prompt: deduped[0]?.summary || "확인할 proactive alert가 없습니다." };
+  }
+  function proactiveAlertSummary(item) {
+    if (!item) return "확인할 proactive alert가 없습니다.";
+    if (item.type === "next_setup" || item.type === "overdue_setup") return briefingItemPrompt(item);
+    if (item.type === "layout_reinform") return `${item.venue} 다음 행사는 레이아웃이 재인폼 상태입니다.\n확인 필요합니다.`;
+    if (item.type === "beverage_shortage") return `다음주 일요일까지 기준으로 ${item.summary.replace(/, /g, "와 ")}합니다.`;
+    return `${item.title}\n${item.summary}`;
+  }
   function briefingItemPrompt(item) {
     if (!item) return "확인할 다음 세팅이 없습니다.";
     const venue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel(item.venue) || item.venue;
@@ -368,47 +415,60 @@
     return `${venue} 다음 행사는 ${eventTitle}입니다.\n${detail}\n세팅 완료하셨나요?`;
   }
   function dailyBriefingConversation(events = currentEvents, today = seoulDateKey(), reset = false) {
-    const briefing = buildDailyBriefing(events, today);
+    const briefing = buildProactiveAlerts(events, today);
     let current = !reset && briefing.candidates.find((item) => item.key === activeBriefingCandidateKey);
     if (!current) current = briefing.candidates[0] || null;
     activeBriefingCandidateKey = current?.key || "";
-    return { ...briefing, current, summary: `오늘 행사는 ${briefing.todayEvents.length}건입니다.\n다음 세팅 확인이 필요한 공간은 ${briefing.count}곳입니다.`, question: briefingItemPrompt(current) };
+    const outline = briefing.candidates.slice(0, 4).map((item) => `- ${item.title}`).join("\n");
+    return { ...briefing, current, summary: `오늘 확인할 게 ${briefing.count}가지 있습니다.${outline ? `\n${outline}` : ""}`, question: proactiveAlertSummary(current) };
   }
   function nextBriefingCandidate(events = currentEvents, today = seoulDateKey()) {
-    const candidates = buildDailyBriefing(events, today).candidates;
+    const candidates = buildProactiveAlerts(events, today).candidates;
     const index = candidates.findIndex((item) => item.key === activeBriefingCandidateKey);
     const next = candidates[index >= 0 ? index + 1 : 0] || null;
     activeBriefingCandidateKey = next?.key || "";
     return next;
   }
   function activeDailyBriefingItem(events = currentEvents, today = seoulDateKey()) {
-    return buildDailyBriefing(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey) || null;
+    return buildProactiveAlerts(events, today).candidates.find((item) => item.key === activeBriefingCandidateKey) || null;
   }
   function openBriefingResource(action, item, events = currentEvents) {
-    const event = events.find((entry) => String(entry.id) === String(item?.nextEventOrderId));
+    const event = events.find((entry) => String(entry.id) === String(item?.nextEventOrderId || item?.eventOrderId));
     if (!item || !event) return "현재 확인 중인 다음 행사를 찾지 못했습니다.";
     if (action === "original") {
       if (!event.storagePath) return "등록된 원본 파일이 없습니다.";
       window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" });
-      return `${item.eventTitle} 원본 엑셀을 열었습니다.`;
+      return `${item.eventTitle || item.title} 원본 엑셀을 열었습니다.`;
     }
-    if (action === "attachments") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openEventAttachments(event.id, item.eventTitle); return `${item.eventTitle} 첨부자료를 열었습니다.`; }
-    if (action === "notes") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openFieldNotes(event.id, item.eventTitle); return `${item.eventTitle} 특이사항을 열었습니다.`; }
+    if (action === "attachments") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openEventAttachments(event.id, item.eventTitle || item.title); return `${item.eventTitle || item.title} 첨부자료를 열었습니다.`; }
+    if (action === "notes") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openFieldNotes(event.id, item.eventTitle || item.title); return `${item.eventTitle || item.title} 특이사항을 열었습니다.`; }
     return "";
   }
   function dailyBriefingAction(action, events = currentEvents, today = seoulDateKey()) {
     const current = activeDailyBriefingItem(events, today) || dailyBriefingConversation(events, today).current;
     if (!current) return { message: "남은 다음 세팅이 없습니다.", current: null };
     if (["original", "attachments", "notes"].includes(action)) return { message: openBriefingResource(action, current, events), current };
+    if (action === "inventory") { document.querySelector("#beverageInventoryWidget")?.scrollIntoView?.({ behavior: "smooth", block: "center" }); return { message: "음주류 재고 현황을 표시했습니다.", current }; }
+    if (action === "demand") {
+      const details = current.sourceMetadata?.comparison?.demand?.details || [];
+      return { message: details.length ? details.map((item) => `${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.meal} · ${item.guests}명`).join("\n") : "집계 기간의 뷔페 행사가 없습니다.", current };
+    }
+    if (action === "candidates") { window.BANQUET_ERP_EVENT_ATTACHMENTS?.openScheduleCandidates?.(current.eventOrderId, current.sourceMetadata?.candidates || [], current.title); return { message: "첨부자료 일정 후보를 열었습니다. 승인 전에는 일정에 반영되지 않습니다.", current }; }
+    if (action === "changes") return { message: current.sourceMetadata?.changes?.map((item) => `${item.label}: ${item.before || "-"} → ${item.after || "-"}`).join("\n") || current.summary, current };
+    if (action === "acknowledge") {
+      acknowledgeProactiveAlert(current, today);
+      const next = buildProactiveAlerts(events, today).candidates[0] || null; activeBriefingCandidateKey = next?.key || "";
+      return { message: next ? `확인 처리했습니다.\n${proactiveAlertSummary(next)}` : "확인 처리했습니다. 남은 proactive alert가 없습니다.", current: next };
+    }
     if (action === "complete") {
       completeBoardItem(current.key, true, today);
-      const next = buildDailyBriefing(events, today).candidates[0] || null;
+      const next = buildProactiveAlerts(events, today).candidates[0] || null;
       activeBriefingCandidateKey = next?.key || "";
-      return { message: next ? `${current.venue} 완료 처리했습니다.\n${briefingItemPrompt(next)}` : `${current.venue} 완료 처리했습니다. 남은 다음 세팅이 없습니다.`, current: next };
+      return { message: next ? `${current.venue} 완료 처리했습니다.\n${proactiveAlertSummary(next)}` : `${current.venue} 완료 처리했습니다. 남은 alert가 없습니다.`, current: next };
     }
     const next = nextBriefingCandidate(events, today);
     const prefix = action === "later" ? `${current.venue} 세팅은 미완료 상태로 유지합니다.` : `${current.venue} 세팅은 건너뜁니다.`;
-    return { message: next ? `${prefix}\n${briefingItemPrompt(next)}` : `${prefix}\n이번 briefing에서 더 확인할 항목이 없습니다.`, current: next };
+    return { message: next ? `${prefix}\n${proactiveAlertSummary(next)}` : `${prefix}\n이번 briefing에서 더 확인할 항목이 없습니다.`, current: next };
   }
   function dailyBriefingAnswer(question, events = currentEvents, today = seoulDateKey()) {
     const text = String(question || "");
@@ -417,23 +477,68 @@
     if (active && /첨부/.test(text)) return openBriefingResource("attachments", active, events);
     if (active && /특이사항|현장\s*메모/.test(text)) return openBriefingResource("notes", active, events);
     if (active && /레이아웃|lay\s*&?\s*out/i.test(text)) return active.setupSummary;
+    if (active && /재고\s*(?:보기|보여|열어)/.test(text)) return dailyBriefingAction("inventory", events, today).message;
+    if (active && /수요\s*(?:상세|보기)|근거/.test(text)) return dailyBriefingAction("demand", events, today).message;
+    if (active && /후보\s*(?:확인|보기)|일정\s*후보/.test(text)) return dailyBriefingAction("candidates", events, today).message;
+    if (active && /변경\s*(?:내용|사항).*(?:보기|보여|확인)?/.test(text)) return dailyBriefingAction("changes", events, today).message;
     if (active && /^(?:아직|안\s*했어|미완료)[.!\s]*$/i.test(text)) return dailyBriefingAction("later", events, today).message;
     if (active && /^(?:다음|넘겨|건너뛰어)[.!\s]*$/i.test(text)) return dailyBriefingAction("next", events, today).message;
-    if (/^(?:했어|했어요|완료|완료했어|끝냈어|응|네)[.!\s]*$/i.test(String(question || "")) && activeBriefingCandidateKey) {
+    if (active && !["next_setup", "overdue_setup"].includes(active.type) && /^(?:확인|확인했어|봤어|응|네)[.!\s]*$/i.test(text)) return dailyBriefingAction("acknowledge", events, today).message;
+    if (active && ["next_setup", "overdue_setup"].includes(active.type) && /^(?:했어|했어요|완료|완료했어|끝냈어|응|네)[.!\s]*$/i.test(text)) {
       return dailyBriefingAction("complete", events, today).message;
     }
     if (!/(오늘\s*(?:뭐|무엇).*해야|다음\s*세팅.*(?:뭐|남)|어떻게\s*세팅|레이아웃.*(?:뭐|적)|재인폼)/i.test(String(question || ""))) return "";
-    const briefing = buildDailyBriefing(events, today); const venueSet = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(question);
+    const briefing = buildProactiveAlerts(events, today); const venueSet = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(question);
     const rows = venueSet?.size ? briefing.candidates.filter((item) => window.BANQUET_ERP_VENUE_UTILS.spacesOverlap(item.venue, question)) : /재인폼/.test(question) ? briefing.candidates.filter((item) => /재인폼/.test(item.summary)) : briefing.candidates;
     if (!rows.length) return "남은 다음 세팅이 없습니다.";
     activeBriefingCandidateKey = rows[0].key;
-    return briefingItemPrompt(rows[0]);
+    return proactiveAlertSummary(rows[0]);
   }
   function loadState() {
-    try { return { completions: {}, plans: {}, reminders: {}, pins: {}, setupOverrides: {}, manual: [], checklist: [], fieldNotes: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
-    catch { return { completions: {}, plans: {}, reminders: {}, pins: {}, setupOverrides: {}, manual: [], checklist: [], fieldNotes: [] }; }
+    try { return { completions: {}, plans: {}, reminders: {}, pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], manual: [], checklist: [], fieldNotes: [], ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+    catch { return { completions: {}, plans: {}, reminders: {}, pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], manual: [], checklist: [], fieldNotes: [] }; }
   }
   function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  function proactiveAlertPayload(item, acknowledged = false, boardDate = seoulDateKey()) {
+    return { board_date: boardDate, item_key: `proactive-alert:${item.id}`, item_kind: "manual", event_order_id: item.eventOrderId || null, space_id: null, item_time: null, venue_name: item.venue || "", title: item.title || "운영 알림", people: null, memo: item.summary || "", is_completed: acknowledged, metadata: { recordType: "proactive_alert", source: "proactive_alerts_v1", alertId: item.id, alertType: item.type, priority: item.priority, acknowledged, alert: { ...item, acknowledged, sourceMetadata: item.sourceMetadata || {} }, updatedAt: new Date().toISOString() } };
+  }
+  function persistProactiveAlert(item, acknowledged = false, boardDate = seoulDateKey()) {
+    return remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(proactiveAlertPayload(item, acknowledged, boardDate)) }).catch((error) => console.error("proactive alert 저장 실패", error));
+  }
+  function acknowledgeProactiveAlert(item, boardDate = seoulDateKey()) {
+    if (!item?.id) return;
+    state.alertAcknowledgements[item.id] = true;
+    state.proactiveAlerts = (state.proactiveAlerts || []).map((entry) => entry.id === item.id ? { ...entry, acknowledged: true } : entry);
+    saveState(); persistProactiveAlert(item, true, boardDate); render();
+  }
+  function registerProactiveAlert(item, boardDate = seoulDateKey()) {
+    if (!item?.id || !item.type) return null;
+    if (isAlertAcknowledged(item.id) || (state.proactiveAlerts || []).some((entry) => entry.id === item.id)) return item;
+    const next = { priority: "medium", eventOrderId: null, venue: "", createdAt: new Date().toISOString(), acknowledged: false, completed: false, sourceMetadata: {}, ...item, key: item.id };
+    state.proactiveAlerts = [...(state.proactiveAlerts || []), next]; saveState(); persistProactiveAlert(next, false, boardDate); render(); return next;
+  }
+  function comparableEventOrder(event = {}) {
+    const schedule = (event.schedule || []).map((row) => [normalize(row.date), normalize(row.time), normalize(row.venue), normalize(row.content), Number(row.people) || 0]);
+    const notes = event.notes || [];
+    return { dates: eventDates(event).sort(), time: timeValue(event.eventDateTime) || normalize(event.eventDateTime), venue: normalize(event.venue), guests: Number(event.guestCount) || 0, schedule, layout: normalize([event.layoutText, ...valueList(event.layoutEqp), ...notes.filter((row) => row.note_type === "layout_eqp").map((row) => row.content)].filter(Boolean).join(" · ")), others: normalize([event.othersText, ...valueList(event.others), ...notes.filter((row) => row.note_type === "others").map((row) => row.content)].filter(Boolean).join(" · ")), beverage: normalize(event.beveragesText || event.beverage || event.bev), items: (event.items || []).map((row) => [normalize(row.itemName || row.item_name || row.name), Number(row.quantity) || 0]) };
+  }
+  function eventOrderChanges(before, after) {
+    const left = comparableEventOrder(before); const right = comparableEventOrder(after); const labels = { dates: "행사 날짜", time: "시간", venue: "장소", guests: "인원", schedule: "일정", layout: "LAY & OUT", others: "OTHERS", beverage: "BEV", items: "주요 품목" };
+    return Object.keys(labels).filter((key) => JSON.stringify(left[key]) !== JSON.stringify(right[key])).map((key) => ({ field: key, label: labels[key], before: Array.isArray(left[key]) ? JSON.stringify(left[key]) : String(left[key] ?? ""), after: Array.isArray(right[key]) ? JSON.stringify(right[key]) : String(right[key] ?? "") }));
+  }
+  function registerEventOrderChange(before, after) {
+    const changes = eventOrderChanges(before, after); if (!changes.length) return null;
+    const signature = alertHash({ eventOrderId: before?.id || after?.id, changes }); const id = `event_order_changed:${before?.id || after?.id}:${signature}`;
+    const today = seoulDateKey(); const eventDate = eventDates(after)[0] || ""; const priority = eventDate === today ? "high" : "medium";
+    const first = changes[0]; const title = `${normalize(after?.companyName || after?.organizer || after?.eventName) || "행사"} 이벤오더 수정`;
+    return registerProactiveAlert({ id, type: "event_order_changed", priority, title, summary: `${first.label} ${first.before || "-"} → ${first.after || "-"}${changes.length > 1 ? ` 외 ${changes.length - 1}건` : ""}`, eventOrderId: before?.id || after?.id || null, venue: after?.venue || before?.venue || "", sourceMetadata: { signature, changes }, actions: ["changes", "original", "acknowledge", "next"] }, today);
+  }
+  function registerAttachmentScheduleCandidates(eventOrderId, eventTitle, candidates = [], metadata = {}) {
+    const unique = [...new Map((candidates || []).map((item) => [`${normalize(item.date)}|${timeValue(item.time) || normalize(item.time)}|${normalize(item.venue)}|${normalize(item.content)}`, item])).values()];
+    if (!unique.length) return null;
+    const signature = alertHash({ eventOrderId, candidates: unique });
+    return registerProactiveAlert({ id: `attachment_schedule_candidates:${eventOrderId}:${signature}`, type: "attachment_schedule_candidates", priority: "medium", title: `${eventTitle || "행사"} 첨부 일정 확인`, summary: `첨부자료에서 추가 일정 ${unique.length}건을 찾았습니다.`, eventOrderId, venue: metadata.venue || "", sourceMetadata: { signature, candidates: unique, ...metadata }, actions: ["candidates", "attachments", "acknowledge", "next"] });
+  }
   const ASSET_AUDIT_TITLES = new Set(["create_asset", "increase_asset_quantity", "decrease_asset_quantity", "move_asset", "update_asset_location"]);
   function isAssetAuditRow(row) {
     const metadata = row?.metadata || {}; const source = String(metadata.source || "").toLowerCase(); const recordType = String(metadata.recordType || "").toLowerCase();
@@ -480,6 +585,15 @@
     try {
       const items = await remoteRequest("operation_board_items?select=*&item_kind=eq.manual&order=board_date.asc");
       const setupRows = (items || []).filter((row) => row.metadata?.taskType === "next_setup" && row.metadata?.recordType !== "board_ai_change_log");
+      const alertRows = (items || []).filter((row) => row.metadata?.recordType === "proactive_alert");
+      state.alertAcknowledgements = { ...(state.alertAcknowledgements || {}) };
+      state.proactiveAlerts = [];
+      alertRows.forEach((row) => {
+        const alert = row.metadata?.alert; const alertId = row.metadata?.alertId || alert?.id;
+        if (!alertId) return;
+        if (row.is_completed || row.metadata?.acknowledged) state.alertAcknowledgements[alertId] = true;
+        else if (alert) state.proactiveAlerts.push({ ...alert, id: alertId, key: alertId, acknowledged: false });
+      });
       const setupKeys = new Set(setupRows.map((row) => row.item_key));
       setupRows.forEach((row) => {
         state.completions[row.item_key] = !!row.is_completed;
@@ -948,6 +1062,6 @@
     if (context) Object.entries(context).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value || ""; });
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
-  window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, setupDocumentSummary, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, ...value }; activeBriefingCandidateKey = ""; } };
+  window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; } };
 })();

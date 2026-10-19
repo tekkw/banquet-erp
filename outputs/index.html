@@ -1112,7 +1112,7 @@
   <script src="./src/eventDisplayUtils.js?v=event-display-v1"></script>
   <script src="./src/venueUtils.js?v=venue-space-set-v1"></script>
   <script src="./src/storage.js"></script>
-  <script src="./src/eventAttachments.js?v=event-attachments-v1"></script>
+  <script src="./src/eventAttachments.js?v=proactive-alerts-v1"></script>
   <script src="./src/auth.js"></script>
   <script src="./src/eventCalendar.js?v=venue-normalization-v1"></script>
   <script src="./src/erpActionRegistry.js?v=1"></script>
@@ -1124,8 +1124,8 @@
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=layout-ai-v2"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
-  <script src="./src/aiAssistant.js?v=daily-briefing-v2"></script>
-  <script src="./src/operationBoard.js?v=daily-briefing-v2"></script>
+  <script src="./src/aiAssistant.js?v=proactive-alerts-v1"></script>
+  <script src="./src/operationBoard.js?v=proactive-alerts-v1"></script>
   <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
   <script src="./src/dashboardWidgets.js?v=pc-today-agenda-v1"></script>
   <script>
@@ -3186,6 +3186,7 @@
       try {
         setStatus("행사 데이터를 Supabase Database에 저장하는 중입니다...");
         savedEvent = overwriteChoice === "overwrite" ? await overwriteEventInSupabase(overwriteCandidate, eventToSave) : await createEventInSupabase(eventToSave);
+        if (overwriteChoice === "overwrite") window.BANQUET_ERP_OPERATION_BOARD?.registerEventOrderChange(overwriteCandidate, savedEvent);
         console.log("event order saved:", { eventOrderId: savedEvent?.id, savedEvent });
         console.log("savedEventOrderId:", savedEvent?.id);
         console.log("child records save completed:", { eventOrderId: savedEvent?.id });
@@ -3821,7 +3822,7 @@
 
     function updateDailyBriefingBadge() {
       if (window.BANQUET_ERP_OPERATION_BOARD?.isDailyBriefingReady && !window.BANQUET_ERP_OPERATION_BOARD.isDailyBriefingReady()) { globalAiBriefingBadge.hidden = true; return; }
-      const count = window.BANQUET_ERP_OPERATION_BOARD?.buildDailyBriefing(savedEvents)?.count || 0;
+      const count = window.BANQUET_ERP_OPERATION_BOARD?.buildProactiveAlerts(savedEvents)?.count || 0;
       globalAiBriefingBadge.textContent = String(count);
       globalAiBriefingBadge.hidden = count === 0;
       globalAiLauncher.setAttribute("aria-label", count ? `AI 비서 · 미확인 브리핑 ${count}건` : "AI 비서");

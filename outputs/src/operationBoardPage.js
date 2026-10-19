@@ -1027,7 +1027,8 @@
   function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak || fieldAiAwaitingAnswer) speakBoardReply(message); finishFieldAiAnswer(); }
   function briefingActionsHtml(item) {
     if (!item) return "";
-    return `<div class="board-ai-actions">${[["complete", "완료"], ["later", "아직"], ["original", "원본 보기"], ["attachments", "첨부자료"], ["notes", "특이사항"], ["next", "다음"]].map(([action, label]) => `<button type="button" data-briefing-action="${action}">${label}</button>`).join("")}</div>`;
+    const labels = { complete: "완료", later: "아직", original: "원본 보기", attachments: "첨부자료", notes: "특이사항", next: "다음", acknowledge: "확인", inventory: "재고 보기", demand: "수요 상세", candidates: "후보 확인", changes: "변경 내용 보기" };
+    return `<div class="board-ai-actions">${(item.actions || ["acknowledge", "next"]).map((action) => `<button type="button" data-briefing-action="${action}">${labels[action] || action}</button>`).join("")}</div>`;
   }
   function showBriefingResult(message, item = board.activeDailyBriefingItem(events)) {
     aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>${briefingActionsHtml(item)}`;
@@ -1037,15 +1038,15 @@
     if (briefingActionInProgress) return;
     if (board.isDailyBriefingReady && !board.isDailyBriefingReady()) return;
     const briefing = board.dailyBriefingConversation(events, undefined, force);
-    const signature = briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|");
+    const signature = briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|");
     const seenKey = `banquet-erp-mobile-daily-briefing-seen:${briefing.date}`;
     if (!force && sessionStorage.getItem(seenKey) === signature) return;
     sessionStorage.setItem(seenKey, signature);
     showBriefingResult(`${briefing.summary}\n\n${briefing.question}`, briefing.current);
   }
   function markMobileDailyBriefingSeen() {
-    const briefing = board.buildDailyBriefing(events);
-    sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.key}:${item.setupSummary}`).join("|"));
+    const briefing = board.buildProactiveAlerts(events);
+    sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.id || item.key}:${item.summary || item.setupSummary}`).join("|"));
   }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {

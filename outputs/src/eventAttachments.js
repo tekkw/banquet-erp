@@ -42,7 +42,55 @@
     return saved;
   }
   async function uploadEventAttachments(eventOrderId, files) {
-    return Promise.all(validateFiles(files).map((file, index) => uploadFile("event_order", eventOrderId, "event_attachment", file, index)));
+    const saved = await Promise.all(validateFiles(files).map((file, index) => uploadFile("event_order", eventOrderId, "event_attachment", file, index)));
+    global.dispatchEvent(new CustomEvent("banquet:event-attachments-uploaded", { detail: { eventOrderId, files: saved } }));
+    return saved;
+  }
+  function normalizeCandidate(value) { return String(value || "").trim().replace(/\s+/g, " "); }
+  function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character])); }
+  function candidateTime(value) { const match = normalizeCandidate(value).match(/(\d{1,2})\s*[:시]\s*(\d{0,2})/); return match ? `${String(Number(match[1])).padStart(2, "0")}:${String(Number(match[2] || 0)).padStart(2, "0")}` : ""; }
+  function extractScheduleCandidates(text, fallbackYear = new Date().getFullYear()) {
+    let inheritedDate = "";
+    return String(text || "").split(/\r?\n/).map((line) => normalizeCandidate(line)).filter(Boolean).map((line) => {
+      const dateMatch = line.match(/(?:(20\d{2})[.\/-])?(\d{1,2})[.\/-](\d{1,2})/); if (dateMatch) inheritedDate = `${dateMatch[1] || fallbackYear}-${String(Number(dateMatch[2])).padStart(2, "0")}-${String(Number(dateMatch[3])).padStart(2, "0")}`;
+      const range = line.match(/(\d{1,2}\s*[:시]\s*\d{0,2})\s*[~\-]\s*(\d{1,2}\s*[:시]\s*\d{0,2})/); const time = candidateTime(range?.[1] || line); if (!inheritedDate || !time) return null;
+      const content = normalizeCandidate(line.replace(dateMatch?.[0] || "", "").replace(range?.[0] || time, "").replace(/^[·\-\s]+/, ""));
+      if (!content || !/(식사|중식|석식|등록|세션|발표|특별|행사|종료|세팅|뷔페|커피)/i.test(content)) return null;
+      return { date: inheritedDate, time, endTime: range ? candidateTime(range[2]) : "", venue: "", content };
+    }).filter(Boolean);
+  }
+  function recordAttachmentAnalysis(eventOrderId, eventTitle, analysisText, existingSchedules = [], metadata = {}) {
+    const existing = new Set((existingSchedules || []).map((item) => `${normalizeCandidate(item.date)}|${candidateTime(item.time)}|${normalizeCandidate(item.venue)}|${normalizeCandidate(item.content)}`));
+    const candidates = extractScheduleCandidates(analysisText, metadata.fallbackYear).filter((item) => !existing.has(`${item.date}|${item.time}|${normalizeCandidate(item.venue)}|${normalizeCandidate(item.content)}`));
+    return global.BANQUET_ERP_OPERATION_BOARD?.registerAttachmentScheduleCandidates(eventOrderId, eventTitle, candidates, metadata) || null;
+  }
+  async function analyzeScheduleAttachments(eventOrderId, eventTitle, files = []) {
+    if (!files.length) throw new Error("분석할 첨부자료가 없습니다.");
+    if (!config.functionUrl) throw new Error("AI 분석 연결을 확인하지 못했습니다.");
+    const response = await fetch(config.functionUrl, { method: "POST", headers: headers({ "Content-Type": "application/json" }), body: JSON.stringify({ question: "첨부자료에서 날짜, 시간, 장소, 식사, 등록, 세션, 특별행사, 행사 종료, 세팅 요청만 추출해 scheduleCandidates 배열 JSON으로 답해주세요. 없는 내용은 추측하지 마세요.", attachments: files.map((file) => ({ id: file.id, name: file.original_filename, originalFilename: file.original_filename, mimeType: file.mime_type, type: file.file_type, publicUrl: publicUrl(file), storageBucket: file.bucket, storagePath: file.storage_path })), eventContext: { id: eventOrderId, eventName: eventTitle } }) });
+    const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "첨부자료 분석에 실패했습니다.");
+    let candidates = body.analysis?.scheduleCandidates || body.scheduleCandidates || []; const answer = String(body.answer || body.output_text || body.rawText || "");
+    if (!Array.isArray(candidates) || !candidates.length) { try { candidates = JSON.parse(answer.match(/\{[\s\S]*\}/)?.[0] || "{}").scheduleCandidates || []; } catch { candidates = []; } }
+    const existingRows = await request(`event_schedules?select=schedule_date,schedule_time,venue,content&event_order_id=eq.${encodeURIComponent(eventOrderId)}`).catch(() => []);
+    const existing = (existingRows || []).map((item) => ({ date: item.schedule_date, time: item.schedule_time, venue: item.venue, content: item.content }));
+    if (!Array.isArray(candidates) || !candidates.length) return recordAttachmentAnalysis(eventOrderId, eventTitle, answer, existing, { attachmentIds: files.map((file) => file.id) });
+    const existingKeys = new Set(existing.map((item) => `${normalizeCandidate(item.date)}|${candidateTime(item.time)}|${normalizeCandidate(item.venue)}|${normalizeCandidate(item.content)}`));
+    const normalized = candidates.map((item) => ({ date: normalizeCandidate(item.date), time: candidateTime(item.time), endTime: candidateTime(item.endTime || item.end_time), venue: normalizeCandidate(item.venue || item.location), content: normalizeCandidate(item.content || item.title || item.activity), people: Number(item.people) || null })).filter((item) => item.date && item.time && item.content && !existingKeys.has(`${item.date}|${item.time}|${item.venue}|${item.content}`));
+    return global.BANQUET_ERP_OPERATION_BOARD?.registerAttachmentScheduleCandidates(eventOrderId, eventTitle, normalized, { attachmentIds: files.map((file) => file.id) }) || null;
+  }
+  async function approveScheduleCandidates(eventOrderId, candidates) {
+    const existing = await request(`event_schedules?select=schedule_date,schedule_time,venue,content&event_order_id=eq.${encodeURIComponent(eventOrderId)}`);
+    const keys = new Set((existing || []).map((item) => `${normalizeCandidate(item.schedule_date)}|${candidateTime(item.schedule_time)}|${normalizeCandidate(item.venue)}|${normalizeCandidate(item.content)}`));
+    const rows = (candidates || []).filter((item) => !keys.has(`${normalizeCandidate(item.date)}|${candidateTime(item.time)}|${normalizeCandidate(item.venue)}|${normalizeCandidate(item.content)}`)).map((item) => ({ event_order_id: eventOrderId, schedule_date: item.date || "", schedule_time: item.endTime ? `${item.time} ~ ${item.endTime}` : item.time || "", venue: item.venue || "", content: item.content || "", people: Number(item.people) || null }));
+    if (rows.length) await request("event_schedules", { method: "POST", body: JSON.stringify(rows) });
+    global.dispatchEvent(new CustomEvent("banquet:event-schedules-updated", { detail: { eventOrderId, count: rows.length } })); return rows;
+  }
+  function openScheduleCandidates(eventOrderId, candidates = [], title = "첨부 일정 후보") {
+    const dialog = document.createElement("dialog"); dialog.className = "field-note-editor field-notes-viewer";
+    dialog.innerHTML = `<div class="field-notes-viewer-header"><h3>${escapeHtml(title || "첨부 일정 후보")}</h3><button type="button" data-cancel aria-label="닫기">×</button></div><p class="attachment-empty">승인한 일정만 행사 일정에 저장됩니다.</p><form>${candidates.map((item, index) => `<label class="event-attachment-row"><input type="checkbox" name="candidate" value="${index}" checked><span>${escapeHtml(item.date || "날짜 미정")} ${escapeHtml(item.time || "시간 미정")}${item.endTime ? `~${escapeHtml(item.endTime)}` : ""} ${escapeHtml(item.venue || "")} · ${escapeHtml(item.content || "")}</span></label>`).join("") || '<p class="attachment-empty">확인할 일정 후보가 없습니다.</p>'}<footer><button type="button" data-cancel>취소</button><button type="submit" class="primary-button"${candidates.length ? "" : " disabled"}>선택 일정 저장</button></footer></form>`;
+    dialog.querySelectorAll("[data-cancel]").forEach((button) => { button.onclick = () => { dialog.close(); dialog.remove(); }; });
+    dialog.querySelector("form").onsubmit = async (event) => { event.preventDefault(); const selected = [...dialog.querySelectorAll('input[name="candidate"]:checked')].map((input) => candidates[Number(input.value)]).filter(Boolean); try { await approveScheduleCandidates(eventOrderId, selected); dialog.close(); dialog.remove(); } catch (error) { alert(error.message || "일정 후보를 저장하지 못했습니다."); } };
+    document.body.append(dialog); dialog.showModal();
   }
   async function linkedFiles(entityType, entityId, linkType) {
     const links = await request(`file_links?select=file_id,link_type,sort_order,created_at&entity_type=eq.${entityType}&entity_id=eq.${encodeURIComponent(entityId)}&link_type=eq.${linkType}&order=sort_order.asc,created_at.asc`);
@@ -75,15 +123,16 @@
     if (onDelete) { const remove = document.createElement("button"); remove.type = "button"; remove.textContent = "삭제"; remove.onclick = async () => { if (!confirm(`${file.original_filename || "첨부자료"}을 삭제할까요?`)) return; try { await deleteFile(file); await onDelete(); } catch (error) { alert(error.message); } }; actions.append(remove); }
     row.append(name, actions); return row;
   }
-  async function renderEventAttachments(container, eventOrderId, allowAdd = true) {
+  async function renderEventAttachments(container, eventOrderId, allowAdd = true, eventTitle = "") {
     container.innerHTML = '<p class="attachment-empty">첨부자료를 불러오는 중입니다.</p>';
     const files = await linkedFiles("event_order", eventOrderId, "event_attachment").catch(() => []); container.innerHTML = "";
-    if (!files.length) container.insertAdjacentHTML("beforeend", '<p class="attachment-empty">등록된 첨부자료가 없습니다.</p>'); else files.forEach((file) => container.append(fileRow(file, allowAdd ? () => renderEventAttachments(container, eventOrderId, allowAdd) : null)));
+    if (!files.length) container.insertAdjacentHTML("beforeend", '<p class="attachment-empty">등록된 첨부자료가 없습니다.</p>'); else files.forEach((file) => container.append(fileRow(file, allowAdd ? () => renderEventAttachments(container, eventOrderId, allowAdd, eventTitle) : null)));
+    if (files.length) { const analyze = document.createElement("button"); analyze.type = "button"; analyze.className = "secondary-button"; analyze.textContent = "첨부 분석"; analyze.onclick = async () => { try { analyze.disabled = true; analyze.textContent = "분석 중..."; const alertItem = await analyzeScheduleAttachments(eventOrderId, eventTitle, files); analyze.textContent = alertItem ? "일정 후보 확인 필요" : "추가 일정 없음"; } catch (error) { analyze.textContent = "첨부 분석"; alert(error.message); } finally { analyze.disabled = false; } }; container.append(analyze); }
     if (allowAdd) { const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"; input.hidden = true;
-      const add = document.createElement("button"); add.type = "button"; add.className = "secondary-button"; add.textContent = "+ 첨부자료"; add.onclick = () => input.click(); input.onchange = async () => { try { add.disabled = true; await uploadEventAttachments(eventOrderId, input.files); await renderEventAttachments(container, eventOrderId, allowAdd); } catch (error) { alert(error.message); } finally { add.disabled = false; } }; container.append(add, input); }
+      const add = document.createElement("button"); add.type = "button"; add.className = "secondary-button"; add.textContent = "+ 첨부자료"; add.onclick = () => input.click(); input.onchange = async () => { try { add.disabled = true; await uploadEventAttachments(eventOrderId, input.files); await renderEventAttachments(container, eventOrderId, allowAdd, eventTitle); } catch (error) { alert(error.message); } finally { add.disabled = false; } }; container.append(add, input); }
   }
   function openEventAttachments(eventOrderId, eventName = "") {
-    const dialog = document.createElement("dialog"); dialog.className = "field-note-editor field-notes-viewer"; const header = document.createElement("div"); header.className = "field-notes-viewer-header"; const title = document.createElement("h3"); title.textContent = `${eventName || "행사"} 첨부자료`; const close = document.createElement("button"); close.type = "button"; close.textContent = "×"; close.setAttribute("aria-label", "닫기"); const content = document.createElement("div"); content.dataset.eventAttachments = ""; close.onclick = () => { dialog.close(); dialog.remove(); }; header.append(title, close); dialog.append(header, content); document.body.append(dialog); renderEventAttachments(content, eventOrderId, true); dialog.showModal();
+    const dialog = document.createElement("dialog"); dialog.className = "field-note-editor field-notes-viewer"; const header = document.createElement("div"); header.className = "field-notes-viewer-header"; const title = document.createElement("h3"); title.textContent = `${eventName || "행사"} 첨부자료`; const close = document.createElement("button"); close.type = "button"; close.textContent = "×"; close.setAttribute("aria-label", "닫기"); const content = document.createElement("div"); content.dataset.eventAttachments = ""; close.onclick = () => { dialog.close(); dialog.remove(); }; header.append(title, close); dialog.append(header, content); document.body.append(dialog); renderEventAttachments(content, eventOrderId, true, eventName); dialog.showModal();
   }
   function noteText(note) { return String(note?.content || "").startsWith(fieldNotePrefix) ? String(note.content).slice(fieldNotePrefix.length) : ""; }
   function isFieldNote(note) { return Boolean(noteText(note)); }
@@ -119,5 +168,5 @@
     const button = document.createElement("button"); button.type = "button"; button.className = "secondary-button"; button.textContent = "+ 첨부자료"; const summary = document.createElement("span"); summary.className = "pending-attachment-summary"; const update = () => { summary.textContent = pendingEventFiles.length ? `${pendingEventFiles.length}개 선택됨` : "선택된 첨부자료 없음"; };
     button.onclick = () => input.click(); input.onchange = () => { try { pendingEventFiles.push(...validateFiles(input.files)); update(); } catch (error) { alert(error.message); } input.value = ""; }; container.append(button, input, summary); update();
   }
-  global.BANQUET_ERP_EVENT_ATTACHMENTS = { mountPendingPicker, getPendingFiles: () => [...pendingEventFiles], clearPendingFiles: () => { pendingEventFiles = []; }, uploadEventAttachments, renderEventAttachments, openEventAttachments, renderFieldNotes, openFieldNoteEditor, openFieldNotes, fieldNotes, isFieldNote, noteText, compressImage, openFile };
+  global.BANQUET_ERP_EVENT_ATTACHMENTS = { mountPendingPicker, getPendingFiles: () => [...pendingEventFiles], clearPendingFiles: () => { pendingEventFiles = []; }, uploadEventAttachments, renderEventAttachments, openEventAttachments, extractScheduleCandidates, recordAttachmentAnalysis, analyzeScheduleAttachments, openScheduleCandidates, approveScheduleCandidates, renderFieldNotes, openFieldNoteEditor, openFieldNotes, fieldNotes, isFieldNote, noteText, compressImage, openFile };
 })(window);
