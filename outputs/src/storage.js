@@ -26,6 +26,12 @@
    * - 외부 API 연결부를 서비스 객체로 만들면 테스트와 교체가 쉬워지고, 나중에 Supabase 외 저장소로 바뀌어도 영향 범위가 작아진다.
    */
   function createStorageService({ supabaseConfig }) {
+    function resolveSpreadsheetContentType(file) {
+      const name = String(file?.name || "").toLowerCase();
+      if (name.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      if (name.endsWith(".xls")) return "application/vnd.ms-excel";
+      return file?.type || "application/octet-stream";
+    }
     /*
      * 왜 이 함수를 만들었는지:
      * - Supabase REST 요청에 필요한 인증 헤더를 매번 직접 작성하지 않기 위해 만들었다.
@@ -171,11 +177,13 @@
       const safePrefix = String(pathPrefix || "event").replace(/[^a-z0-9_-]/gi, "_");
       const storagePath = `${safePrefix}_${Date.now()}.xlsx`;
       const originalFilename = file.name;
+      const resolvedContentType = resolveSpreadsheetContentType(file);
       const encodedPath = encodeURIComponent(storagePath);
       const uploadUrl = `${supabaseConfig.url}/storage/v1/object/${supabaseConfig.bucket}/${encodedPath}`;
 
       console.log("storagePath:", storagePath);
       console.log("originalFilename:", originalFilename);
+      console.debug("[Storage] original upload", { originalFilename, browserFileType: file.type || "", resolvedContentType, storagePath });
       console.log("storage upload 시작:", storagePath);
 
       const response = await fetch(uploadUrl, {
@@ -183,7 +191,7 @@
         headers: {
           apikey: supabaseConfig.anonKey,
           Authorization: `Bearer ${supabaseConfig.anonKey}`,
-          "Content-Type": file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Type": resolvedContentType,
           "x-upsert": "false",
         },
         body: file,
@@ -262,6 +270,7 @@
       supabaseRequest,
       loggedSupabaseRequest,
       insertRowsWithLog,
+      resolveSpreadsheetContentType,
       uploadOriginalFile,
       buildPublicStorageUrl,
       fetchStoredFile,
