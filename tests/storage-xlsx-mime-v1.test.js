@@ -27,5 +27,8 @@ assert.equal(storage.resolveSpreadsheetContentType({ name: "legacy.xls", type: "
   const eventResult = await storage.uploadOriginalFile(eventOrder);
   assert.equal(requests[1].options.headers["Content-Type"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
   assert.match(eventResult.storagePath, /^event_\d+\.xlsx$/);
+
+  await storage.supabaseRequest("operation_board_items", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify({ metadata: { snapshot: { beer: 254, soju: 223, cola: 203, cider: 179 } } }) });
+  assert.equal(requests[2].options.headers["Content-Type"], "application/json", "snapshot JSON body must not fall back to text/plain");
   console.log("storage XLSX MIME tests passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });

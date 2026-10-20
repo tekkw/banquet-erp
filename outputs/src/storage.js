@@ -104,9 +104,11 @@
      * - 네트워크 요청 코드를 중복 작성하면 오류 처리 방식이 기능마다 달라져 유지보수가 어려워진다.
      */
     async function supabaseRequest(path, options = {}) {
+      const headers = { ...(options.headers || {}) };
+      if (typeof options.body === "string" && !Object.keys(headers).some((name) => name.toLowerCase() === "content-type")) headers["Content-Type"] = "application/json";
       const response = await fetch(`${supabaseConfig.url}/rest/v1/${path}`, {
         ...options,
-        headers: supabaseHeaders(options.headers),
+        headers: supabaseHeaders(headers),
       });
       if (!response.ok) {
         const error = await supabaseErrorFromResponse(response, "Supabase Database error");
