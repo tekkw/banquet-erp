@@ -49,7 +49,9 @@
     return month ? { year: null, month: Number(month[1]) } : null;
   }
   function inventoryStructure(sheet) {
-    const rows = global.XLSX?.utils?.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) || [];
+    const addresses = sheetCells(sheet).map(([address]) => parseAddress(address)).filter(Boolean);
+    const range = addresses.length ? `A1:${columnName(Math.max(...addresses.map((cell) => cell.column)))}${Math.max(...addresses.map((cell) => cell.row))}` : undefined;
+    const rows = global.XLSX?.utils?.sheet_to_json(sheet, { header: 1, defval: "", raw: true, ...(range ? { range } : {}) }) || [];
     const positions = [];
     rows.forEach((row, rowIndex) => (row || []).forEach((value, columnIndex) => { if (clean(value)) positions.push({ row: rowIndex, column: columnIndex, value: clean(value) }); }));
     const findCell = (pattern) => positions.find((cell) => pattern.test(cell.value));
@@ -58,12 +60,39 @@
     const monthlyHeader = findCell(/당월재고/);
     const items = Object.fromEntries(Object.entries(ITEM_PATTERNS).map(([key, pattern]) => [key, rows.findIndex((row) => pattern.test((row || []).map(clean).join(" ")))]));
     const headerMerge = headerCell && (sheet?.["!merges"] || []).find((range) => headerCell.row >= range.s.r && headerCell.row <= range.e.r && headerCell.column >= range.s.c && headerCell.column <= range.e.c);
-    const inventoryColumns = headerCell ? headerMerge ? Array.from({ length: headerMerge.e.c - headerMerge.s.c + 1 }, (_, index) => headerMerge.s.c + index) : [headerCell.column] : [];
+    const headerColumns = headerCell ? headerMerge ? Array.from({ length: headerMerge.e.c - headerMerge.s.c + 1 }, (_, index) => headerMerge.s.c + index) : [headerCell.column] : [];
+    const inventoryColumns = [...new Set(headerColumns.flatMap((column) => [column - 1, column, column + 1]).filter((column) => column >= 0))];
     const inventoryColumn = inventoryColumns.sort((left, right) => Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[right]) != null).length - Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[left]) != null).length)[0];
-    const inventoryHeader = headerCell && { ...headerCell, column: inventoryColumn ?? headerCell.column, mergedColumns: inventoryColumns };
+    const inventoryValueCount = Object.values(items).filter((row) => row >= 0 && normalizeStockNumber(rows[row]?.[inventoryColumn]) != null).length;
+    const inventoryHeader = headerCell && { ...headerCell, headerColumn: headerCell.column, column: inventoryColumn ?? headerCell.column, mergedColumns: inventoryColumns };
     const titleText = rows.slice(0, 12).flat().map(clean).filter(Boolean).join(" ");
     const missingItems = Object.entries(items).filter(([, row]) => row < 0).map(([key]) => key);
-    return { rows, hasTable: Boolean(categoryHeader && monthlyHeader), valid: Boolean(categoryHeader && monthlyHeader && inventoryHeader && !missingItems.length), inventoryHeader, categoryHeader, monthlyHeader, items, missingItems, period: parsePeriod(titleText) };
+    return { rows, hasTable: Boolean(categoryHeader && monthlyHeader), valid: Boolean(categoryHeader && monthlyHeader && inventoryHeader && !missingItems.length && inventoryValueCount === Object.keys(items).length), inventoryHeader, categoryHeader, monthlyHeader, items, missingItems, inventoryValueCount, period: parsePeriod(titleText) };
+  }
+
+  function repairHancomRichText(arrayBuffer) {
+    const archive = global.XLSX?.CFB?.read?.(new Uint8Array(arrayBuffer), { type: "array" });
+    const index = archive?.FullPaths?.findIndex((path) => /\/xl\/sharedStrings\.xml$/i.test(path));
+    if (index == null || index < 0) return null;
+    const entry = archive.FileIndex[index];
+    const source = new TextDecoder().decode(entry.content);
+    const repaired = source
+      .replace(/<hs:(?:size|ratio|spacing|offset)\b[^>]*\/>/g, "")
+      .replace(/\s+hs:extension="[^"]*"/g, "");
+    if (repaired === source) return null;
+    entry.content = new TextEncoder().encode(repaired);
+    entry.size = entry.content.length;
+    return global.XLSX.CFB.write(archive, { fileType: "zip", type: "array" });
+  }
+
+  function readInventoryWorkbook(arrayBuffer) {
+    const options = { type: "array", cellFormula: true };
+    const workbook = global.XLSX.read(arrayBuffer, options);
+    if (workbook.SheetNames.every((sheetName) => workbook.Sheets?.[sheetName])) return workbook;
+    const repaired = repairHancomRichText(arrayBuffer);
+    if (!repaired) return workbook;
+    console.debug("[Beverage Inventory] retrying Hancom rich text workbook");
+    return global.XLSX.read(repaired, options);
   }
   function normalizeStockNumber(value) {
     const normalized = clean(value).replaceAll(",", "");
@@ -110,13 +139,16 @@
     if (!selected) {
       if (tableSheets.some((candidate) => !candidate.structure.inventoryHeader)) throw new Error("실재고수 header를 찾지 못했습니다.");
       if (tableSheets.some((candidate) => candidate.structure.missingItems.length)) throw new Error("필수 품목 row를 찾지 못했습니다.");
+      if (tableSheets.some((candidate) => candidate.structure.inventoryValueCount < Object.keys(CELL_MAPPING).length)) throw new Error("실재고수 값을 읽지 못했습니다.");
       throw new Error("재고 형식의 시트를 찾지 못했습니다.");
     }
     const sourceCells = Object.fromEntries(Object.keys(CELL_MAPPING).map((key) => [key, readInventoryItem(key, selected.structure)]));
     console.debug("[Beverage Inventory] workbook selection", {
       selectedSheet: selected.sheetName,
       inventoryHeaderRow: selected.structure.inventoryHeader.row + 1,
-      inventoryHeaderColumn: selected.structure.inventoryHeader.column + 1,
+      inventoryHeaderColumn: selected.structure.inventoryHeader.headerColumn + 1,
+      inventoryHeaderAddress: `${columnName(selected.structure.inventoryHeader.headerColumn + 1)}${selected.structure.inventoryHeader.row + 1}`,
+      inventoryValueColumn: selected.structure.inventoryHeader.column + 1,
       inventoryHeaderText: selected.structure.inventoryHeader.value,
       beer: sourceCells.beer,
       soju: sourceCells.soju,
@@ -236,7 +268,7 @@
     if (!file) return null;
     if (!global.XLSX) throw new Error("엑셀 파서를 불러오지 못했습니다.");
     let workbook;
-    try { workbook = global.XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: true }); }
+    try { workbook = readInventoryWorkbook(await file.arrayBuffer()); }
     catch (error) { console.error("[Beverage Inventory] workbook read failed", error); throw new Error("엑셀 파일을 읽지 못했습니다."); }
     const parsed = readStockWorkbook(workbook, file.name);
     const uploaded = await bindings.uploadOriginalFile?.(file, { pathPrefix: "beverage_inventory" });
@@ -301,5 +333,5 @@
     return count ? `<div class="beverage-inventory-warning" role="status">음주류 발주 필요 <strong>${count}품목</strong></div>` : "";
   }
 
-  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RATES, readStockWorkbook, demandRange, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
+  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RATES, readInventoryWorkbook, readStockWorkbook, demandRange, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
 })(window);
