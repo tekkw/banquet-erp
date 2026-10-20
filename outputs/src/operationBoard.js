@@ -676,14 +676,24 @@
     const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
     return block.time < currentTime;
   }
-  function isSetupOverdue(item, referenceDate = selectedDate, now = new Date()) {
-    const scheduledDate = setupScheduledDate(item); if (item.completed || !scheduledDate) return false;
-    if (scheduledDate < referenceDate) return true;
-    return scheduledDate === referenceDate && referenceDate === dateKey(now) && /^\d\d:\d\d$/.test(item.next?.time || item.time || "") && (item.next?.time || item.time) < `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  function getSetupTaskTimingStatus(item, today = seoulDateKey()) {
+    const scheduledDate = setupScheduledDate(item) || item?.date || "";
+    if (item?.completed) return { status: "completed", scheduledDate, daysOverdue: 0 };
+    if (!scheduledDate || scheduledDate > today) return { status: "future", scheduledDate, daysOverdue: 0 };
+    if (scheduledDate === today) return { status: "today", scheduledDate, daysOverdue: 0 };
+    const daysOverdue = Math.max(1, Math.round((new Date(`${today}T00:00:00Z`) - new Date(`${scheduledDate}T00:00:00Z`)) / 86400000));
+    return { status: "overdue", scheduledDate, daysOverdue };
   }
-  function sortSetupTasks(tasks, referenceDate = selectedDate) {
-    const rank = (item) => { const date = setupScheduledDate(item); return !date ? 3 : date < referenceDate ? 0 : date === referenceDate ? 1 : 2; };
-    return [...(tasks || [])].sort((left, right) => rank(left) - rank(right) || (setupScheduledDate(left) || "9999-12-31").localeCompare(setupScheduledDate(right) || "9999-12-31") || String(left.next?.time || left.time || "").localeCompare(String(right.next?.time || right.time || "")));
+  function isSetupTaskActiveToday(item, today = seoulDateKey()) {
+    const pinned = item?.pinned ?? state.pins[item?.key];
+    return pinned === true && ["overdue", "today"].includes(getSetupTaskTimingStatus(item, today).status);
+  }
+  function isSetupOverdue(item, referenceDate = seoulDateKey()) {
+    return getSetupTaskTimingStatus(item, referenceDate).status === "overdue";
+  }
+  function sortSetupTasks(tasks, referenceDate = seoulDateKey()) {
+    const rank = { overdue: 0, today: 1, future: 2, completed: 3 };
+    return [...(tasks || [])].sort((left, right) => rank[getSetupTaskTimingStatus(left, referenceDate).status] - rank[getSetupTaskTimingStatus(right, referenceDate).status] || (setupScheduledDate(left) || left.date || "9999-12-31").localeCompare(setupScheduledDate(right) || right.date || "9999-12-31") || String(left.next?.time || left.time || "").localeCompare(String(right.next?.time || right.time || "")));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
@@ -750,8 +760,8 @@
     renderDashboardAgendaWidget();
     window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
-  function setupBoardTasks(blocks) {
-    return sortSetupTasks((blocks || []).filter((item) => state.pins[item.key] && !item.completed));
+  function setupBoardTasks(blocks, today = seoulDateKey()) {
+    return sortSetupTasks((blocks || []).filter((item) => isSetupTaskActiveToday(item, today)), today);
   }
   function renderSetupTaskBoard(blocks) {
     const tasks = setupBoardTasks(blocks);
@@ -760,13 +770,15 @@
       const next = item.next || {}; const eventTitle = next.name || item.title; const eventDate = next.date || state.setupOverrides[item.key]?.eventDate || "";
       const childSummary = checklist.map((child) => `${child.name}${child.quantity ? ` ${child.quantity}${child.unit || ""}` : ""}`).join(" · ");
       const sourceBadge = item.metadataSource === "manual_setup_task" ? "수동" : "자동";
-      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</span><div><strong>${escapeHtml(eventTitle)}</strong><small>예정 ${escapeHtml([eventDate && eventDate.slice(5).replace("-", "/"), item.next?.time || item.time].filter(Boolean).join(" "))}</small></div>${isSetupOverdue(item) ? '<span class="setup-overdue-badge">지연</span>' : ""}<span class="setup-source-badge">${sourceBadge}</span></div>${childSummary ? `<p class="setup-task-summary">${escapeHtml(childSummary)}</p>` : ""}<div class="setup-task-actions">${renderOriginalAction(item.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
+      const timing = getSetupTaskTimingStatus(item); const timingBadge = timing.status === "today" ? '<span class="setup-timing-badge setup-today-badge">오늘</span>' : timing.status === "overdue" ? `<span class="setup-timing-badge setup-overdue-badge">지연 ${timing.daysOverdue}일</span>` : "";
+      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</span><div><strong>${escapeHtml(eventTitle)}</strong><small>예정 ${escapeHtml([eventDate && eventDate.slice(5).replace("-", "/"), item.next?.time || item.time].filter(Boolean).join(" "))}</small></div>${timingBadge}<span class="setup-source-badge">${sourceBadge}</span></div>${childSummary ? `<p class="setup-task-summary">${escapeHtml(childSummary)}</p>` : ""}<div class="setup-task-actions">${renderOriginalAction(item.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
     return `<section class="setup-task-board"><div class="setup-task-heading"><h3>다음 세팅 / 고정 작업</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${tasks.map((item) => card(item)).join("") || '<p>상단에 고정된 작업이 없습니다.</p>'}</div></section>`;
   }
   function renderSetupCandidates(blocks) {
-    const active = sortSetupTasks(blocks.filter((item) => !item.completed));
-    const completed = sortSetupTasks(blocks.filter((item) => item.completed));
+    const today = seoulDateKey();
+    const active = sortSetupTasks(blocks.filter((item) => !item.completed), today);
+    const completed = sortSetupTasks(blocks.filter((item) => item.completed), today);
     const completedRow = (item) => `<div class="completed-setup-row" data-key="${escapeHtml(item.key)}"><span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</strong> · ${escapeHtml(item.next?.name || item.title)}</span><button type="button" data-restore-complete>복원</button></div>`;
     return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(completedRow).join("") || '<p>완료된 세팅이 없습니다.</p>'}</details></section>`;
   }
@@ -1103,5 +1115,5 @@
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, getSetupTaskTimingStatus, isSetupTaskActiveToday, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
 })();

@@ -113,4 +113,26 @@ context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Arr
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");
 assert(source.includes('item_kind=eq.manual&order=board_date.asc') && source.includes('x.date === boardDate || x.type === "next_setup"'), "원격과 로컬 날짜 필터 모두 setup task를 예외 처리해야 한다");
 
+const actualToday = "2026-10-20";
+const futurePinned = { key: "future-pinned", type: "next_setup", pinned: true, completed: false, date: "2026-10-19", time: "15:00", next: { date: "2026-10-21", time: "15:00" } };
+const todayPinned = { ...futurePinned, key: "today-pinned", next: { date: actualToday, time: "23:00" } };
+const overduePinned = { ...futurePinned, key: "overdue-pinned", next: { date: "2026-10-19", time: "08:00" } };
+const completedPinned = { ...overduePinned, key: "completed-pinned", completed: true };
+assert.strictEqual(board.getSetupTaskTimingStatus(futurePinned, actualToday).status, "future");
+assert.strictEqual(board.getSetupTaskTimingStatus(todayPinned, actualToday).status, "today", "예정 시간 전이어도 예정일 시작부터 today여야 한다");
+assert.deepStrictEqual({ ...board.getSetupTaskTimingStatus(overduePinned, actualToday) }, { status: "overdue", scheduledDate: "2026-10-19", daysOverdue: 1 });
+assert.strictEqual(board.getSetupTaskTimingStatus(completedPinned, actualToday).status, "completed");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned, todayPinned, overduePinned, completedPinned], actualToday), (item) => item.key), ["overdue-pinned", "today-pinned"], "A-D. 미래/완료는 숨기고 지연/오늘만 상단에 표시해야 한다");
+assert.deepStrictEqual(Array.from(board.sortSetupTasks([futurePinned, todayPinned, overduePinned], actualToday), (item) => item.key), ["overdue-pinned", "today-pinned", "future-pinned"], "다음 세팅 탭은 미래를 유지하고 지연/오늘/미래 순이어야 한다");
+
+const editable = { key: "editable", type: "next_setup", date: "2026-10-19", time: "08:00", completed: false };
+board._setStateForTest({ pins: { editable: true }, setupOverrides: { editable: { eventDate: "2026-10-21", time: "08:00" } } });
+assert.strictEqual(board.setupBoardTasks([editable], actualToday).length, 0, "E. 미래로 수정된 작업은 상단에서 즉시 사라져야 한다");
+board._setStateForTest({ pins: { editable: true }, setupOverrides: { editable: { eventDate: actualToday, time: "08:00" } } });
+assert.strictEqual(board.setupBoardTasks([editable], actualToday).length, 1, "F. 오늘로 수정된 작업은 상단에 즉시 나타나야 한다");
+context.window.matchMedia = () => ({ matches: true }); const mobileActive = Array.from(board.setupBoardTasks([editable], actualToday), (item) => item.key);
+context.window.matchMedia = () => ({ matches: false }); const pcActive = Array.from(board.setupBoardTasks([editable], actualToday), (item) => item.key);
+assert.deepStrictEqual(pcActive, mobileActive, "G. PC/모바일은 공용 active helper 결과를 사용해야 한다");
+assert(source.includes("updateSetupTask") && source.includes("saveState();") && source.includes("render();"), "예정일 수정 후 공용 render로 즉시 반영해야 한다");
+
 console.log("operation-board setup task V1 tests passed");

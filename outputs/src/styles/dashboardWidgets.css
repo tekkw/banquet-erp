@@ -307,6 +307,8 @@ body {
 .setup-task-actions .setup-original-action { flex-basis: auto; }
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
+.setup-timing-badge { align-self: start; padding: 2px 6px; border: 1px solid; border-radius: 999px; font-size: 9px; font-weight: 800; }
+.setup-today-badge { color: #bfdbfe; border-color: rgba(96, 165, 250, .45); background: rgba(30, 64, 175, .35); }
 .setup-overdue-badge { color: #fecaca; border-color: rgba(248, 113, 113, .45); background: rgba(127, 29, 29, .35); }
 .daily-operations-briefing { display: grid; gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid rgba(198, 166, 103, .32); border-radius: 12px; background: rgba(198, 166, 103, .08); }
 .daily-operations-briefing-heading strong, .daily-operations-briefing-heading small { display: block; }
