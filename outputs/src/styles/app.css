@@ -9,7 +9,7 @@
 @import "./sidebar.css";
 @import "./forms.css";
 @import "./dashboard.css";
-@import "./calendar.css";
+@import "./calendar.css?v=mobile-week-calendar-v1";
 @import "./assets.css";
 @import "./ai.css";
 @import "./modal.css?v=event-overwrite-contrast-v1";

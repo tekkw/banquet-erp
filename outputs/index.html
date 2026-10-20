@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=daily-briefing-v2">
+  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-week-calendar-v1">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -242,6 +242,17 @@
           <button id="exportExcelButton" class="primary-button" type="button">엑셀 다운로드</button>
         </div>
         <div id="calendarGrid" class="calendar-grid"></div>
+        <section id="mobileWeekCalendar" class="mobile-week-calendar" aria-label="주간 확대 캘린더">
+          <div class="mobile-week-controls">
+            <button id="prevWeek" type="button" aria-label="이전 주">‹</button>
+            <strong id="mobileWeekTitle"></strong>
+            <button id="nextWeek" type="button" aria-label="다음 주">›</button>
+            <button id="todayWeek" type="button">오늘</button>
+          </div>
+          <div id="mobileWeekDays" class="mobile-week-days" aria-label="주간 날짜 선택"></div>
+          <h3 id="mobileWeekHeading"></h3>
+          <div id="mobileWeekEvents" class="mobile-week-events"></div>
+        </section>
       </section>
       </section>
 
@@ -1114,7 +1125,7 @@
   <script src="./src/storage.js"></script>
   <script src="./src/eventAttachments.js?v=proactive-alerts-v1"></script>
   <script src="./src/auth.js"></script>
-  <script src="./src/eventCalendar.js?v=venue-normalization-v1"></script>
+  <script src="./src/eventCalendar.js?v=mobile-week-calendar-v1"></script>
   <script src="./src/erpActionRegistry.js?v=1"></script>
   <script src="./src/erpConversationAgent.js?v=venue-normalization-v2"></script>
   <script src="./src/beverageInventory.js?v=beverage-inventory-v1"></script>
@@ -1164,6 +1175,14 @@
     const resultWrap = document.querySelector("#resultWrap");
     const calendarTitle = document.querySelector("#calendarTitle");
     const calendarGrid = document.querySelector("#calendarGrid");
+    const mobileWeekCalendar = document.querySelector("#mobileWeekCalendar");
+    const mobileWeekTitle = document.querySelector("#mobileWeekTitle");
+    const mobileWeekDays = document.querySelector("#mobileWeekDays");
+    const mobileWeekHeading = document.querySelector("#mobileWeekHeading");
+    const mobileWeekEvents = document.querySelector("#mobileWeekEvents");
+    const prevWeekButton = document.querySelector("#prevWeek");
+    const nextWeekButton = document.querySelector("#nextWeek");
+    const todayWeekButton = document.querySelector("#todayWeek");
     const exportMode = document.querySelector("#exportMode");
     const exportYear = document.querySelector("#exportYear");
     const exportMonth = document.querySelector("#exportMonth");
@@ -1478,6 +1497,14 @@
       elements: {
         calendarTitle,
         calendarGrid,
+        mobileWeekCalendar,
+        mobileWeekTitle,
+        mobileWeekDays,
+        mobileWeekHeading,
+        mobileWeekEvents,
+        prevWeekButton,
+        nextWeekButton,
+        todayWeekButton,
       },
       constants: {
         eventColors,
@@ -1491,6 +1518,11 @@
       callbacks: {
         openEventModal,
         openDateEventsSheet,
+        onSelectedDateChange: (dateKey) => {
+          const [year, month] = dateKey.split("-").map(Number);
+          calendarDate = new Date(year, month - 1, 1);
+          renderCalendar();
+        },
       },
     });
     const eventOrderService = window.BANQUET_ERP_EVENT_ORDER.createEventOrderService({
@@ -1832,11 +1864,13 @@
 
     prevMonthButton.addEventListener("click", () => {
       calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+      calendarController.selectDate(formatDateKey(calendarDate), { notify: false });
       renderCalendar();
     });
 
     nextMonthButton.addEventListener("click", () => {
       calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+      calendarController.selectDate(formatDateKey(calendarDate), { notify: false });
       renderCalendar();
     });
 

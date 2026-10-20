@@ -848,3 +848,157 @@ button.mini-day:hover {
     min-height: 150px !important;
   }
 }
+
+.mobile-week-calendar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-week-calendar {
+    display: grid;
+    gap: 12px;
+    margin: 14px 10px 10px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+
+  .mobile-week-controls {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) 36px auto;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .mobile-week-controls strong {
+    text-align: center;
+    color: var(--text-strong, #102033);
+    font-size: 15px;
+  }
+
+  .mobile-week-controls button,
+  .mobile-week-day,
+  .mobile-week-event {
+    font: inherit;
+  }
+
+  .mobile-week-controls button {
+    min-height: 34px;
+    padding: 5px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--text-strong, #102033);
+    font-weight: 800;
+  }
+
+  .mobile-week-days {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    touch-action: pan-y;
+  }
+
+  .mobile-week-day {
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    min-width: 0;
+    min-height: 54px;
+    padding: 5px 1px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: #f7f9fc;
+    color: #526477;
+  }
+
+  .mobile-week-day strong {
+    color: #102033;
+    font-size: 15px;
+  }
+
+  .mobile-week-day small {
+    color: #1e6fd9;
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .mobile-week-day.today:not(.selected) {
+    border-color: #94bdf2;
+  }
+
+  .mobile-week-day.selected {
+    border-color: #1e6fd9;
+    background: #eaf3ff;
+    color: #174f92;
+  }
+
+  .mobile-week-calendar h3 {
+    margin: 2px 0 0;
+    color: var(--text-strong, #102033);
+    font-size: 16px;
+  }
+
+  .mobile-week-events {
+    display: grid;
+    gap: 7px;
+  }
+
+  .mobile-week-event {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 48px;
+    padding: 7px 9px;
+    border: 1px solid var(--event-color);
+    border-left: 4px solid var(--event-color);
+    border-radius: 8px;
+    text-align: left;
+  }
+
+  .mobile-week-event-venue {
+    padding: 3px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .mobile-week-event-title {
+    display: grid;
+    min-width: 0;
+  }
+
+  .mobile-week-event-title strong,
+  .mobile-week-event-title small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-week-event-title strong {
+    font-size: 13px;
+  }
+
+  .mobile-week-event-title small,
+  .mobile-week-event-guests {
+    font-size: 11px;
+  }
+
+  .mobile-week-event-guests {
+    font-weight: 800;
+    white-space: nowrap;
+  }
+
+  .mobile-week-empty {
+    margin: 0;
+    padding: 16px 8px;
+    color: #526477;
+    text-align: center;
+    font-size: 13px;
+  }
+}

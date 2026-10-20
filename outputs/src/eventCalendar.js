@@ -15,6 +15,17 @@
  * - 주간/일간 보기, 드래그 일정 이동, 객실/식음/시설 캘린더를 같은 방식으로 확장할 수 있다.
  */
 (function registerBanquetErpEventCalendar() {
+  function dateKeyFromUtc(date) { return date.toISOString().slice(0, 10); }
+  function dateFromKey(dateKey) { return new Date(`${dateKey}T00:00:00Z`); }
+  function shiftDateKey(dateKey, days) { const date = dateFromKey(dateKey); date.setUTCDate(date.getUTCDate() + days); return dateKeyFromUtc(date); }
+  function getSundayWeekRange(dateKey) {
+    const selected = dateFromKey(dateKey); const start = shiftDateKey(dateKey, -selected.getUTCDay());
+    return { start, end: shiftDateKey(start, 6), dates: Array.from({ length: 7 }, (_, index) => shiftDateKey(start, index)) };
+  }
+  function seoulTodayKey(now = new Date()) {
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value])); return `${values.year}-${values.month}-${values.day}`;
+  }
   /*
    * 왜 이 함수를 만들었는지:
    * - 캘린더 DOM 요소와 외부 콜백을 하나로 묶어 캘린더 전용 컨트롤러를 만들기 위해 작성했다.
@@ -26,11 +37,13 @@
    * - 화면 컴포넌트 단위로 컨트롤러를 만들면 모달, 저장, API와 느슨하게 연결되어 테스트와 교체가 쉬워진다.
    */
   function createCalendarController({ elements, constants, helpers, callbacks = {} }) {
-    const { calendarTitle, calendarGrid } = elements;
+    const { calendarTitle, calendarGrid, mobileWeekCalendar, mobileWeekTitle, mobileWeekDays, mobileWeekHeading, mobileWeekEvents, prevWeekButton, nextWeekButton, todayWeekButton } = elements;
     const { eventColors } = constants;
     const { formatDateKey, normalizeEventColorKey, getEventRenderRange, syncExportDefaults } = helpers;
-    const { openEventModal, openDateEventsSheet } = callbacks;
+    const { openEventModal, openDateEventsSheet, onSelectedDateChange } = callbacks;
     const DESKTOP_EVENT_LIMIT = 5;
+    let selectedDateKey = seoulTodayKey();
+    let currentSavedEvents = [];
 
     function shortVenueLabel(eventItem) {
       const venues = [eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean);
@@ -40,6 +53,63 @@
     function fullVenueLabel(eventItem) {
       return [...new Set([eventItem.venue, ...(eventItem.schedule || []).map((row) => row.venue)].filter(Boolean))].join(", ") || "장소 미입력";
     }
+
+    function eventsForDate(dateKey, savedEvents) {
+      const date = new Date(`${dateKey}T00:00:00`);
+      return savedEvents.filter((eventItem) => {
+        const range = getEventRenderRange(eventItem); return range.startDate && range.endDate && date >= range.startDate && date <= range.endDate;
+      });
+    }
+
+    function renderMobileWeek(savedEvents = currentSavedEvents) {
+      if (!mobileWeekCalendar || !window.matchMedia?.("(max-width: 768px)").matches) return;
+      const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+      const range = getSundayWeekRange(selectedDateKey); const todayKey = seoulTodayKey();
+      mobileWeekTitle.textContent = `${Number(range.start.slice(5, 7))}/${Number(range.start.slice(8, 10))} ~ ${Number(range.end.slice(5, 7))}/${Number(range.end.slice(8, 10))}`;
+      mobileWeekDays.innerHTML = "";
+      range.dates.forEach((dateKey, index) => {
+        const button = document.createElement("button"); button.type = "button"; button.className = "mobile-week-day"; button.dataset.weekDate = dateKey;
+        if (dateKey === selectedDateKey) button.classList.add("selected"); if (dateKey === todayKey) button.classList.add("today");
+        button.innerHTML = `<span>${weekdays[index]}</span><strong>${Number(dateKey.slice(8, 10))}</strong>${dateKey === todayKey ? "<small>오늘</small>" : ""}`;
+        button.addEventListener("click", () => selectDate(dateKey)); mobileWeekDays.append(button);
+      });
+      const selectedDate = dateFromKey(selectedDateKey);
+      mobileWeekHeading.textContent = new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "long", day: "numeric", weekday: "long" }).format(selectedDate);
+      mobileWeekEvents.innerHTML = "";
+      const events = eventsForDate(selectedDateKey, savedEvents);
+      events.forEach((eventItem) => {
+        const color = eventColors[normalizeEventColorKey(eventItem.color)] || eventColors.gray; const display = window.BANQUET_ERP_EVENT_DISPLAY;
+        const title = display?.getEventDisplayTitle(eventItem) || eventItem.eventName || "이름 없는 행사"; const secondary = display?.getEventSecondaryTitle(eventItem) || "";
+        const button = document.createElement("button"); button.type = "button"; button.className = "mobile-week-event"; button.style.setProperty("--event-color", color.dot || color.border); button.style.background = color.background; button.style.borderColor = color.border; button.style.color = color.text;
+        const venue = document.createElement("span"); venue.className = "mobile-week-event-venue"; venue.textContent = shortVenueLabel(eventItem);
+        const titleWrap = document.createElement("span"); titleWrap.className = "mobile-week-event-title";
+        const titleText = document.createElement("strong"); titleText.textContent = title; titleWrap.append(titleText);
+        if (secondary) { const secondaryText = document.createElement("small"); secondaryText.textContent = secondary; titleWrap.append(secondaryText); }
+        const guests = document.createElement("span"); guests.className = "mobile-week-event-guests"; guests.textContent = `${eventItem.guestCount ?? "-"}명`;
+        button.append(venue, titleWrap, guests);
+        button.addEventListener("click", () => openEventModal?.(eventItem, selectedDateKey)); mobileWeekEvents.append(button);
+      });
+      if (!events.length) mobileWeekEvents.innerHTML = '<p class="mobile-week-empty">등록된 행사가 없습니다.</p>';
+    }
+
+    function selectDate(dateKey, options = {}) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey || "")) return;
+      selectedDateKey = dateKey; renderMobileWeek();
+      calendarGrid.querySelectorAll(".calendar-day.selected").forEach((cell) => cell.classList.remove("selected"));
+      calendarGrid.querySelector(`[data-date-key="${dateKey}"]`)?.classList.add("selected");
+      if (options.notify !== false) onSelectedDateChange?.(dateKey);
+      if (options.scroll) mobileWeekCalendar?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+
+    function moveWeek(days) { selectDate(shiftDateKey(selectedDateKey, days)); }
+    prevWeekButton?.addEventListener("click", () => moveWeek(-7));
+    nextWeekButton?.addEventListener("click", () => moveWeek(7));
+    todayWeekButton?.addEventListener("click", () => selectDate(seoulTodayKey()));
+    let swipeStartX = null;
+    [mobileWeekCalendar?.querySelector(".mobile-week-controls"), mobileWeekDays].filter(Boolean).forEach((target) => {
+      target.addEventListener("touchstart", (event) => { swipeStartX = event.changedTouches?.[0]?.clientX ?? null; }, { passive: true });
+      target.addEventListener("touchend", (event) => { if (swipeStartX == null) return; const delta = (event.changedTouches?.[0]?.clientX ?? swipeStartX) - swipeStartX; swipeStartX = null; if (Math.abs(delta) >= 45) moveWeek(delta < 0 ? 7 : -7); }, { passive: true });
+    });
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -52,6 +122,7 @@
      * - 캘린더 표시 규칙을 한곳에 모아야 날짜 계산이나 바 디자인을 바꿀 때 다른 업무 로직을 건드리지 않는다.
      */
     function renderCalendar({ calendarDate, savedEvents }) {
+      currentSavedEvents = savedEvents;
       const year = calendarDate.getFullYear();
       const month = calendarDate.getMonth();
       calendarTitle.textContent = `${year}년 ${month + 1}월`;
@@ -106,6 +177,7 @@
           dayCell.className = `calendar-day${isOutside ? " outside" : ""}`;
           dayCell.dataset.dateKey = dateKey;
           if (dateKey === todayKey) dayCell.classList.add("today");
+          if (dateKey === selectedDateKey) dayCell.classList.add("selected");
           if (weekSegments.some((segment) => isDateWithinRange(date, segment.segmentStart, segment.segmentEnd))) {
             dayCell.classList.add("has-events");
           }
@@ -124,7 +196,7 @@
           if (desktopHiddenCount) {
             const overflow = document.createElement("span"); overflow.className = "desktop-calendar-overflow"; overflow.textContent = `+${desktopHiddenCount}건`; dayCell.append(overflow);
           }
-          dayCell.addEventListener("click", () => window.matchMedia("(min-width: 769px)").matches ? openDesktopDayDrawer(dateKey, savedEvents) : openDateEventsSheet?.(dateKey));
+          dayCell.addEventListener("click", () => window.matchMedia("(min-width: 769px)").matches ? openDesktopDayDrawer(dateKey, savedEvents) : mobileWeekCalendar ? selectDate(dateKey, { scroll: true }) : openDateEventsSheet?.(dateKey));
           weekRow.append(dayCell);
         });
 
@@ -136,6 +208,7 @@
         weekRow.append(eventLayer);
         calendarGrid.append(weekRow);
       }
+      renderMobileWeek(savedEvents);
     }
 
     /*
@@ -279,10 +352,12 @@
 
     return {
       renderCalendar,
+      selectDate,
     };
   }
 
   window.BANQUET_ERP_EVENT_CALENDAR = {
     createCalendarController,
+    getSundayWeekRange,
   };
 })();
