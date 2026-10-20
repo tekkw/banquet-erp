@@ -32,15 +32,27 @@ assert.deepEqual(JSON.parse(JSON.stringify(parsed.sourceCells)), {
   cola: { address: "BE11", value: 203, formula: false },
   cider: { address: "BE14", value: 179, formula: false },
 });
+const octoberNow = new Date("2026-10-20T12:00:00+09:00");
+const monthIndependent = inventory.readStockWorkbook({
+  SheetNames: ["8월 (신규)", "9월 (기존)", "9월 (신규)", "10월 (예시)"],
+  Sheets: {
+    "8월 (신규)": inventorySheet({ beer: { v: 8 }, soju: { v: 8 }, cola: { v: 8 }, cider: { v: 8 } }),
+    "9월 (기존)": inventorySheet({ beer: { v: 90 }, soju: { v: 90 }, cola: { v: 90 }, cider: { v: 90 } }),
+    "9월 (신규)": inventorySheet({ beer: { v: 254 }, soju: { v: 223 }, cola: { v: 203 }, cider: { v: 179 } }),
+    "10월 (예시)": inventorySheet({ title: "■ 26년 10월 예시", beer: { v: 1 }, soju: { v: 1 }, cola: { v: 1 }, cider: { v: 1 } }),
+  },
+}, "재고 현황.xlsx", octoberNow);
+assert.equal(monthIndependent.sheetName, "9월 (신규)", "A-D. 현재 월과 무관하게 최신 유효 월의 신규 시트를 선택하고 예시는 제외해야 한다");
+assert.deepEqual([monthIndependent.beer, monthIndependent.soju, monthIndependent.cola, monthIndependent.cider], [254, 223, 203, 179], "E-F. 실제 품목의 실재고수를 semantic lookup으로 읽어야 한다");
 const fallbackSheet = inventorySheet({ beer: {}, soju: {}, cola: {}, cider: {} });
 delete fallbackSheet.A5; delete fallbackSheet.A8; delete fallbackSheet.B11; delete fallbackSheet.B14;
 fallbackSheet.BE20 = { v: "1,234 " }; fallbackSheet.BE21 = { v: 200 }; fallbackSheet.BE22 = { v: 300 }; fallbackSheet.BE23 = { v: 400 };
 fallbackSheet.A20 = { v: "맥주" }; fallbackSheet.A21 = { v: "소주" }; fallbackSheet.B22 = { v: "콜라" }; fallbackSheet.B23 = { v: "칠성사이다" };
 const fallbackParsed = inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": fallbackSheet } }, "2026-09-stock.xlsx");
 assert.deepEqual([fallbackParsed.beer, fallbackParsed.soju, fallbackParsed.cola, fallbackParsed.cider], [1234, 200, 300, 400], "고정 셀이 비면 품목 행과 실재고수 열로 읽어야 한다");
-assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["안내"], Sheets: { 안내: { A1: { v: "예시 안내" } } } }, "2026-09.xlsx"), /음주류 재고 시트를 찾지 못했습니다/);
+assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["안내"], Sheets: { 안내: { A1: { v: "예시 안내" } } } }, "2026-09.xlsx"), /재고 형식의 시트를 찾지 못했습니다/);
 const missingValueSheet = inventorySheet({ beer: { f: "SUM(A1:A2)" }, soju: { v: 2 }, cola: { v: 3 }, cider: { v: 4 } });
-assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": missingValueSheet } }, "2026-09.xlsx"), /실재고수 값을 확인하지 못했습니다/);
+assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": missingValueSheet } }, "2026-09.xlsx"), /실재고수 값을 읽지 못했습니다/);
 assert.deepEqual(JSON.parse(JSON.stringify(inventory.CELL_MAPPING)), {
   beer: { label: "맥주", labelCell: "A5", stockCell: "BE5" },
   soju: { label: "소주", labelCell: "A8", stockCell: "BE8" },
@@ -83,7 +95,7 @@ const boardHtml = fs.readFileSync("outputs/board/index.html", "utf8");
 const ai = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 const registry = fs.readFileSync("outputs/src/erpActionRegistry.js", "utf8");
 assert(html.includes('id="beverageInventoryWidget"') && html.includes('data-beverage-upload') && html.includes('data-beverage-original'));
-assert(html.includes("beverageInventory.js?v=beverage-inventory-v1") && boardHtml.includes("beverageInventory.js?v=beverage-inventory-v1"));
+assert(html.includes("beverageInventory.js?v=inventory-sheet-selection-v1") && boardHtml.includes("beverageInventory.js?v=inventory-sheet-selection-v1"));
 assert(registry.includes('"get_beverage_inventory_status", "inventory", "query"'));
 assert(ai.includes('executeAction("get_beverage_inventory_status"') && ai.includes("matchesQuestion(question)"), "AI는 공용 Action Registry의 결정론 계산을 사용해야 한다");
 assert(source.includes('board_date: SNAPSHOT_DATE') && source.includes('item_key: SNAPSHOT_KEY'), "최신 snapshot은 기존 공용 persistent table의 고정 key로 덮어써야 한다");
