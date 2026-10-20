@@ -4,10 +4,10 @@
   const SNAPSHOT_DATE = "2000-01-01";
   const SNAPSHOT_KEY = "beverage-inventory:latest";
   const CELL_MAPPING = Object.freeze({
-    beer: Object.freeze({ label: "맥주", labelCell: "A5", stockCell: "BE5" }),
-    soju: Object.freeze({ label: "소주", labelCell: "A8", stockCell: "BE8" }),
-    cola: Object.freeze({ label: "콜라", labelCell: "B11", stockCell: "BE11" }),
-    cider: Object.freeze({ label: "사이다", labelCell: "B14", stockCell: "BE14" }),
+    beer: Object.freeze({ label: "맥주" }),
+    soju: Object.freeze({ label: "소주" }),
+    cola: Object.freeze({ label: "콜라" }),
+    cider: Object.freeze({ label: "사이다" }),
   });
   const ITEM_PATTERNS = Object.freeze({ beer: /맥주/, soju: /소주/, cola: /콜라/, cider: /사이다/ });
   const DEMAND_RATES = Object.freeze({ beer: 1, soju: 0.5, cola: 0.3, cider: 0.3 });
@@ -55,19 +55,17 @@
     const positions = [];
     rows.forEach((row, rowIndex) => (row || []).forEach((value, columnIndex) => { if (clean(value)) positions.push({ row: rowIndex, column: columnIndex, value: clean(value) }); }));
     const findCell = (pattern) => positions.find((cell) => pattern.test(cell.value));
-    const headerCell = findCell(/^\s*실재고수\s*$/);
     const categoryHeader = findCell(/^\s*구분\s*$/);
-    const monthlyHeader = findCell(/당월재고/);
+    const monthlyHeader = findCell(/^\s*당월재고\s*$/);
     const items = Object.fromEntries(Object.entries(ITEM_PATTERNS).map(([key, pattern]) => [key, rows.findIndex((row) => pattern.test((row || []).map(clean).join(" ")))]));
-    const headerMerge = headerCell && (sheet?.["!merges"] || []).find((range) => headerCell.row >= range.s.r && headerCell.row <= range.e.r && headerCell.column >= range.s.c && headerCell.column <= range.e.c);
-    const headerColumns = headerCell ? headerMerge ? Array.from({ length: headerMerge.e.c - headerMerge.s.c + 1 }, (_, index) => headerMerge.s.c + index) : [headerCell.column] : [];
-    const inventoryColumns = [...new Set(headerColumns.flatMap((column) => [column - 1, column, column + 1]).filter((column) => column >= 0))];
-    const inventoryColumn = inventoryColumns.sort((left, right) => Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[right]) != null).length - Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[left]) != null).length)[0];
-    const inventoryValueCount = Object.values(items).filter((row) => row >= 0 && normalizeStockNumber(rows[row]?.[inventoryColumn]) != null).length;
-    const inventoryHeader = headerCell && { ...headerCell, headerColumn: headerCell.column, column: inventoryColumn ?? headerCell.column, mergedColumns: inventoryColumns };
+    const monthlyMerge = monthlyHeader && (sheet?.["!merges"] || []).find((range) => monthlyHeader.row >= range.s.r && monthlyHeader.row <= range.e.r && monthlyHeader.column >= range.s.c && monthlyHeader.column <= range.e.c);
+    const firstColumn = monthlyMerge?.s.c ?? monthlyHeader?.column;
+    const lastColumn = monthlyMerge?.e.c ?? monthlyHeader?.column;
+    const currentStockHeader = monthlyHeader && positions.find((cell) => /^\s*수량\s*$/.test(cell.value) && cell.row > (monthlyMerge?.e.r ?? monthlyHeader.row) && cell.row <= monthlyHeader.row + 4 && cell.column >= firstColumn && cell.column <= lastColumn);
+    const inventoryValueCount = Object.values(items).filter((row) => row >= 0 && normalizeStockNumber(rows[row]?.[currentStockHeader?.column]) != null).length;
     const titleText = rows.slice(0, 12).flat().map(clean).filter(Boolean).join(" ");
     const missingItems = Object.entries(items).filter(([, row]) => row < 0).map(([key]) => key);
-    return { rows, hasTable: Boolean(categoryHeader && monthlyHeader), valid: Boolean(categoryHeader && monthlyHeader && inventoryHeader && !missingItems.length && inventoryValueCount === Object.keys(items).length), inventoryHeader, categoryHeader, monthlyHeader, items, missingItems, inventoryValueCount, period: parsePeriod(titleText) };
+    return { rows, hasTable: Boolean(categoryHeader && monthlyHeader), valid: Boolean(categoryHeader && monthlyHeader && currentStockHeader && !missingItems.length && inventoryValueCount === Object.keys(items).length), currentStockHeader, categoryHeader, monthlyHeader, items, missingItems, inventoryValueCount, period: parsePeriod(titleText) };
   }
 
   function repairHancomRichText(arrayBuffer) {
@@ -110,7 +108,7 @@
     return value == null ? null : { address, value, formula: Boolean(cell?.f) };
   }
   function readInventoryItem(key, structure) {
-    const row = structure.items[key]; const column = structure.inventoryHeader?.column;
+    const row = structure.items[key]; const column = structure.currentStockHeader?.column;
     if (row < 0 || column == null) return null;
     const rawValue = structure.rows[row]?.[column]; const value = normalizeStockNumber(rawValue);
     return value == null ? null : { row: row + 1, column: column + 1, rawValue, value };
@@ -121,43 +119,44 @@
     console.debug("[Beverage Inventory] workbook sheets", { sheetNames });
     const currentKey = seoulDateKey(now);
     const filenamePeriod = parsePeriod(originalFilename);
+    const currentYear = Number(currentKey.slice(0, 4));
+    const currentMonth = Number(currentKey.slice(5, 7));
+    const currentPeriodKey = (currentYear * 12) + currentMonth;
     const candidates = workbook.SheetNames.map((sheetName, index) => {
       const sheet = workbook.Sheets?.[sheetName];
       const structure = inventoryStructure(sheet);
       const namePeriod = parsePeriod(sheetName);
-      const period = namePeriod || structure.period;
-      const year = period?.year || filenamePeriod?.year || Number(currentKey.slice(0, 4));
-      const month = period?.month || 0;
+      const year = namePeriod?.year || structure.period?.year || filenamePeriod?.year || currentYear;
+      const month = namePeriod?.month || structure.period?.month || 0;
       const variant = /신규/.test(sheetName) ? 2 : /기존/.test(sheetName) ? 1 : 0;
       return { sheetName, sheet, structure, index, year, month, variant, example: /예시/.test(sheetName) };
-    }).filter((candidate) => candidate.structure.valid);
+    }).filter((candidate) => candidate.structure.valid && candidate.variant === 2 && !candidate.example && ((candidate.year * 12) + candidate.month) <= currentPeriodKey);
     const tableSheets = workbook.SheetNames.map((sheetName) => ({ sheetName, structure: inventoryStructure(workbook.Sheets?.[sheetName]) })).filter((candidate) => candidate.structure.hasTable);
-    const preferred = candidates.some((candidate) => !candidate.example) ? candidates.filter((candidate) => !candidate.example) : candidates;
+    const preferred = candidates.slice();
     preferred.sort((left, right) => right.year - left.year || right.month - left.month || right.variant - left.variant || right.index - left.index);
     console.debug("[Beverage Inventory] valid sheets", { validInventorySheets: candidates.map(({ sheetName, year, month, variant, example }) => ({ sheetName, year, month, variant: variant === 2 ? "신규" : variant === 1 ? "기존" : "", example })) });
     const selected = preferred[0];
     if (!selected) {
-      if (tableSheets.some((candidate) => !candidate.structure.inventoryHeader)) throw new Error("실재고수 header를 찾지 못했습니다.");
+      if (tableSheets.some((candidate) => !candidate.structure.currentStockHeader)) throw new Error("당월재고 수량 header를 찾지 못했습니다.");
       if (tableSheets.some((candidate) => candidate.structure.missingItems.length)) throw new Error("필수 품목 row를 찾지 못했습니다.");
-      if (tableSheets.some((candidate) => candidate.structure.inventoryValueCount < Object.keys(CELL_MAPPING).length)) throw new Error("실재고수 값을 읽지 못했습니다.");
+      if (tableSheets.some((candidate) => candidate.structure.inventoryValueCount < Object.keys(CELL_MAPPING).length)) throw new Error("당월재고 수량 값을 읽지 못했습니다.");
       throw new Error("재고 형식의 시트를 찾지 못했습니다.");
     }
     const sourceCells = Object.fromEntries(Object.keys(CELL_MAPPING).map((key) => [key, readInventoryItem(key, selected.structure)]));
     console.debug("[Beverage Inventory] workbook selection", {
       selectedSheet: selected.sheetName,
-      inventoryHeaderRow: selected.structure.inventoryHeader.row + 1,
-      inventoryHeaderColumn: selected.structure.inventoryHeader.headerColumn + 1,
-      inventoryHeaderAddress: `${columnName(selected.structure.inventoryHeader.headerColumn + 1)}${selected.structure.inventoryHeader.row + 1}`,
-      inventoryValueColumn: selected.structure.inventoryHeader.column + 1,
-      inventoryHeaderText: selected.structure.inventoryHeader.value,
+      referenceYear: selected.year,
+      referenceMonth: selected.month,
+      monthlyHeaderAddress: `${columnName(selected.structure.monthlyHeader.column + 1)}${selected.structure.monthlyHeader.row + 1}`,
+      currentStockColumn: columnName(selected.structure.currentStockHeader.column + 1),
       beer: sourceCells.beer,
       soju: sourceCells.soju,
       cola: sourceCells.cola,
       cider: sourceCells.cider,
     });
-    if (Object.values(sourceCells).some((cell) => !cell)) throw new Error("실재고수 값을 읽지 못했습니다.");
+    if (Object.values(sourceCells).some((cell) => !cell)) throw new Error("당월재고 수량 값을 읽지 못했습니다.");
     const stock = Object.fromEntries(Object.entries(sourceCells).map(([key, cell]) => [key, cell.value]));
-    return { ...stock, uploadedAt: new Date().toISOString(), originalFilename: clean(originalFilename), sheetName: selected.sheetName, sourceCells };
+    return { ...stock, uploadedAt: new Date().toISOString(), originalFilename: clean(originalFilename), sheetName: selected.sheetName, referenceYear: selected.year, referenceMonth: selected.month, isFallback: selected.year !== currentYear || selected.month !== currentMonth, sourceCells };
   }
 
   function eventDates(event) {
@@ -302,7 +301,10 @@
     if (status) { status.textContent = comparison.shortageCount ? `음주류 발주 필요 ${comparison.shortageCount}품목` : "재고 충분"; status.dataset.type = comparison.shortageCount ? "warning" : "ok"; }
     if (originalButton) originalButton.disabled = !snapshot.storagePath;
     const filename = root.querySelector("[data-beverage-filename]");
-    if (filename) filename.textContent = snapshot.originalFilename || "업로드 파일";
+    if (filename) {
+      const basis = snapshot.referenceMonth ? `${snapshot.isFallback ? "최근 재고: " : ""}${snapshot.referenceYear || ""}년 ${snapshot.referenceMonth}월 기준` : `${snapshot.sheetName || ""} 기준`;
+      filename.textContent = [snapshot.originalFilename || "업로드 파일", basis].filter(Boolean).join(" · ");
+    }
   }
   function bindWidget() {
     const root = document.getElementById?.("beverageInventoryWidget");
