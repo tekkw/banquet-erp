@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=daily-briefing-v2">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=mobile-board-regression-v1">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=proactive-briefing-trigger-v1">
   <link rel="stylesheet" href="../src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body class="operation-board-page">
@@ -51,6 +51,7 @@
       <div id="boardAiContext" class="board-ai-context" hidden><span id="boardAiContextText"></span><button id="boardAiContextClear" type="button" aria-label="최근 행사 및 세팅 컨텍스트 지우기">×</button></div>
       <div id="boardAiResult" class="board-ai-result" aria-live="polite"></div>
       <div class="board-ai-quick-actions" aria-label="빠른 질문">
+        <button type="button" data-mobile-briefing-open>오늘 브리핑 <span data-mobile-ai-briefing-badge hidden>0</span></button>
         <button type="button" data-board-ai-quick="오늘 끝나고 뭘 세팅해야 돼?">오늘 세팅</button>
         <button type="button" data-board-ai-quick="다음 행사 알려줘">다음 행사</button>
         <button type="button" data-board-ai-quick="현재 세팅 뭐야?">현재 세팅</button>
@@ -78,12 +79,12 @@
   <script src="../src/eventAttachments.js?v=proactive-alerts-v1"></script>
   <script src="../src/aiKnowledgeRules.js"></script>
   <script src="../src/beverageInventory.js?v=beverage-inventory-v1"></script>
-  <script src="../src/operationBoard.js?v=next-event-resolver-v1"></script>
+  <script src="../src/operationBoard.js?v=proactive-briefing-trigger-v1"></script>
   <script src="../src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
   <script src="../src/boardLayoutRecommendations.js?v=1"></script>
   <script src="../src/settingAdvisor.js?v=3"></script>
   <script src="../src/erpActionRegistry.js?v=1"></script>
   <script src="../src/erpConversationAgent.js?v=venue-normalization-v2"></script>
-  <script src="../src/operationBoardPage.js?v=venue-normalization-v2"></script>
+  <script src="../src/operationBoardPage.js?v=proactive-briefing-trigger-v1"></script>
 </body>
 </html>

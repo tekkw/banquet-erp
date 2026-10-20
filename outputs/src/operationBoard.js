@@ -508,6 +508,10 @@
   function dailyBriefingAnswer(question, events = currentEvents, today = seoulDateKey()) {
     const text = String(question || "");
     const correction = correctBriefingNextEvent(text, events, today); if (correction) return correction;
+    if (/(?:오늘\s*브리핑|확인할\s*(?:거|것).*(?:있어|있나|알려)|다음\s*세팅.*(?:뭐|무엇).*남)/i.test(text)) {
+      const briefing = dailyBriefingConversation(events, today, true);
+      return briefing.count ? `${briefing.summary}\n${briefing.question}` : "오늘 확인할 게 없습니다.";
+    }
     const active = activeDailyBriefingItem(events, today);
     if (active && /원본|엑셀/.test(text)) return openBriefingResource("original", active, events);
     if (active && /첨부/.test(text)) return openBriefingResource("attachments", active, events);

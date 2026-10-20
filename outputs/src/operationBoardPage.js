@@ -12,6 +12,8 @@
   const aiForm = document.getElementById("boardAiForm");
   const aiInput = document.getElementById("boardAiInput");
   const aiResult = document.getElementById("boardAiResult");
+  const mobileBriefingButton = document.querySelector("[data-mobile-briefing-open]");
+  const mobileBriefingBadge = document.querySelector("[data-mobile-ai-briefing-badge]");
   const aiContextLabel = document.getElementById("boardAiContext");
   const aiContextText = document.getElementById("boardAiContextText");
   const aiContextClearButton = document.getElementById("boardAiContextClear");
@@ -1048,6 +1050,12 @@
     const briefing = board.buildProactiveAlerts(events);
     sessionStorage.setItem(`banquet-erp-mobile-daily-briefing-seen:${briefing.date}`, briefing.candidates.map((item) => `${item.id || item.key}:${item.nextEventOrderId || item.eventOrderId || ""}:${item.scheduledDate || ""}:${item.summary || item.setupSummary}`).join("|"));
   }
+  function updateMobileDailyBriefingBadge() {
+    const count = board.buildProactiveAlerts(events)?.count || 0;
+    mobileBriefingBadge.textContent = String(count);
+    mobileBriefingBadge.hidden = count === 0;
+    mobileBriefingButton.setAttribute("aria-label", count ? `오늘 브리핑 · 미확인 ${count}건` : "오늘 브리핑");
+  }
   function showTransientMessage(message) { aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; }
   function proposalSummary(proposal) {
     if (proposal.intent === "update_schedule_time") return `${proposal.target?.venue || "행사"} · ${proposal.target?.content || "일정"}\n${proposal.target?.currentTime || "-"} → ${proposal.change?.time || "-"}`;
@@ -1128,6 +1136,7 @@
   aiPlusButton?.addEventListener("click", () => { const open = aiPlusMenu.hidden; aiPlusMenu.hidden = !open; aiPlusButton.setAttribute("aria-expanded", String(open)); });
   aiContextClearButton?.addEventListener("click", clearRecentEventSettingContext);
   document.querySelectorAll("[data-board-ai-quick]").forEach((button) => button.addEventListener("click", () => { aiInput.value = button.dataset.boardAiQuick; aiForm.requestSubmit(); }));
+  mobileBriefingButton.addEventListener("click", () => showMobileDailyBriefing(true));
   if (!SpeechRecognitionApi) { speechButton.disabled = true; speechButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다."; setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); }
   else speechButton.addEventListener("click", toggleSpeechRecognition);
   visualCloseButton.addEventListener("click", closeVisualCamera);
@@ -1284,7 +1293,7 @@
     if (!opened) window.location.assign(route);
   };
   window.addEventListener("banquet:field-note-saved", () => refresh());
-  window.addEventListener("banquet:operation-board-rendered", () => showMobileDailyBriefing());
+  window.addEventListener("banquet:operation-board-rendered", updateMobileDailyBriefingBadge);
   window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
