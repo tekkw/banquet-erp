@@ -49,12 +49,21 @@
     return month ? { year: null, month: Number(month[1]) } : null;
   }
   function inventoryStructure(sheet) {
-    const cells = sheetCells(sheet);
-    const findText = (pattern) => cells.find(([, cell]) => pattern.test(clean(cell?.v ?? cell?.w)));
-    const header = findText(/실재고수/);
-    const items = Object.fromEntries(Object.entries(ITEM_PATTERNS).map(([key, pattern]) => [key, findText(pattern)]));
-    const titleText = cells.slice(0, 40).map(([, cell]) => clean(cell?.v ?? cell?.w)).join(" ");
-    return { valid: Boolean(header && Object.values(items).every(Boolean)), headerCell: header?.[0] || "", items, period: parsePeriod(titleText) };
+    const rows = global.XLSX?.utils?.sheet_to_json(sheet, { header: 1, defval: "", raw: false }) || [];
+    const positions = [];
+    rows.forEach((row, rowIndex) => (row || []).forEach((value, columnIndex) => { if (clean(value)) positions.push({ row: rowIndex, column: columnIndex, value: clean(value) }); }));
+    const findCell = (pattern) => positions.find((cell) => pattern.test(cell.value));
+    const headerCell = findCell(/^\s*실재고수\s*$/);
+    const categoryHeader = findCell(/^\s*구분\s*$/);
+    const monthlyHeader = findCell(/당월재고/);
+    const items = Object.fromEntries(Object.entries(ITEM_PATTERNS).map(([key, pattern]) => [key, rows.findIndex((row) => pattern.test((row || []).map(clean).join(" ")))]));
+    const headerMerge = headerCell && (sheet?.["!merges"] || []).find((range) => headerCell.row >= range.s.r && headerCell.row <= range.e.r && headerCell.column >= range.s.c && headerCell.column <= range.e.c);
+    const inventoryColumns = headerCell ? headerMerge ? Array.from({ length: headerMerge.e.c - headerMerge.s.c + 1 }, (_, index) => headerMerge.s.c + index) : [headerCell.column] : [];
+    const inventoryColumn = inventoryColumns.sort((left, right) => Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[right]) != null).length - Object.values(items).filter((row) => normalizeStockNumber(rows[row]?.[left]) != null).length)[0];
+    const inventoryHeader = headerCell && { ...headerCell, column: inventoryColumn ?? headerCell.column, mergedColumns: inventoryColumns };
+    const titleText = rows.slice(0, 12).flat().map(clean).filter(Boolean).join(" ");
+    const missingItems = Object.entries(items).filter(([, row]) => row < 0).map(([key]) => key);
+    return { rows, hasTable: Boolean(categoryHeader && monthlyHeader), valid: Boolean(categoryHeader && monthlyHeader && inventoryHeader && !missingItems.length), inventoryHeader, categoryHeader, monthlyHeader, items, missingItems, period: parsePeriod(titleText) };
   }
   function normalizeStockNumber(value) {
     const normalized = clean(value).replaceAll(",", "");
@@ -71,18 +80,11 @@
     const value = normalizeStockNumber(cell?.v ?? (!cell?.f ? cell?.w : null));
     return value == null ? null : { address, value, formula: Boolean(cell?.f) };
   }
-  function readInventoryItem(sheet, sheetName, key, structure) {
-    const itemAddress = structure.items[key]?.[0];
-    const itemPosition = parseAddress(itemAddress);
-    const headerPosition = parseAddress(structure.headerCell);
-    if (itemPosition && headerPosition) {
-      const columns = [...new Set([headerPosition.column, headerPosition.column - 1].filter((column) => column > 0))];
-      for (const column of columns) {
-        const semantic = readNumericCell(sheet, `${columnName(column)}${itemPosition.row}`, sheetName);
-        if (semantic) return semantic;
-      }
-    }
-    return readNumericCell(sheet, CELL_MAPPING[key].stockCell, sheetName);
+  function readInventoryItem(key, structure) {
+    const row = structure.items[key]; const column = structure.inventoryHeader?.column;
+    if (row < 0 || column == null) return null;
+    const rawValue = structure.rows[row]?.[column]; const value = normalizeStockNumber(rawValue);
+    return value == null ? null : { row: row + 1, column: column + 1, rawValue, value };
   }
   function readStockWorkbook(workbook, originalFilename = "", now = new Date()) {
     if (!workbook?.SheetNames?.length) throw new Error("재고 형식의 시트를 찾지 못했습니다.");
@@ -100,19 +102,26 @@
       const variant = /신규/.test(sheetName) ? 2 : /기존/.test(sheetName) ? 1 : 0;
       return { sheetName, sheet, structure, index, year, month, variant, example: /예시/.test(sheetName) };
     }).filter((candidate) => candidate.structure.valid);
+    const tableSheets = workbook.SheetNames.map((sheetName) => ({ sheetName, structure: inventoryStructure(workbook.Sheets?.[sheetName]) })).filter((candidate) => candidate.structure.hasTable);
     const preferred = candidates.some((candidate) => !candidate.example) ? candidates.filter((candidate) => !candidate.example) : candidates;
     preferred.sort((left, right) => right.year - left.year || right.month - left.month || right.variant - left.variant || right.index - left.index);
     console.debug("[Beverage Inventory] valid sheets", { validInventorySheets: candidates.map(({ sheetName, year, month, variant, example }) => ({ sheetName, year, month, variant: variant === 2 ? "신규" : variant === 1 ? "기존" : "", example })) });
     const selected = preferred[0];
-    if (!selected) throw new Error("재고 형식의 시트를 찾지 못했습니다.");
-    const sourceCells = Object.fromEntries(Object.keys(CELL_MAPPING).map((key) => [key, readInventoryItem(selected.sheet, selected.sheetName, key, selected.structure)]));
+    if (!selected) {
+      if (tableSheets.some((candidate) => !candidate.structure.inventoryHeader)) throw new Error("실재고수 header를 찾지 못했습니다.");
+      if (tableSheets.some((candidate) => candidate.structure.missingItems.length)) throw new Error("필수 품목 row를 찾지 못했습니다.");
+      throw new Error("재고 형식의 시트를 찾지 못했습니다.");
+    }
+    const sourceCells = Object.fromEntries(Object.keys(CELL_MAPPING).map((key) => [key, readInventoryItem(key, selected.structure)]));
     console.debug("[Beverage Inventory] workbook selection", {
       selectedSheet: selected.sheetName,
-      inventoryHeaderColumn: columnName(parseAddress(selected.structure.headerCell)?.column || 0) || null,
-      beer: { row: parseAddress(selected.structure.items.beer?.[0])?.row || null, value: sourceCells.beer?.value ?? null },
-      soju: { row: parseAddress(selected.structure.items.soju?.[0])?.row || null, value: sourceCells.soju?.value ?? null },
-      cola: { row: parseAddress(selected.structure.items.cola?.[0])?.row || null, value: sourceCells.cola?.value ?? null },
-      cider: { row: parseAddress(selected.structure.items.cider?.[0])?.row || null, value: sourceCells.cider?.value ?? null },
+      inventoryHeaderRow: selected.structure.inventoryHeader.row + 1,
+      inventoryHeaderColumn: selected.structure.inventoryHeader.column + 1,
+      inventoryHeaderText: selected.structure.inventoryHeader.value,
+      beer: sourceCells.beer,
+      soju: sourceCells.soju,
+      cola: sourceCells.cola,
+      cider: sourceCells.cider,
     });
     if (Object.values(sourceCells).some((cell) => !cell)) throw new Error("실재고수 값을 읽지 못했습니다.");
     const stock = Object.fromEntries(Object.entries(sourceCells).map(([key, cell]) => [key, cell.value]));
@@ -226,7 +235,9 @@
   async function uploadInventoryFile(file) {
     if (!file) return null;
     if (!global.XLSX) throw new Error("엑셀 파서를 불러오지 못했습니다.");
-    const workbook = global.XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: true });
+    let workbook;
+    try { workbook = global.XLSX.read(await file.arrayBuffer(), { type: "array", cellFormula: true }); }
+    catch (error) { console.error("[Beverage Inventory] workbook read failed", error); throw new Error("엑셀 파일을 읽지 못했습니다."); }
     const parsed = readStockWorkbook(workbook, file.name);
     const uploaded = await bindings.uploadOriginalFile?.(file, { pathPrefix: "beverage_inventory" });
     const nextSnapshot = { ...parsed, storagePath: uploaded?.storagePath || "" };
