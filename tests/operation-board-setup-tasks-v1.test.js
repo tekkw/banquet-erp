@@ -54,7 +54,7 @@ assert(source.includes('data-setup-editor') && source.includes('name="eventOrder
 assert(!source.includes('prompt("연결 행사 ID"'), "행사 ID를 문자열 prompt로 수정하면 안 된다");
 assert(source.includes("eventOrderId: data.eventOrderId") && source.includes("setupEventDetails(linkedEvent)"), "선택 행사의 실제 ID와 표시 정보를 연결해야 한다");
 assert(source.includes("data-editor-child-add") && source.includes("data-editor-child-delete") && source.includes("data-editor-child-complete"), "modal에서 하위 항목을 관리할 수 있어야 한다");
-assert(source.includes('class="setup-venue-badge"') && source.includes('class="setup-task-summary"'), "상단 카드는 장소 badge와 하위 항목 요약을 표시해야 한다");
+assert(source.includes('class="setup-venue-badge"') && source.includes('data-setup-detail'), "상단 카드는 compact 장소 badge와 상세 보기 동작을 제공해야 한다");
 assert(source.includes("setup-editor-dialog") && source.includes("showModal()"), "모바일도 공용 행사 선택 editor를 사용해야 한다");
 assert(source.includes('data-setup-create') && source.includes('data-setup-create-form'), "다음 세팅 탭에서 공용 setup editor로 수동 작업을 추가해야 한다");
 assert(source.includes('name="pinned" type="checkbox" checked'), "생성 시 상단 고정을 선택할 수 있어야 한다");
@@ -87,6 +87,11 @@ assert.deepStrictEqual(Array.from(candidates, (item) => item.details.eventDate),
 assert.deepStrictEqual(Array.from(candidates.filter((item) => item.overlap), (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-25"], "같은 공간 후보는 날짜 오름차순이어야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "today").details), "10/15 · 오늘 주최 · 부1 · 20명", "organizer와 compact venue만 기본 label에 표시해야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "fallback").details), "10/20 · 행사명 대체 · 카2 · 50명", "organizer가 없으면 event_name을 사용해야 한다");
+const organizerCard = board.setupCardInfo({ type: "next_setup", venue: "부라노1", eventOrderId: "today", next: { eventOrderId: "today", date: "2026-10-15", time: "09:00", name: "긴 오늘 행사명", people: 20 } });
+assert.deepStrictEqual({ ...organizerCard }, { eventOrderId: "today", title: "오늘 주최", date: "2026-10-15", time: "09:00", venue: "부1", people: 20 }, "B/D. 카드에는 organizer/date/time/short venue/people만 사용해야 한다");
+const fallbackCard = board.setupCardInfo({ type: "next_setup", venue: "카프리2", eventOrderId: "fallback", next: { eventOrderId: "fallback", date: "2026-10-20", time: "13:00", name: "행사명 대체", people: 50 } });
+assert.strictEqual(fallbackCard.title, "행사명 대체", "C. organizer가 없으면 event_name을 사용해야 한다");
+assert(source.includes("LAY &amp; OUT") && source.includes("OTHERS"), "I. 긴 행사명과 LAY & OUT/OTHERS는 상세 modal에서 확인할 수 있어야 한다");
 const duplicateBlocks = [{ key: "manual-setup:one", kind: "manual", type: "next_setup", date: "2026-10-15", venue: "부라노1", eventOrderId: "week", next: { date: "2026-10-18" } }];
 assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노1", "2026-10-18", duplicateBlocks)?.key, "manual-setup:one", "eventOrderId + venue + 예정 날짜 중복을 찾아야 한다");
 assert.strictEqual(board.findLocalSetupDuplicate("week", "부라노2", "2026-10-18", duplicateBlocks), null, "공간이 다르면 별도 세팅 작업을 허용해야 한다");

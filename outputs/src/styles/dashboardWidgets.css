@@ -306,6 +306,9 @@ body {
 .setup-task-card button { min-height: 28px; padding: 3px 7px; border: 1px solid var(--dash-border); border-radius: 6px; background: transparent; color: var(--dash-text); font: inherit; font-size: 10px; cursor: pointer; }
 .setup-task-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
 .setup-task-actions .setup-original-action { flex-basis: auto; }
+.setup-card-meta { overflow: hidden; color: var(--dash-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; word-break: keep-all; overflow-wrap: normal; }
+.operation-block .next-setup-detail { display: none; }
+.operation-block.next-setup-expanded .next-setup-detail { display: grid; }
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
 .setup-overdue-badge { color: #fecaca; border-color: rgba(248, 113, 113, .45); background: rgba(127, 29, 29, .35); }
@@ -645,10 +648,10 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .operation-block-mobile-header span { min-width: 0; padding: 3px 7px; border-radius: 999px; font-size: 11px; line-height: 1.35; word-break: keep-all; }
   .operation-block-mobile-header strong { overflow: hidden; background: color-mix(in srgb, var(--space-color) 15%, transparent); color: var(--space-color); text-overflow: ellipsis; white-space: nowrap; }
   .operation-block-mobile-header span { flex: 0 0 auto; border: 1px solid var(--dash-border); color: #b9c7d2; }
-  .operation-block h4 { display: -webkit-box; margin: 9px 0 5px; overflow: hidden; font-size: 15px; line-height: 1.45; word-break: keep-all; overflow-wrap: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .operation-block h4 { display: -webkit-box; min-width: 0; margin: 9px 0 5px; overflow: hidden; font-size: 15px; line-height: 1.45; word-break: keep-all; overflow-wrap: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .operation-block p,
   .operation-block-mobile-support,
-  .next-setup-mobile-summary { word-break: keep-all; overflow-wrap: break-word; }
+  .next-setup-mobile-summary { word-break: keep-all; overflow-wrap: normal; }
   .operation-block-mobile-support { display: flex; flex-wrap: wrap; gap: 6px; color: var(--dash-muted); font-size: 12px; }
   .operation-check { grid-area: complete; display: inline-flex; align-items: center; gap: 7px; min-height: 44px; margin-top: 10px; padding: 0 12px; border: 1px solid var(--dash-border); border-radius: 8px; color: var(--dash-text); font-size: 12px; }
   .operation-mobile-only { display: inline; }
@@ -658,12 +661,10 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
   .operation-mobile-reminder-menu[hidden] { display: none; }
   .operation-mobile-reminder-menu button { min-height: 42px; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--dash-text); text-align: left; }
   .operation-mobile-reminder-menu button:active { background: rgba(76, 141, 255, .14); }
-  .next-setup-mobile-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; margin-top: 9px; padding: 10px; border: 1px solid rgba(150, 180, 205, .1); border-radius: 9px; background: rgba(6, 17, 31, .34); }
+  .next-setup-mobile-summary { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 9px; padding: 10px; border: 1px solid rgba(150, 180, 205, .1); border-radius: 9px; background: rgba(6, 17, 31, .34); }
   .next-setup-mobile-summary strong,
   .next-setup-mobile-summary span { grid-column: 1; }
-  .next-setup-mobile-summary time,
-  .next-setup-mobile-summary small { grid-column: 2; text-align: right; }
-  .next-setup-mobile-summary button { grid-column: 1 / -1; min-height: 42px; margin-top: 5px; border: 1px solid var(--dash-border); border-radius: 8px; background: rgba(19, 47, 70, .72); color: var(--dash-text); }
+  .next-setup-mobile-summary small { grid-column: 1; overflow: hidden; color: var(--dash-muted); text-overflow: ellipsis; white-space: nowrap; }
   .operation-block .next-setup-detail { display: none; }
   .operation-block.next-setup-expanded .next-setup-detail { display: grid; }
   .operation-detail-dialog { width: min(430px, calc(100vw - 20px)); max-height: calc(100dvh - var(--mobile-bottom-nav-height, 72px) - 24px); }
