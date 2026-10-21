@@ -740,7 +740,9 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .beverage-inventory-widget [data-beverage-status][data-type="warning"] { background: rgba(255, 103, 103, .14); color: #ff9b9b; }
 .beverage-inventory-widget [data-beverage-status][data-type="ok"] { background: rgba(63, 185, 116, .14); color: #77dda3; }
 .beverage-inventory-widget [data-beverage-status][data-type="error"] { color: #ff9b9b; }
-.beverage-inventory-row { display: grid; grid-template-columns: 54px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid rgba(150, 180, 205, .1); font-size: 12px; }
+.beverage-inventory-widget [data-beverage-summary] { display: grid; grid-auto-flow: column; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(62px, auto)); column-gap: 18px; }
+.beverage-inventory-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: center; gap: 3px 8px; padding: 8px 0; border-bottom: 1px solid rgba(150, 180, 205, .1); font-size: 12px; }
+.beverage-inventory-row strong { grid-column: 1 / -1; }
 .beverage-inventory-row span { color: var(--dash-muted); font-variant-numeric: tabular-nums; }
 .beverage-inventory-row em { color: #77dda3; font-size: 11px; font-style: normal; font-weight: 800; }
 .beverage-inventory-row.is-short em { color: #ff9b9b; }
@@ -752,6 +754,9 @@ button.mini-day:hover { border: 0; background: rgba(130, 149, 232, .12); color: 
 .beverage-inventory-actions { display: flex; gap: 7px; margin-top: auto; }
 .beverage-inventory-actions button { min-height: 34px; padding: 6px 9px; font-size: 11px; }
 .beverage-inventory-warning { margin: 10px 0; padding: 9px 11px; border: 1px solid rgba(255, 103, 103, .24); border-radius: 9px; background: rgba(255, 103, 103, .1); color: #ffc0c0; font-size: 12px; }
+@media (max-width: 720px) {
+  .beverage-inventory-widget [data-beverage-summary] { grid-auto-flow: row; grid-template-columns: 1fr; grid-template-rows: none; }
+}
 
 @media (max-width: 768px) {
   .hall-confirmation-card { grid-template-columns: 1fr; }

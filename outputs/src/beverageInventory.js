@@ -171,11 +171,34 @@
     const dates = [...(event?.calendarDates || []), event?.startDate, event?.endDate].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(clean(value)));
     return [...new Set(dates)].sort();
   }
+  function scheduleDateKey(value, event) {
+    const text = clean(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const match = text.match(/(?:^|\D)(\d{1,2})\s*[.\/-]\s*(\d{1,2})(?:\D|$)/);
+    if (!match) return "";
+    const eventYear = eventDates(event).map((date) => Number(date.slice(0, 4))).find(Boolean)
+      || Number(clean(event?.eventDateTime).match(/(?:^|\D)(20\d{2})(?:\D|$)/)?.[1])
+      || Number(seoulDateKey().slice(0, 4));
+    return `${eventYear}-${String(Number(match[1])).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+  }
   function normalizeMeal(value) {
     const text = clean(value).toLowerCase();
-    if (/중식|lunch/.test(text)) return "중식뷔페";
-    if (/석식|dinner/.test(text)) return "석식뷔페";
+    if (/중식|런치|lunch/.test(text)) return "중식뷔페";
+    if (/석식|디너|dinner/.test(text)) return "석식뷔페";
     return "";
+  }
+  function valueText(value) {
+    if (Array.isArray(value)) return value.map((item) => valueText(item)).join(" ");
+    if (value && typeof value === "object") return [value.label, value.name, value.key, value.content, value.itemName, value.item_name, value.mealType, value.meal_type].map(clean).join(" ");
+    return clean(value);
+  }
+  function mealContext(event, row) {
+    const scheduleText = [row?.content, row?.meal, row?.type, row?.mealType, row?.meal_type].map(valueText).join(" ");
+    const eventText = [event?.mealTypes, event?.eventType, event?.items, event?.event_items, event?.notes, event?.event_notes, event?.others, event?.internalMemo, event?.parsedMealTypes, event?.meal].map(valueText).join(" ");
+    const meal = normalizeMeal(scheduleText) || (!scheduleText && normalizeMeal(eventText));
+    const buffet = /뷔페|buffet/i.test(`${scheduleText} ${eventText}`);
+    const excludedType = /도시락|코스|단품|box\s*meal|course/i.test(scheduleText);
+    return { meal, buffet, included: Boolean(meal && buffet && !excludedType), scheduleText, eventText };
   }
   function calculateDemand(events, today = seoulDateKey()) {
     const range = demandRange(today);
@@ -185,14 +208,15 @@
       const fallbackDates = eventDates(event);
       const rows = event?.schedule?.length ? event.schedule : fallbackDates.map((date) => ({ date, content: [event.eventType, ...(event.mealTypes || [])].join(" "), venue: event.venue, people: event.guestCount }));
       rows.forEach((row) => {
-        const date = clean(row.date) || fallbackDates[0] || "";
+        const date = scheduleDateKey(row.date, event) || fallbackDates[0] || "";
         if (!date || date < range.start || date > range.end) return;
         const venue = clean(row.venue || event.venue);
         if (/피렌체|firenze/i.test(venue)) return;
-        const text = [row.content, event.eventType, ...(event.mealTypes || [])].map(clean).join(" ");
-        if (/check\s*in|check\s*out|체크\s*인|체크\s*아웃|입실|퇴실/i.test(text) || !/뷔페|buffet/i.test(text)) return;
-        const meal = normalizeMeal(text);
-        if (!meal) return;
+        const text = [row.content, row.type, row.meal, row.mealType, row.meal_type].map(valueText).join(" ");
+        if (/check\s*in|check\s*out|체크\s*인|체크\s*아웃|입실|퇴실/i.test(text)) return;
+        const context = mealContext(event, row);
+        if (!context.included) return;
+        const meal = context.meal;
         const eventId = clean(event.id) || [event.eventName, event.companyName, event.startDate].map(clean).join("|");
         const key = `${eventId}|${date}|${meal}`;
         if (seen.has(key)) return;
@@ -219,7 +243,7 @@
 
   function matchesQuestion(question) {
     const text = clean(question);
-    return (/식사.*인원/.test(text) || /(음주류|주류|음료|맥주|소주|콜라|사이다|아이시스|생수|퓨리스|커피|물)/.test(text)) && /(발주|부족|재고|필요|충분|모자|얼마|몇\s*개|있어|인원)/.test(text);
+    return (/식사.*(?:인원|몇\s*명)/.test(text) || /(음주류|주류|술|음료|맥주|소주|콜라|사이다|아이시스|생수|퓨리스|커피|물)/.test(text)) && /(발주|부족|재고|필요|충분|모자|얼마|몇\s*(?:개|명)|있어|인원)/.test(text);
   }
   function questionItemKey(question) {
     const text = clean(question).toLowerCase();
@@ -232,7 +256,7 @@
   function answerQuestion(question, events = currentEvents, today = seoulDateKey()) {
     if (!snapshot) return { text: "음주류 재고 엑셀이 아직 업로드되지 않았습니다.", comparison: getComparison(events, today) };
     const comparison = getComparison(events, today);
-    if (/식사.*인원/.test(clean(question))) return { text: `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")} 식사 인원은 총 ${comparison.demand.totalGuests}명입니다.`, comparison };
+    if (/식사.*(?:인원|몇\s*명)/.test(clean(question))) return { text: `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")} 식사 인원은 총 ${comparison.demand.totalGuests}명입니다.`, comparison };
     const selectedKey = questionItemKey(question);
     const rangeLabel = `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")}`;
     if (selectedKey) {
@@ -245,8 +269,8 @@
     const shortageLabels = shortages.map((item) => `${item.label} ${item.shortage}개`);
     const shortageText = shortageLabels.length > 1 ? `${shortageLabels.slice(0, -1).join(", ")}와 ${shortageLabels.at(-1)}` : shortageLabels[0] || "";
     const text = shortages.length
-      ? `${rangeLabel} 기준으로 ${shortageText}가 부족합니다.`
-      : `${rangeLabel} 기준 음주류 재고가 모두 충분합니다.`;
+      ? `${rangeLabel} 식사 예상 인원은 ${comparison.demand.totalGuests}명입니다. 현재 기준으로 ${shortageText}가 부족합니다.`
+      : `${rangeLabel} 식사 예상 인원은 ${comparison.demand.totalGuests}명입니다. 현재 기준으로 음주류 재고가 모두 충분합니다.`;
     return { text, comparison };
   }
 
@@ -315,8 +339,8 @@
       if (originalButton) originalButton.disabled = true;
       return;
     }
-    if (summary) summary.innerHTML = Object.values(comparison.items).map((item) => `<div class="beverage-inventory-row${item.shortage ? " is-short" : ""}"><strong>${item.label}</strong><span>${item.stock}${item.required == null ? "" : ` / 필요 ${item.required}`}</span><em>${item.required == null ? "필요량 미설정" : item.shortage ? `부족 ${item.shortage}` : "충분"}</em></div>`).join("");
-    if (details) details.innerHTML = `${comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.title} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>"}<li><strong>총 식사 수요: ${comparison.demand.totalGuests}명</strong></li>`;
+    if (summary) summary.innerHTML = Object.values(comparison.items).map((item) => `<div class="beverage-inventory-row${item.shortage ? " is-short" : ""}"><strong>${item.label}</strong><span>현재 ${item.stock}${item.required == null ? " · 필요량 기준 미설정" : ` · 필요 ${item.required}`}</span><em>${item.required == null ? "" : item.shortage ? `부족 ${item.shortage}` : `여유 ${item.stock - item.required}`}</em></div>`).join("");
+    if (details) details.innerHTML = `${comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.title} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>"}<li><strong>총 식사 수요: ${comparison.demand.totalGuests}명</strong></li>${Object.entries(DEMAND_RATES).filter(([, rate]) => rate != null).map(([key, rate]) => `<li>${escapeHtml(`${LABELS[key]}: ${comparison.demand.totalGuests} × ${rate} = ${comparison.demand.required[key]}`)}</li>`).join("")}`;
     if (status) { status.textContent = comparison.shortageCount ? `음주류 발주 필요 ${comparison.shortageCount}품목` : "재고 충분"; status.dataset.type = comparison.shortageCount ? "warning" : "ok"; }
     if (originalButton) originalButton.disabled = !snapshot.storagePath;
     const filename = root.querySelector("[data-beverage-filename]");
@@ -354,5 +378,5 @@
     return count ? `<div class="beverage-inventory-warning" role="status">음주류 발주 필요 <strong>${count}품목</strong></div>` : "";
   }
 
-  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RATES, readInventoryWorkbook, readStockWorkbook, demandRange, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
+  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RATES, readInventoryWorkbook, readStockWorkbook, demandRange, scheduleDateKey, mealContext, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
 })(window);

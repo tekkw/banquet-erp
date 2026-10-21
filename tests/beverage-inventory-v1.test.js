@@ -80,7 +80,7 @@ assert.equal(comparison.items.beer.shortage, 50);
 assert.equal(comparison.items.soju.shortage, 0);
 assert.equal(comparison.items.cola.shortage, 20);
 assert.equal(comparison.shortageCount, 2);
-assert.equal(inventory.answerQuestion("음주류 발주해야 돼?", events, "2026-10-16").text, "10/16~10/25 기준으로 맥주 50개와 콜라 20개가 부족합니다.");
+assert.equal(inventory.answerQuestion("음주류 발주해야 돼?", events, "2026-10-16").text, "10/16~10/25 식사 예상 인원은 200명입니다. 현재 기준으로 맥주 50개와 콜라 20개가 부족합니다.");
 assert.match(inventory.answerQuestion("맥주 얼마나 부족해?", events, "2026-10-16").text, /현재 150개, 필요 200개로 50개 부족/);
 const changedDemand = inventory.getComparison([...events, { id: "new", venue: "부라노3", guestCount: 20, schedule: [{ date: "2026-10-21", content: "석식 뷔페" }] }], "2026-10-16");
 assert.equal(changedDemand.demand.required.beer, 220, "행사 변경 시 최신 목록으로 다시 계산해야 한다");
@@ -107,6 +107,17 @@ assert.equal(waterComparison.items.water500.required, 280);
 assert.equal(waterComparison.items.water500.shortage, 39);
 assert.match(inventory.answerQuestion("물 부족해?", mealEvents280, "2026-10-21").text, /39개 부족/);
 assert.match(inventory.answerQuestion("이번주 식사 인원 몇 명이야?", mealEvents280, "2026-10-21").text, /총 280명/);
+const productionShapeEvents = [
+  { id: "convention", companyName: "대구척수장애인협회", startDate: "2026-10-22", venue: "컨벤션B", guestCount: 70, schedule: [{ date: "10. 22 (목)", content: "디너/뷔페", venue: "컨벤션B", people: 70 }] },
+  { id: "festa", companyName: "콘텐츠랩", startDate: "2026-10-22", venue: "페스타", guestCount: 73, schedule: [{ date: "10. 22 (목)", content: "디너/뷔페", venue: "페스타", people: 73 }] },
+  { id: "capri", companyName: "충남대학교 산업대학원", startDate: "2026-10-24", venue: "카프리1", guestCount: 40, schedule: [{ date: "10. 24 (토)", content: "디너/뷔페", venue: "카프리1" }] },
+  { id: "meal-type", companyName: "mealTypes 행사", startDate: "2026-10-25", venue: "부라노1", guestCount: 10, mealTypes: ["석식뷔페"], schedule: [{ date: "10. 25 (일)", content: "석식", venue: "부라노1" }] },
+  { id: "firenze-raw", companyName: "제외", startDate: "2026-10-24", venue: "피렌체", guestCount: 500, schedule: [{ date: "10. 24 (토)", content: "디너/뷔페", venue: "피렌체", people: 500 }] },
+];
+const productionShapeDemand = inventory.calculateDemand(productionShapeEvents, "2026-10-21");
+assert.equal(inventory.scheduleDateKey("10. 22 (목)", productionShapeEvents[0]), "2026-10-22", "실제 저장 형식의 월·일을 ISO 날짜로 정규화해야 한다");
+assert.equal(productionShapeDemand.totalGuests, 193, "row.people 우선, guestCount fallback, mealTypes 뷔페 근거를 함께 사용해야 한다");
+assert.deepEqual(JSON.parse(JSON.stringify(productionShapeDemand.details.map((item) => item.guests))), [70, 73, 40, 10]);
 inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 500 });
 assert.equal(inventory.getComparison(events, "2026-10-16").shortageCount, 0, "새 snapshot은 이전 현재고를 덮어써야 한다");
 
@@ -115,7 +126,9 @@ const boardHtml = fs.readFileSync("outputs/board/index.html", "utf8");
 const ai = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 const registry = fs.readFileSync("outputs/src/erpActionRegistry.js", "utf8");
 assert(html.includes('id="beverageInventoryWidget"') && html.includes('data-beverage-upload') && html.includes('data-beverage-original'));
-assert(html.includes("beverageInventory.js?v=inventory-eight-items-v1") && boardHtml.includes("beverageInventory.js?v=inventory-eight-items-v1"));
+assert(html.includes("beverageInventory.js?v=beverage-demand-v2") && boardHtml.includes("beverageInventory.js?v=beverage-demand-v2"));
+const dashboardCss = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
+assert(dashboardCss.includes("grid-template-columns: repeat(2") && dashboardCss.includes("@media (max-width: 720px)"), "PC는 2열, 모바일은 1열이어야 한다");
 assert(registry.includes('"get_beverage_inventory_status", "inventory", "query"'));
 assert(ai.includes('executeAction("get_beverage_inventory_status"') && ai.includes("matchesQuestion(question)"), "AI는 공용 Action Registry의 결정론 계산을 사용해야 한다");
 assert(source.includes('board_date: SNAPSHOT_DATE') && source.includes('item_key: SNAPSHOT_KEY'), "최신 snapshot은 기존 공용 persistent table의 고정 key로 덮어써야 한다");
