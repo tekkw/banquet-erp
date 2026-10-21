@@ -108,6 +108,21 @@ const ordering = [
   { ...persistent, key: "today", next: { date: "2026-10-21", time: "09:00" } },
 ];
 assert.deepStrictEqual(Array.from(board.sortSetupTasks(ordering, "2026-10-21"), (item) => item.key), ["overdue", "today", "future"], "지연, 오늘, 미래 순으로 정렬해야 한다");
+const futurePinned = { key: "future-pinned", id: "future-pinned", kind: "manual", type: "next_setup", date: "2026-10-21", venue: "부라노1", eventOrderId: "future-event", next: { eventOrderId: "future-event", date: "2026-10-22", name: "긴 미래 행사명" } };
+board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: {} });
+assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-21"), "future");
+assert.strictEqual(board.setupBoardTasks([futurePinned], "2026-10-21").length, 0, "A. 예정일 전에는 상단 고정에 표시하지 않는다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned], "2026-10-22"), (item) => item.key), [futurePinned.key], "B. 예정일 당일 표시한다");
+assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "overdue", "C. 지난 미완료 작업은 지연이다");
+board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: { [futurePinned.key]: true } });
+assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "completed");
+assert.strictEqual(board.setupBoardTasks([futurePinned], "2026-10-23").length, 0, "D. 완료 작업은 상단에서 제거한다");
+const automaticDuplicate = { ...futurePinned, key: "auto-duplicate", id: undefined, kind: "next_setup" };
+board._setStateForTest({ pins: { [futurePinned.key]: true, [automaticDuplicate.key]: true }, completions: {} });
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([automaticDuplicate, futurePinned], "2026-10-22"), (item) => item.key), [futurePinned.key], "E. persistent task가 동일 자동 후보보다 우선한다");
+const separate = { ...futurePinned, key: "separate", id: "separate" };
+board._setStateForTest({ pins: { [futurePinned.key]: true, [separate.key]: true }, completions: { [futurePinned.key]: true } });
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned, separate], "2026-10-22"), (item) => item.key), [separate.key], "F. 별도 persistent task는 하나를 완료해도 유지한다");
 context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");

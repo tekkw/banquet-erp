@@ -750,8 +750,29 @@
     renderDashboardAgendaWidget();
     window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
-  function setupBoardTasks(blocks) {
-    return sortSetupTasks((blocks || []).filter((item) => state.pins[item.key] && !item.completed));
+  function getPinnedSetupStatus(task, today = seoulDateKey()) {
+    if (task?.completed === true || state.completions[task?.key] === true) return "completed";
+    const scheduledDate = setupScheduledDate(task) || task?.plannedDate || task?.date || "";
+    if (scheduledDate > today) return "future";
+    if (scheduledDate === today) return "today";
+    return "overdue";
+  }
+  function pinnedSetupMatchKey(item) {
+    const venue = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(item?.venue) || normalize(item?.venue).toLowerCase().replace(/\s+/g, "");
+    return [item?.eventOrderId || item?.next?.eventOrderId || "", venue, setupScheduledDate(item) || item?.plannedDate || item?.date || ""].join("|");
+  }
+  function dedupePinnedSetupTasks(tasks) {
+    const persistent = []; const automatic = []; const persistentIds = new Set();
+    (tasks || []).forEach((item) => {
+      if (item.kind === "manual") { const id = String(item.id || item.key || ""); if (!persistentIds.has(id)) { persistentIds.add(id); persistent.push(item); } }
+      else automatic.push(item);
+    });
+    const persistentMatches = new Set(persistent.map(pinnedSetupMatchKey)); const automaticKeys = new Set();
+    return [...persistent, ...automatic.filter((item) => { const match = pinnedSetupMatchKey(item); const key = `${match}|${item.source || item.kind || "auto"}|${item.type || "next_setup"}`; if (persistentMatches.has(match) || automaticKeys.has(key)) return false; automaticKeys.add(key); return true; })];
+  }
+  function setupBoardTasks(blocks, today = seoulDateKey()) {
+    const visible = (blocks || []).filter((item) => state.pins[item.key] && ["today", "overdue"].includes(getPinnedSetupStatus(item, today)));
+    return sortSetupTasks(dedupePinnedSetupTasks(visible), today);
   }
   function renderSetupTaskBoard(blocks) {
     const tasks = setupBoardTasks(blocks);
@@ -760,7 +781,8 @@
       const next = item.next || {}; const eventTitle = next.name || item.title; const eventDate = next.date || state.setupOverrides[item.key]?.eventDate || "";
       const childSummary = checklist.map((child) => `${child.name}${child.quantity ? ` ${child.quantity}${child.unit || ""}` : ""}`).join(" · ");
       const sourceBadge = item.metadataSource === "manual_setup_task" ? "수동" : "자동";
-      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</span><div><strong>${escapeHtml(eventTitle)}</strong><small>예정 ${escapeHtml([eventDate && eventDate.slice(5).replace("-", "/"), item.next?.time || item.time].filter(Boolean).join(" "))}</small></div>${isSetupOverdue(item) ? '<span class="setup-overdue-badge">지연</span>' : ""}<span class="setup-source-badge">${sourceBadge}</span></div>${childSummary ? `<p class="setup-task-summary">${escapeHtml(childSummary)}</p>` : ""}<div class="setup-task-actions">${renderOriginalAction(item.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
+      const status = getPinnedSetupStatus(item); const overdueDays = status === "overdue" && eventDate ? Math.max(1, Math.round((new Date(`${seoulDateKey()}T12:00:00+09:00`) - new Date(`${eventDate}T12:00:00+09:00`)) / 86400000)) : 0;
+      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</span><div><strong>${escapeHtml(eventTitle)}</strong><small>예정 ${escapeHtml([eventDate && eventDate.slice(5).replace("-", "/"), item.next?.time || item.time].filter(Boolean).join(" "))}</small></div>${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-source-badge">${sourceBadge}</span></div>${childSummary ? `<p class="setup-task-summary">${escapeHtml(childSummary)}</p>` : ""}<div class="setup-task-actions">${renderOriginalAction(item.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
     return `<section class="setup-task-board"><div class="setup-task-heading"><h3>다음 세팅 / 고정 작업</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${tasks.map((item) => card(item)).join("") || '<p>상단에 고정된 작업이 없습니다.</p>'}</div></section>`;
   }
@@ -1104,4 +1126,6 @@
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
   window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
+  window.BANQUET_ERP_OPERATION_BOARD.getPinnedSetupStatus = getPinnedSetupStatus;
+  window.BANQUET_ERP_OPERATION_BOARD.dedupePinnedSetupTasks = dedupePinnedSetupTasks;
 })();

@@ -294,6 +294,7 @@ body {
 .setup-task-card.completed { opacity: .72; }
 .setup-task-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; }
 .setup-task-main > div { display: grid; min-width: 0; gap: 1px; }
+.setup-task-main > div strong { min-width: 0; overflow: hidden; word-break: keep-all; overflow-wrap: normal; }
 .setup-task-main span, .setup-task-main small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-task-main span { font-size: 12px; }
 .setup-task-main small { color: var(--dash-muted); font-size: 10px; }
@@ -347,8 +348,13 @@ body {
 
 @media (max-width: 768px) {
   .setup-task-board { position: static; z-index: auto; top: auto; padding: 8px; }
-  .setup-task-card { grid-template-columns: 1fr; gap: 7px; }
-  .setup-task-actions { justify-content: flex-start; }
+  .setup-task-card { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .setup-task-main { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .setup-task-main > div strong { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .setup-task-main .setup-overdue-badge, .setup-task-main .setup-source-badge { grid-column: 3; max-width: 72px; }
+  .setup-task-summary { display: -webkit-box; white-space: normal; word-break: keep-all; overflow-wrap: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .setup-task-actions { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; }
+  .setup-task-actions button { flex: 0 0 auto; white-space: nowrap; }
   .setup-editor-child { grid-template-columns: auto minmax(100px, 1fr) 56px 52px auto; }
   .setup-editor-dialog { inset: auto 0 0; width: 100%; max-width: none; max-height: 88dvh; margin: 0; border-width: 1px 0 0; border-radius: 16px 16px 0 0; }
   .setup-editor-dialog form { padding: 16px 14px calc(16px + env(safe-area-inset-bottom)); }

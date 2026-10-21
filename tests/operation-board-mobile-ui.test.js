@@ -17,6 +17,8 @@ assert(styles.includes("word-break: keep-all"), "한글이 한 글자씩 줄바�
 assert(styles.includes(".operation-block.next-setup-expanded .next-setup-detail { display: grid; }"), "상세 보기 시 다음 세팅 상세가 확장돼야 한다");
 assert(styles.includes(".setup-task-board { position: static; z-index: auto; top: auto;"), "모바일 고정 작업 영역은 스크롤을 따라오면 안 된다");
 assert(styles.includes(".setup-task-board { position: sticky; top: 8px;"), "PC의 기존 고정 영역 동작은 유지해야 한다");
+assert(styles.includes("word-break: keep-all") && styles.includes("-webkit-line-clamp: 2"), "G. 긴 행사명은 글자 단위로 세로 줄바꿈하지 않고 최대 2줄로 제한해야 한다");
+assert(styles.includes(".setup-task-actions { flex-wrap: nowrap;") && styles.includes("white-space: nowrap"), "H. 모바일 action row는 compact하게 유지해야 한다");
 assert(pageStyles.includes("padding: 76px 10px calc(190px + env(safe-area-inset-bottom))"), "마지막 일정이 fixed AI 입력바 위까지 스크롤되도록 하단 여백이 필요하다");
 
 console.log("operation-board mobile UI tests passed");
