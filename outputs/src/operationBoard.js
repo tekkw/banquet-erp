@@ -395,7 +395,7 @@
     const signature = alertHash({ uploadedAt: comparison.snapshot.uploadedAt, required: comparison.demand.required, details: comparison.demand.details, shortage: shortages.map((item) => [item.key, item.shortage]) });
     const id = `beverage_shortage:${signature}`;
     if (isAlertAcknowledged(id)) return null;
-    return { id, key: id, type: "beverage_shortage", priority: "high", title: "음주류 발주 필요", summary: shortages.map((item) => `${item.label} ${item.shortage}개`).join(", ") + " 부족", eventOrderId: null, venue: "", createdAt: comparison.snapshot.uploadedAt || new Date().toISOString(), acknowledged: false, completed: false, sourceMetadata: { signature, comparison }, actions: ["inventory", "demand", "acknowledge", "next"] };
+    return { id, key: id, type: "beverage_shortage", priority: "high", title: "음주류 발주 필요", summary: shortages.map((item) => `${item.label} ${item.shortage}${item.unit || "개"}`).join(", ") + " 부족", eventOrderId: null, venue: "", createdAt: comparison.snapshot.uploadedAt || new Date().toISOString(), acknowledged: false, completed: false, sourceMetadata: { signature, comparison }, actions: ["inventory", "demand", "acknowledge", "next"] };
   }
   function buildProactiveAlerts(events = currentEvents, today = seoulDateKey()) {
     const briefing = buildDailyBriefing(events, today); const alerts = [];

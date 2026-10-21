@@ -72,26 +72,24 @@ const demand = inventory.calculateDemand(events, "2026-10-16");
 assert.deepEqual(JSON.parse(JSON.stringify(demand.range)), { start: "2026-10-16", end: "2026-10-25" });
 assert.equal(demand.details.length, 2, "같은 행사/식사 중복과 비대상 일정은 제외해야 한다");
 assert.equal(demand.totalGuests, 200);
-assert.deepEqual(JSON.parse(JSON.stringify(demand.required)), { beer: 200, soju: 100, cola: 60, cider: 60, water500: 200 });
+assert.deepEqual(JSON.parse(JSON.stringify(demand.required)), { beer: 200, soju: 100, cola: 60, cider: 60, water300: 200, puris19l: 2, coffee: 0 });
 
-inventory._setSnapshotForTest({ beer: 150, soju: 130, cola: 40, cider: 80, water500: 500, uploadedAt: "2026-10-16T00:00:00.000Z", originalFilename: "stock.xlsx" });
+inventory._setSnapshotForTest({ beer: 150, soju: 130, cola: 40, cider: 80, water500: 500, water300: 500, puris19l: 10, coffee: 10, uploadedAt: "2026-10-16T00:00:00.000Z", originalFilename: "stock.xlsx" });
 const comparison = inventory.getComparison(events, "2026-10-16");
 assert.equal(comparison.items.beer.shortage, 50);
 assert.equal(comparison.items.soju.shortage, 0);
 assert.equal(comparison.items.cola.shortage, 20);
 assert.equal(comparison.shortageCount, 2);
 assert.equal(inventory.answerQuestion("음주류 발주해야 돼?", events, "2026-10-16").text, "10/16~10/25 식사 예상 인원은 200명입니다. 현재 기준으로 맥주 50개와 콜라 20개가 부족합니다.");
-assert.match(inventory.answerQuestion("맥주 얼마나 부족해?", events, "2026-10-16").text, /현재 150개, 필요 200개로 50개 부족/);
+assert.match(inventory.answerQuestion("맥주 얼마나 부족해?", events, "2026-10-16").text, /필요 200개, 현재 150개로 50개 부족/);
 const changedDemand = inventory.getComparison([...events, { id: "new", venue: "부라노3", guestCount: 20, schedule: [{ date: "2026-10-21", content: "석식 뷔페" }] }], "2026-10-16");
 assert.equal(changedDemand.demand.required.beer, 220, "행사 변경 시 최신 목록으로 다시 계산해야 한다");
 inventory._setSnapshotForTest({ beer: 361, soju: 331, cola: 192, cider: 151, water500: 344, water300: 701, puris19l: 18, coffee: 17 });
-for (const key of ["water300", "puris19l", "coffee"]) {
-  assert.equal(inventory.getComparison(events, "2026-10-16").items[key].required, null, `${key}에는 임의 필요량을 적용하지 않아야 한다`);
-  assert.equal(inventory.getComparison(events, "2026-10-16").items[key].shortage, 0, `${key}는 부족 건수에 포함되지 않아야 한다`);
-}
-assert.match(inventory.answerQuestion("아이시스 500 얼마나 있어?", events, "2026-10-16").text, /344개/);
-assert.match(inventory.answerQuestion("300미리 생수 재고?", events, "2026-10-16").text, /701개/);
-assert.match(inventory.answerQuestion("퓨리스 몇 개 있어?", events, "2026-10-16").text, /18개/);
+assert.equal(inventory.getComparison(events, "2026-10-16").items.water500.required, null, "500ml은 자동 필요량을 적용하지 않아야 한다");
+assert.equal(inventory.getComparison(events, "2026-10-16").items.water500.shortage, 0, "500ml은 부족 건수에 포함되지 않아야 한다");
+assert.match(inventory.answerQuestion("아이시스 500 얼마나 있어?", events, "2026-10-16").text, /344병/);
+assert.match(inventory.answerQuestion("300미리 생수 재고?", events, "2026-10-16").text, /701병/);
+assert.match(inventory.answerQuestion("퓨리스 몇 개 있어?", events, "2026-10-16").text, /18통/);
 assert.match(inventory.answerQuestion("커피 재고 얼마야?", events, "2026-10-16").text, /17개/);
 assert.equal(inventory.matchesQuestion("300미리 생수 재고?"), true);
 const mealEvents280 = [
@@ -100,12 +98,14 @@ const mealEvents280 = [
   { id: "meal-3", companyName: "행사 C", venue: "카프리1", guestCount: 80, schedule: [{ date: "2026-10-23", content: "중식뷔페" }] },
   { id: "excluded", companyName: "제외", venue: "피렌체", schedule: [{ date: "2026-10-23", content: "중식뷔페", people: 500 }] },
 ];
-inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 241, water300: 401, puris19l: 11, coffee: 11 });
+inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 241, water300: 241, puris19l: 11, coffee: 11 });
 const waterComparison = inventory.getComparison(mealEvents280, "2026-10-21");
 assert.equal(waterComparison.demand.totalGuests, 280);
-assert.equal(waterComparison.items.water500.required, 280);
-assert.equal(waterComparison.items.water500.shortage, 39);
-assert.match(inventory.answerQuestion("물 부족해?", mealEvents280, "2026-10-21").text, /39개 부족/);
+assert.equal(waterComparison.items.water300.required, 280);
+assert.equal(waterComparison.items.water300.shortage, 39);
+assert.equal(waterComparison.items.water500.required, null);
+assert.equal(waterComparison.items.puris19l.required, 3);
+assert.match(inventory.answerQuestion("물 부족해?", mealEvents280, "2026-10-21").text, /39병 부족/);
 assert.match(inventory.answerQuestion("이번주 식사 인원 몇 명이야?", mealEvents280, "2026-10-21").text, /총 280명/);
 const productionShapeEvents = [
   { id: "convention", companyName: "대구척수장애인협회", startDate: "2026-10-22", venue: "컨벤션B", guestCount: 70, schedule: [{ date: "10. 22 (목)", content: "디너/뷔페", venue: "컨벤션B", people: 70 }] },
@@ -118,7 +118,19 @@ const productionShapeDemand = inventory.calculateDemand(productionShapeEvents, "
 assert.equal(inventory.scheduleDateKey("10. 22 (목)", productionShapeEvents[0]), "2026-10-22", "실제 저장 형식의 월·일을 ISO 날짜로 정규화해야 한다");
 assert.equal(productionShapeDemand.totalGuests, 193, "row.people 우선, guestCount fallback, mealTypes 뷔페 근거를 함께 사용해야 한다");
 assert.deepEqual(JSON.parse(JSON.stringify(productionShapeDemand.details.map((item) => item.guests))), [70, 73, 40, 10]);
-inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 500 });
+assert.equal(productionShapeDemand.required.water300, 193);
+assert.equal(productionShapeDemand.required.puris19l, 2);
+const demand201 = inventory.calculateDemand([{ id: "meal-201", startDate: "2026-10-22", venue: "페스타", schedule: [{ date: "2026-10-22", content: "석식뷔페", people: 201 }] }], "2026-10-21");
+assert.equal(demand201.required.puris19l, 3, "201명은 퓨리스 3통이 필요하다");
+const coffeeEvents = [
+  { id: "coffee-a", startDate: "2026-10-22", venue: "페스타", schedule: [{ date: "2026-10-22", time: "10:00", content: "커피브레이크" }, { date: "2026-10-22", time: "10:00", content: "커피 브레이크" }, { date: "2026-10-22", time: "15:00", content: "Coffee Break" }] },
+  { id: "coffee-b", startDate: "2026-10-23", venue: "카프리1", items: [{ itemName: "커피브레이크" }], schedule: [{ date: "2026-10-23", content: "세미나" }] },
+  { id: "coffee-none", startDate: "2026-10-24", venue: "부라노1", schedule: [{ date: "2026-10-24", content: "세미나" }] },
+];
+const coffeeDemand = inventory.calculateDemand(coffeeEvents, "2026-10-21");
+assert.equal(coffeeDemand.coffeeBreakCount, 3, "동일 일정 중복은 제거하고 실제 커피브레이크 횟수만 계산해야 한다");
+assert.equal(coffeeDemand.required.coffee, 3);
+inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 500, water300: 500, puris19l: 10, coffee: 10 });
 assert.equal(inventory.getComparison(events, "2026-10-16").shortageCount, 0, "새 snapshot은 이전 현재고를 덮어써야 한다");
 
 const html = fs.readFileSync("outputs/index.html", "utf8");
@@ -126,7 +138,7 @@ const boardHtml = fs.readFileSync("outputs/board/index.html", "utf8");
 const ai = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 const registry = fs.readFileSync("outputs/src/erpActionRegistry.js", "utf8");
 assert(html.includes('id="beverageInventoryWidget"') && html.includes('data-beverage-upload') && html.includes('data-beverage-original'));
-assert(html.includes("beverageInventory.js?v=beverage-demand-v2") && boardHtml.includes("beverageInventory.js?v=beverage-demand-v2"));
+assert(html.includes("beverageInventory.js?v=beverage-demand-rules-v2") && boardHtml.includes("beverageInventory.js?v=beverage-demand-rules-v2"));
 const dashboardCss = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
 assert(dashboardCss.includes("grid-template-columns: repeat(2") && dashboardCss.includes("@media (max-width: 720px)"), "PC는 2열, 모바일은 1열이어야 한다");
 assert(registry.includes('"get_beverage_inventory_status", "inventory", "query"'));

@@ -14,8 +14,15 @@
     coffee: Object.freeze({ label: "원두커피" }),
   });
   const ITEM_PATTERNS = Object.freeze({ beer: /맥주/, soju: /소주/, cola: /콜라/, cider: /사이다/, water500: /(?:아이시스.*500\s*ml|500\s*ml.*아이시스)/i, water300: /(?:아이시스.*300\s*ml|300\s*ml.*아이시스)/i, puris19l: /(?:퓨리스|19\s*l)/i, coffee: /(?:원두커피|가루커피)/ });
-  const DEMAND_RATES = Object.freeze({ beer: 1, soju: 0.5, cola: 0.3, cider: 0.3, water500: 1, water300: null, puris19l: null, coffee: null });
+  const DEMAND_RULES = Object.freeze({
+    beer: Object.freeze({ type: "per_guest", rate: 1 }), soju: Object.freeze({ type: "per_guest", rate: 0.5 }),
+    cola: Object.freeze({ type: "per_guest", rate: 0.3 }), cider: Object.freeze({ type: "per_guest", rate: 0.3 }),
+    water500: Object.freeze({ type: "manual" }), water300: Object.freeze({ type: "per_guest", rate: 1 }),
+    puris19l: Object.freeze({ type: "per_100_guests", rate: 1 }), coffee: Object.freeze({ type: "per_coffee_break", rate: 1 }),
+  });
+  const DEMAND_RATES = Object.freeze(Object.fromEntries(Object.entries(DEMAND_RULES).map(([key, rule]) => [key, rule.type === "per_guest" ? rule.rate : null])));
   const LABELS = Object.freeze({ beer: "맥주", soju: "소주", cola: "콜라", cider: "사이다", water500: "아이시스 500ml", water300: "아이시스 300ml", puris19l: "퓨리스 생수 19L", coffee: "원두커피" });
+  const UNITS = Object.freeze({ beer: "개", soju: "개", cola: "개", cider: "개", water500: "병", water300: "병", puris19l: "통", coffee: "개" });
   let snapshot = null;
   let currentEvents = [];
   let bindings = {};
@@ -200,6 +207,24 @@
     const excludedType = /도시락|코스|단품|box\s*meal|course/i.test(scheduleText);
     return { meal, buffet, included: Boolean(meal && buffet && !excludedType), scheduleText, eventText };
   }
+  function coffeeBreakDemand(events, range) {
+    const seen = new Set(); const details = [];
+    (events || []).forEach((event) => {
+      const fallbackDates = eventDates(event); const rows = event?.schedule || [];
+      const eventText = [event?.mealTypes, event?.items, event?.event_items, event?.notes, event?.event_notes, event?.others, event?.internalMemo, event?.parsedMealTypes].map(valueText).join(" ");
+      const directRows = rows.filter((row) => /커피\s*브레이크|coffee\s*break/i.test([row?.content, row?.meal, row?.type, row?.mealType, row?.meal_type].map(valueText).join(" ")));
+      const candidates = directRows.length ? directRows : /커피\s*브레이크|coffee\s*break/i.test(eventText) ? fallbackDates.map((date) => ({ date, venue: event.venue, content: "커피브레이크" })) : [];
+      candidates.forEach((row) => {
+        const date = scheduleDateKey(row.date, event) || fallbackDates[0] || ""; const venue = clean(row.venue || event.venue);
+        if (!date || date < range.start || date > range.end || /피렌체|firenze/i.test(venue)) return;
+        const eventId = clean(event.id) || [event.eventName, event.companyName, event.startDate].map(clean).join("|");
+        const scheduleKey = [clean(row.time), clean(row.content).toLowerCase().replace(/\s+/g, "")].join("|");
+        const key = `${eventId}|${date}|${scheduleKey}`; if (seen.has(key)) return; seen.add(key);
+        details.push({ eventOrderId: event.id || "", date, time: clean(row.time), venue, title: clean(event.companyName || event.eventName) || "행사명 미입력" });
+      });
+    });
+    return details.sort((left, right) => `${left.date}|${left.time}`.localeCompare(`${right.date}|${right.time}`));
+  }
   function calculateDemand(events, today = seoulDateKey()) {
     const range = demandRange(today);
     const seen = new Set();
@@ -227,15 +252,20 @@
     });
     details.sort((left, right) => left.date.localeCompare(right.date) || left.venue.localeCompare(right.venue, "ko"));
     const totalGuests = details.reduce((sum, item) => sum + item.guests, 0);
-    const required = Object.fromEntries(Object.entries(DEMAND_RATES).filter(([, rate]) => rate != null).map(([key, rate]) => [key, Math.ceil(totalGuests * rate)]));
-    return { range, details, totalGuests, required };
+    const coffeeBreaks = coffeeBreakDemand(events, range);
+    const required = Object.fromEntries(Object.entries(DEMAND_RULES).filter(([, rule]) => rule.type !== "manual").map(([key, rule]) => {
+      if (rule.type === "per_100_guests") return [key, Math.ceil(totalGuests / 100) * rule.rate];
+      if (rule.type === "per_coffee_break") return [key, coffeeBreaks.length * rule.rate];
+      return [key, Math.ceil(totalGuests * rule.rate)];
+    }));
+    return { range, details, totalGuests, coffeeBreaks, coffeeBreakCount: coffeeBreaks.length, required };
   }
   function compareInventory(stockSnapshot, demand) {
     const items = Object.fromEntries(Object.keys(LABELS).map((key) => {
       const stock = Math.max(0, Number(stockSnapshot?.[key]) || 0);
-      const hasDemandRate = DEMAND_RATES[key] != null;
-      const required = hasDemandRate ? Math.max(0, Number(demand?.required?.[key]) || 0) : null;
-      return [key, { key, label: LABELS[key], stock, required, shortage: hasDemandRate ? Math.max(0, required - stock) : 0, sufficient: hasDemandRate ? stock >= required : null }];
+      const hasAutomaticDemand = demand?.required?.[key] != null;
+      const required = hasAutomaticDemand ? Math.max(0, Number(demand.required[key]) || 0) : null;
+      return [key, { key, label: LABELS[key], unit: UNITS[key] || "개", stock, required, shortage: hasAutomaticDemand ? Math.max(0, required - stock) : 0, sufficient: hasAutomaticDemand ? stock >= required : null }];
     }));
     return { snapshot: stockSnapshot || null, demand, items, shortageCount: Object.values(items).filter((item) => item.shortage > 0).length };
   }
@@ -248,8 +278,8 @@
   function questionItemKey(question) {
     const text = clean(question).toLowerCase();
     return Object.keys(LABELS).find((key) => text.includes(LABELS[key].toLowerCase()))
-      || (/(?:아이시스.*500|500\s*(?:ml|미리)|물)/.test(text) ? "water500" : "")
-      || (/(?:아이시스.*300|300\s*(?:ml|미리).*(?:아이시스|생수)|생수.*300)/.test(text) ? "water300" : "")
+      || (/(?:아이시스.*500|500\s*(?:ml|미리))/.test(text) ? "water500" : "")
+      || (/(?:아이시스.*300|300\s*(?:ml|미리)|생수.*300|물)/.test(text) ? "water300" : "")
       || (/퓨리스|19\s*l/.test(text) ? "puris19l" : "")
       || (/원두|가루커피|커피/.test(text) ? "coffee" : "");
   }
@@ -261,9 +291,10 @@
     const rangeLabel = `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")}`;
     if (selectedKey) {
       const item = comparison.items[selectedKey];
-      if (item.required == null) return { text: `${item.label} 현재 재고는 ${item.stock}개입니다. 필요량 기준은 아직 설정되지 않았습니다.`, comparison };
-      const status = item.shortage ? `${item.shortage}개 부족합니다.` : `${item.stock - item.required}개 여유로 충분합니다.`;
-      return { text: `${rangeLabel} 뷔페 행사 기준 ${item.label}은 현재 ${item.stock}개, 필요 ${item.required}개로 ${status}`, comparison };
+      const unit = UNITS[selectedKey] || "개";
+      if (item.required == null) return { text: `${item.label} 현재 재고는 ${item.stock}${unit}입니다. 필요량 기준은 아직 설정되지 않았습니다.`, comparison };
+      const status = item.shortage ? `${item.shortage}${unit} 부족합니다.` : `${item.stock - item.required}${unit} 여유로 충분합니다.`;
+      return { text: `${rangeLabel} 기준 ${item.label}: 필요 ${item.required}${unit}, 현재 ${item.stock}${unit}${unit === "개" ? "로" : "으로"} ${status}`, comparison };
     }
     const shortages = Object.values(comparison.items).filter((item) => item.shortage > 0);
     const shortageLabels = shortages.map((item) => `${item.label} ${item.shortage}개`);
@@ -340,7 +371,7 @@
       return;
     }
     if (summary) summary.innerHTML = Object.values(comparison.items).map((item) => `<div class="beverage-inventory-row${item.shortage ? " is-short" : ""}"><strong>${item.label}</strong><span>현재 ${item.stock}${item.required == null ? " · 필요량 기준 미설정" : ` · 필요 ${item.required}`}</span><em>${item.required == null ? "" : item.shortage ? `부족 ${item.shortage}` : `여유 ${item.stock - item.required}`}</em></div>`).join("");
-    if (details) details.innerHTML = `${comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.title} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>"}<li><strong>총 식사 수요: ${comparison.demand.totalGuests}명</strong></li>${Object.entries(DEMAND_RATES).filter(([, rate]) => rate != null).map(([key, rate]) => `<li>${escapeHtml(`${LABELS[key]}: ${comparison.demand.totalGuests} × ${rate} = ${comparison.demand.required[key]}`)}</li>`).join("")}`;
+    if (details) details.innerHTML = `${comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.title} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>"}<li><strong>뷔페 총인원: ${comparison.demand.totalGuests}명</strong></li>${Object.entries(DEMAND_RULES).filter(([, rule]) => rule.type !== "manual").map(([key, rule]) => { const formula = rule.type === "per_100_guests" ? `ceil(${comparison.demand.totalGuests} / 100) = ${comparison.demand.required[key]}` : rule.type === "per_coffee_break" ? `${comparison.demand.coffeeBreakCount}건 × ${rule.rate} = ${comparison.demand.required[key]}` : `${comparison.demand.totalGuests} × ${rule.rate} = ${comparison.demand.required[key]}`; return `<li>${escapeHtml(`${LABELS[key]}: ${formula}${UNITS[key]}`)}</li>`; }).join("")}`;
     if (status) { status.textContent = comparison.shortageCount ? `음주류 발주 필요 ${comparison.shortageCount}품목` : "재고 충분"; status.dataset.type = comparison.shortageCount ? "warning" : "ok"; }
     if (originalButton) originalButton.disabled = !snapshot.storagePath;
     const filename = root.querySelector("[data-beverage-filename]");
@@ -378,5 +409,5 @@
     return count ? `<div class="beverage-inventory-warning" role="status">음주류 발주 필요 <strong>${count}품목</strong></div>` : "";
   }
 
-  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RATES, readInventoryWorkbook, readStockWorkbook, demandRange, scheduleDateKey, mealContext, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
+  global.BANQUET_ERP_BEVERAGE_INVENTORY = Object.freeze({ CELL_MAPPING, DEMAND_RULES, DEMAND_RATES, readInventoryWorkbook, readStockWorkbook, demandRange, scheduleDateKey, mealContext, coffeeBreakDemand, calculateDemand, compareInventory, matchesQuestion, answerQuestion, getComparison, loadSnapshot, uploadInventoryFile, init, setEvents, warningHtml, _setSnapshotForTest(value) { snapshot = value; } });
 })(window);
