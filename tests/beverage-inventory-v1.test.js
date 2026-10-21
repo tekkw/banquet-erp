@@ -9,11 +9,11 @@ const inventory = window.BANQUET_ERP_BEVERAGE_INVENTORY;
 
 const inventorySheet = (values = {}) => {
   const inventoryColumn = values.inventoryColumn ?? 6;
-  const rows = Array.from({ length: 16 }, () => Array(inventoryColumn + 3).fill(""));
+  const rows = Array.from({ length: 27 }, () => Array(inventoryColumn + 3).fill(""));
   rows[0][0] = values.title || "■ 26년 9월 연회장 재고 현황";
   rows[1][0] = "구분"; rows[1][inventoryColumn] = values.monthlyHeader ?? "당월재고";
   rows[3][inventoryColumn] = values.quantityHeader ?? "수량";
-  [[4, "맥주", values.beer], [7, "소주", values.soju], [10, "펩시콜라 24EA", values.cola], [13, "칠성사이다 24EA", values.cider]].forEach(([row, label, value]) => { rows[row][0] = label; rows[row][inventoryColumn] = value ?? ""; });
+  [[4, "맥주", values.beer], [7, "소주", values.soju], [10, "펩시콜라 24EA", values.cola], [13, "칠성사이다 24EA", values.cider], [16, "아이시스8.0 20EA 500ml", values.water500 ?? 0], [19, "300ml 아이시스", values.water300 ?? 0], [22, "퓨리스 생수 19L", values.puris19l ?? 0], [25, "원두커피(가루커피)", values.coffee ?? 0]].forEach(([row, label, value]) => { rows[row][0] = label; rows[row][inventoryColumn] = value ?? ""; });
   return { __rows: rows, "!merges": values.merges || [{ s: { r: 1, c: inventoryColumn }, e: { r: 2, c: inventoryColumn + 2 } }] };
 };
 const workbook = {
@@ -21,7 +21,7 @@ const workbook = {
   Workbook: { WBView: [{ activeTab: 0 }] },
   Sheets: {
     "9월 (신규)": inventorySheet({ beer: 254, soju: "223 ", cola: "203", cider: "179" }),
-    "10월 (신규)": inventorySheet({ title: "■ 26년 10월 연회장 재고 현황", inventoryColumn: 53, beer: 361, soju: 331, cola: 192, cider: 151 }),
+    "10월 (신규)": inventorySheet({ title: "■ 26년 10월 연회장 재고 현황", inventoryColumn: 53, beer: 361, soju: 331, cola: 192, cider: 151, water500: 344, water300: 701, puris19l: 18, coffee: 17 }),
   },
 };
 const octoberNow = new Date("2026-10-20T12:00:00+09:00");
@@ -30,6 +30,7 @@ assert.deepEqual({ beer: parsed.beer, soju: parsed.soju, cola: parsed.cola, cide
 assert.equal(parsed.sourceCells.beer.column, 54, "merged 당월재고 아래 수량 column을 동적으로 찾아야 한다");
 assert.equal(parsed.referenceMonth, 10);
 assert.equal(parsed.isFallback, false);
+assert.deepEqual([parsed.water500, parsed.water300, parsed.puris19l, parsed.coffee], [344, 701, 18, 17], "추가 4개 품목을 서로 바꾸지 않고 읽어야 한다");
 
 const novemberNow = new Date("2026-11-10T12:00:00+09:00");
 const novemberSheet = inventorySheet({ title: "■ 26년 11월 연회장 재고 현황", beer: 410, soju: 320, cola: 210, cider: 180 });
@@ -53,6 +54,7 @@ const missingValueSheet = inventorySheet({ beer: "", soju: 2, cola: 3, cider: 4 
 assert.throws(() => inventory.readStockWorkbook({ SheetNames: ["9월 (신규)"], Sheets: { "9월 (신규)": missingValueSheet } }, "2026-09.xlsx"), /당월재고 수량 값을 읽지 못했습니다/);
 assert.deepEqual(JSON.parse(JSON.stringify(inventory.CELL_MAPPING)), {
   beer: { label: "맥주" }, soju: { label: "소주" }, cola: { label: "콜라" }, cider: { label: "사이다" },
+  water500: { label: "아이시스 500ml" }, water300: { label: "아이시스 300ml" }, puris19l: { label: "퓨리스 생수 19L" }, coffee: { label: "원두커피" },
 });
 
 const events = [
@@ -70,9 +72,9 @@ const demand = inventory.calculateDemand(events, "2026-10-16");
 assert.deepEqual(JSON.parse(JSON.stringify(demand.range)), { start: "2026-10-16", end: "2026-10-25" });
 assert.equal(demand.details.length, 2, "같은 행사/식사 중복과 비대상 일정은 제외해야 한다");
 assert.equal(demand.totalGuests, 200);
-assert.deepEqual(JSON.parse(JSON.stringify(demand.required)), { beer: 200, soju: 100, cola: 60, cider: 60 });
+assert.deepEqual(JSON.parse(JSON.stringify(demand.required)), { beer: 200, soju: 100, cola: 60, cider: 60, water500: 200 });
 
-inventory._setSnapshotForTest({ beer: 150, soju: 130, cola: 40, cider: 80, uploadedAt: "2026-10-16T00:00:00.000Z", originalFilename: "stock.xlsx" });
+inventory._setSnapshotForTest({ beer: 150, soju: 130, cola: 40, cider: 80, water500: 500, uploadedAt: "2026-10-16T00:00:00.000Z", originalFilename: "stock.xlsx" });
 const comparison = inventory.getComparison(events, "2026-10-16");
 assert.equal(comparison.items.beer.shortage, 50);
 assert.equal(comparison.items.soju.shortage, 0);
@@ -82,7 +84,30 @@ assert.equal(inventory.answerQuestion("음주류 발주해야 돼?", events, "20
 assert.match(inventory.answerQuestion("맥주 얼마나 부족해?", events, "2026-10-16").text, /현재 150개, 필요 200개로 50개 부족/);
 const changedDemand = inventory.getComparison([...events, { id: "new", venue: "부라노3", guestCount: 20, schedule: [{ date: "2026-10-21", content: "석식 뷔페" }] }], "2026-10-16");
 assert.equal(changedDemand.demand.required.beer, 220, "행사 변경 시 최신 목록으로 다시 계산해야 한다");
-inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500 });
+inventory._setSnapshotForTest({ beer: 361, soju: 331, cola: 192, cider: 151, water500: 344, water300: 701, puris19l: 18, coffee: 17 });
+for (const key of ["water300", "puris19l", "coffee"]) {
+  assert.equal(inventory.getComparison(events, "2026-10-16").items[key].required, null, `${key}에는 임의 필요량을 적용하지 않아야 한다`);
+  assert.equal(inventory.getComparison(events, "2026-10-16").items[key].shortage, 0, `${key}는 부족 건수에 포함되지 않아야 한다`);
+}
+assert.match(inventory.answerQuestion("아이시스 500 얼마나 있어?", events, "2026-10-16").text, /344개/);
+assert.match(inventory.answerQuestion("300미리 생수 재고?", events, "2026-10-16").text, /701개/);
+assert.match(inventory.answerQuestion("퓨리스 몇 개 있어?", events, "2026-10-16").text, /18개/);
+assert.match(inventory.answerQuestion("커피 재고 얼마야?", events, "2026-10-16").text, /17개/);
+assert.equal(inventory.matchesQuestion("300미리 생수 재고?"), true);
+const mealEvents280 = [
+  { id: "meal-1", companyName: "행사 A", venue: "컨벤션AB", schedule: [{ date: "2026-10-21", content: "석식뷔페", people: 120 }] },
+  { id: "meal-2", companyName: "행사 B", venue: "페스타", schedule: [{ date: "2026-10-22", content: "중식뷔페", people: 80 }, { date: "2026-10-22", content: "중식뷔페 준비", people: 80 }] },
+  { id: "meal-3", companyName: "행사 C", venue: "카프리1", guestCount: 80, schedule: [{ date: "2026-10-23", content: "중식뷔페" }] },
+  { id: "excluded", companyName: "제외", venue: "피렌체", schedule: [{ date: "2026-10-23", content: "중식뷔페", people: 500 }] },
+];
+inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 241, water300: 401, puris19l: 11, coffee: 11 });
+const waterComparison = inventory.getComparison(mealEvents280, "2026-10-21");
+assert.equal(waterComparison.demand.totalGuests, 280);
+assert.equal(waterComparison.items.water500.required, 280);
+assert.equal(waterComparison.items.water500.shortage, 39);
+assert.match(inventory.answerQuestion("물 부족해?", mealEvents280, "2026-10-21").text, /39개 부족/);
+assert.match(inventory.answerQuestion("이번주 식사 인원 몇 명이야?", mealEvents280, "2026-10-21").text, /총 280명/);
+inventory._setSnapshotForTest({ beer: 500, soju: 500, cola: 500, cider: 500, water500: 500 });
 assert.equal(inventory.getComparison(events, "2026-10-16").shortageCount, 0, "새 snapshot은 이전 현재고를 덮어써야 한다");
 
 const html = fs.readFileSync("outputs/index.html", "utf8");
@@ -90,7 +115,7 @@ const boardHtml = fs.readFileSync("outputs/board/index.html", "utf8");
 const ai = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 const registry = fs.readFileSync("outputs/src/erpActionRegistry.js", "utf8");
 assert(html.includes('id="beverageInventoryWidget"') && html.includes('data-beverage-upload') && html.includes('data-beverage-original'));
-assert(html.includes("beverageInventory.js?v=current-month-stock-v1") && boardHtml.includes("beverageInventory.js?v=current-month-stock-v1"));
+assert(html.includes("beverageInventory.js?v=inventory-eight-items-v1") && boardHtml.includes("beverageInventory.js?v=inventory-eight-items-v1"));
 assert(registry.includes('"get_beverage_inventory_status", "inventory", "query"'));
 assert(ai.includes('executeAction("get_beverage_inventory_status"') && ai.includes("matchesQuestion(question)"), "AI는 공용 Action Registry의 결정론 계산을 사용해야 한다");
 assert(source.includes('board_date: SNAPSHOT_DATE') && source.includes('item_key: SNAPSHOT_KEY'), "최신 snapshot은 기존 공용 persistent table의 고정 key로 덮어써야 한다");

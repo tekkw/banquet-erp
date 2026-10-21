@@ -25,10 +25,12 @@ let alerts = board.buildProactiveAlerts(events, today);
 assert(alerts.alerts.some((item) => item.type === "layout_reinform"), "A. RE-INFORM은 layout_reinform alert를 만든다");
 assert.equal(board.setupDocumentSummary({ layoutText: "Class Type 40석", othersText: "등록테이블 2T 무선마이크 2EA" }), "클래스 40석 · 등록 2T · 무선마이크 2EA", "B. 세팅 핵심 정보는 결정론 parser로 요약한다");
 
-window.BANQUET_ERP_BEVERAGE_INVENTORY = { getComparison: () => ({ snapshot: { uploadedAt: "2026-10-19T00:00:00Z" }, shortageCount: 1, items: { beer: { key: "beer", label: "맥주", shortage: 36 } }, demand: { required: { beer: 100 }, details: [] } }) };
+window.BANQUET_ERP_BEVERAGE_INVENTORY = { getComparison: () => ({ snapshot: { uploadedAt: "2026-10-19T00:00:00Z" }, shortageCount: 2, items: { beer: { key: "beer", label: "맥주", shortage: 36 }, water500: { key: "water500", label: "아이시스 500ml", shortage: 39 }, water300: { key: "water300", label: "아이시스 300ml", shortage: 0 } }, demand: { required: { beer: 100, water500: 280 }, details: [] } }) };
 alerts = board.buildProactiveAlerts(events, today);
 assert.equal(alerts.alerts[0].type, "beverage_shortage", "C/J. 부족 alert는 high priority로 먼저 표시한다");
 assert.equal(alerts.alerts.filter((item) => item.type === "beverage_shortage").length, 1, "I. 동일 shortage는 한 건으로 dedupe한다");
+assert.match(alerts.alerts[0].summary, /아이시스 500ml 39개/, "water500 부족은 proactive alert에 포함한다");
+assert.doesNotMatch(alerts.alerts[0].summary, /아이시스 300ml/, "기준 없는 품목은 proactive alert에서 제외한다");
 board.dailyBriefingConversation(events, today, true);
 board.dailyBriefingAction("acknowledge", events, today);
 assert(!board.buildProactiveAlerts(events, today).alerts.some((item) => item.type === "beverage_shortage"), "acknowledged shortage는 같은 snapshot/demand에서 재생성하지 않는다");

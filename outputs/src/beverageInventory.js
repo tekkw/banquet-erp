@@ -8,10 +8,14 @@
     soju: Object.freeze({ label: "소주" }),
     cola: Object.freeze({ label: "콜라" }),
     cider: Object.freeze({ label: "사이다" }),
+    water500: Object.freeze({ label: "아이시스 500ml" }),
+    water300: Object.freeze({ label: "아이시스 300ml" }),
+    puris19l: Object.freeze({ label: "퓨리스 생수 19L" }),
+    coffee: Object.freeze({ label: "원두커피" }),
   });
-  const ITEM_PATTERNS = Object.freeze({ beer: /맥주/, soju: /소주/, cola: /콜라/, cider: /사이다/ });
-  const DEMAND_RATES = Object.freeze({ beer: 1, soju: 0.5, cola: 0.3, cider: 0.3 });
-  const LABELS = Object.freeze({ beer: "맥주", soju: "소주", cola: "콜라", cider: "사이다" });
+  const ITEM_PATTERNS = Object.freeze({ beer: /맥주/, soju: /소주/, cola: /콜라/, cider: /사이다/, water500: /(?:아이시스.*500\s*ml|500\s*ml.*아이시스)/i, water300: /(?:아이시스.*300\s*ml|300\s*ml.*아이시스)/i, puris19l: /(?:퓨리스|19\s*l)/i, coffee: /(?:원두커피|가루커피)/ });
+  const DEMAND_RATES = Object.freeze({ beer: 1, soju: 0.5, cola: 0.3, cider: 0.3, water500: 1, water300: null, puris19l: null, coffee: null });
+  const LABELS = Object.freeze({ beer: "맥주", soju: "소주", cola: "콜라", cider: "사이다", water500: "아이시스 500ml", water300: "아이시스 300ml", puris19l: "퓨리스 생수 19L", coffee: "원두커피" });
   let snapshot = null;
   let currentEvents = [];
   let bindings = {};
@@ -153,6 +157,10 @@
       soju: sourceCells.soju,
       cola: sourceCells.cola,
       cider: sourceCells.cider,
+      water500: sourceCells.water500,
+      water300: sourceCells.water300,
+      puris19l: sourceCells.puris19l,
+      coffee: sourceCells.coffee,
     });
     if (Object.values(sourceCells).some((cell) => !cell)) throw new Error("당월재고 수량 값을 읽지 못했습니다.");
     const stock = Object.fromEntries(Object.entries(sourceCells).map(([key, cell]) => [key, cell.value]));
@@ -195,14 +203,15 @@
     });
     details.sort((left, right) => left.date.localeCompare(right.date) || left.venue.localeCompare(right.venue, "ko"));
     const totalGuests = details.reduce((sum, item) => sum + item.guests, 0);
-    const required = Object.fromEntries(Object.entries(DEMAND_RATES).map(([key, rate]) => [key, Math.ceil(totalGuests * rate)]));
+    const required = Object.fromEntries(Object.entries(DEMAND_RATES).filter(([, rate]) => rate != null).map(([key, rate]) => [key, Math.ceil(totalGuests * rate)]));
     return { range, details, totalGuests, required };
   }
   function compareInventory(stockSnapshot, demand) {
-    const items = Object.fromEntries(Object.keys(DEMAND_RATES).map((key) => {
+    const items = Object.fromEntries(Object.keys(LABELS).map((key) => {
       const stock = Math.max(0, Number(stockSnapshot?.[key]) || 0);
-      const required = Math.max(0, Number(demand?.required?.[key]) || 0);
-      return [key, { key, label: LABELS[key], stock, required, shortage: Math.max(0, required - stock), sufficient: stock >= required }];
+      const hasDemandRate = DEMAND_RATES[key] != null;
+      const required = hasDemandRate ? Math.max(0, Number(demand?.required?.[key]) || 0) : null;
+      return [key, { key, label: LABELS[key], stock, required, shortage: hasDemandRate ? Math.max(0, required - stock) : 0, sufficient: hasDemandRate ? stock >= required : null }];
     }));
     return { snapshot: stockSnapshot || null, demand, items, shortageCount: Object.values(items).filter((item) => item.shortage > 0).length };
   }
@@ -210,15 +219,25 @@
 
   function matchesQuestion(question) {
     const text = clean(question);
-    return /(음주류|주류|음료|맥주|소주|콜라|사이다)/.test(text) && /(발주|부족|재고|필요|충분|모자)/.test(text);
+    return (/식사.*인원/.test(text) || /(음주류|주류|음료|맥주|소주|콜라|사이다|아이시스|생수|퓨리스|커피|물)/.test(text)) && /(발주|부족|재고|필요|충분|모자|얼마|몇\s*개|있어|인원)/.test(text);
+  }
+  function questionItemKey(question) {
+    const text = clean(question).toLowerCase();
+    return Object.keys(LABELS).find((key) => text.includes(LABELS[key].toLowerCase()))
+      || (/(?:아이시스.*500|500\s*(?:ml|미리)|물)/.test(text) ? "water500" : "")
+      || (/(?:아이시스.*300|300\s*(?:ml|미리).*(?:아이시스|생수)|생수.*300)/.test(text) ? "water300" : "")
+      || (/퓨리스|19\s*l/.test(text) ? "puris19l" : "")
+      || (/원두|가루커피|커피/.test(text) ? "coffee" : "");
   }
   function answerQuestion(question, events = currentEvents, today = seoulDateKey()) {
     if (!snapshot) return { text: "음주류 재고 엑셀이 아직 업로드되지 않았습니다.", comparison: getComparison(events, today) };
     const comparison = getComparison(events, today);
-    const selectedKey = Object.keys(LABELS).find((key) => clean(question).includes(LABELS[key]));
+    if (/식사.*인원/.test(clean(question))) return { text: `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")} 식사 인원은 총 ${comparison.demand.totalGuests}명입니다.`, comparison };
+    const selectedKey = questionItemKey(question);
     const rangeLabel = `${comparison.demand.range.start.slice(5).replace("-", "/")}~${comparison.demand.range.end.slice(5).replace("-", "/")}`;
     if (selectedKey) {
       const item = comparison.items[selectedKey];
+      if (item.required == null) return { text: `${item.label} 현재 재고는 ${item.stock}개입니다. 필요량 기준은 아직 설정되지 않았습니다.`, comparison };
       const status = item.shortage ? `${item.shortage}개 부족합니다.` : `${item.stock - item.required}개 여유로 충분합니다.`;
       return { text: `${rangeLabel} 뷔페 행사 기준 ${item.label}은 현재 ${item.stock}개, 필요 ${item.required}개로 ${status}`, comparison };
     }
@@ -296,8 +315,8 @@
       if (originalButton) originalButton.disabled = true;
       return;
     }
-    if (summary) summary.innerHTML = Object.values(comparison.items).map((item) => `<div class="beverage-inventory-row${item.shortage ? " is-short" : ""}"><strong>${item.label}</strong><span>${item.stock} / 필요 ${item.required}</span><em>${item.shortage ? `부족 ${item.shortage}` : "충분"}</em></div>`).join("");
-    if (details) details.innerHTML = comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>";
+    if (summary) summary.innerHTML = Object.values(comparison.items).map((item) => `<div class="beverage-inventory-row${item.shortage ? " is-short" : ""}"><strong>${item.label}</strong><span>${item.stock}${item.required == null ? "" : ` / 필요 ${item.required}`}</span><em>${item.required == null ? "필요량 미설정" : item.shortage ? `부족 ${item.shortage}` : "충분"}</em></div>`).join("");
+    if (details) details.innerHTML = `${comparison.demand.details.map((item) => `<li>${escapeHtml(`${item.date.slice(5).replace("-", "/")} ${item.venue} · ${item.title} · ${item.meal} · ${item.guests}명`)}</li>`).join("") || "<li>집계 기간의 뷔페 행사가 없습니다.</li>"}<li><strong>총 식사 수요: ${comparison.demand.totalGuests}명</strong></li>`;
     if (status) { status.textContent = comparison.shortageCount ? `음주류 발주 필요 ${comparison.shortageCount}품목` : "재고 충분"; status.dataset.type = comparison.shortageCount ? "warning" : "ok"; }
     if (originalButton) originalButton.disabled = !snapshot.storagePath;
     const filename = root.querySelector("[data-beverage-filename]");
