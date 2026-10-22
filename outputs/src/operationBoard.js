@@ -743,6 +743,7 @@
       ${beverageWarning}
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
+      ${renderTodayExecutionBoard()}
       <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
       <section class="operation-board-tab-panel" data-board-tab-panel="operations" ${activeBoardTab === "operations" ? "" : "hidden"}>
         ${showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
@@ -809,6 +810,18 @@
     const completedRow = (item) => `<div class="completed-setup-row" data-key="${escapeHtml(item.key)}"><span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</strong> · ${escapeHtml(item.next?.name || item.title)}</span><button type="button" data-restore-complete>복원</button></div>`;
     return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(completedRow).join("") || '<p>완료된 세팅이 없습니다.</p>'}</details></section>`;
   }
+  function getTodayExecutionBoard(actualToday = seoulDateKey()) {
+    const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; if (!autopilot?.buildTodayBoard) return { actualToday, tasks: [], exceptions: [], nextTask: null };
+    const alerts = buildProactiveAlerts(currentEvents, actualToday).alerts; const priorityPlan = autopilot.buildPriorityPlan({ events: currentEvents, existingTasks: state.manual.filter((item) => item.type === "next_setup"), actualToday, proactiveAlerts: alerts });
+    return autopilot.buildTodayBoard({ tasks: state.manual, checklist: state.checklist, priorityItems: priorityPlan.queue, events: currentEvents, actualToday });
+  }
+  function beverageExceptionDetail(item) { const shortages = Object.values(item.sourceMetadata?.comparison?.items || {}).filter((entry) => entry.shortage > 0); return shortages.map((entry) => `${escapeHtml(entry.label)} · 필요 ${escapeHtml(entry.required)} / 현재 ${escapeHtml(entry.stock)} · ${escapeHtml(entry.shortage)}${escapeHtml(entry.unit || "개")} 부족`).join("<br>") || escapeHtml(item.summary || "재고 부족"); }
+  function renderTodayExecutionBoard(board = getTodayExecutionBoard()) {
+    const taskCard = (task) => `<article class="today-execution-card" data-key="${escapeHtml(task.key)}"><header><span>${task.timing === "overdue" ? `지연 ${task.overdueDays}일` : task.scheduledTime || task.eventStartTime || "시간 미정"}</span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(task.venue) || task.venue)} · ${escapeHtml(task.organizer)}</strong><b>${escapeHtml(task.progressLabel)}</b></header><div class="today-execution-checklist">${task.checklist.map((item) => `<label data-item-id="${escapeHtml(item.id)}"><input type="checkbox" data-check-item ${item.completed ? "checked" : ""}><span>${escapeHtml(item.name)}${item.quantity ? ` ${escapeHtml(item.quantity)}${escapeHtml(item.unit || "")}` : ""}</span></label>`).join("") || "<span>체크리스트 없음</span>"}</div><footer><button type="button" data-setup-detail>상세</button><button type="button" data-complete ${task.canComplete ? "" : "disabled"}>완료</button></footer></article>`;
+    const exceptionCard = (item) => `<article class="today-exception-card" data-today-source-key="${escapeHtml(item.sourceKey || item.id)}"><header><span>확인필요</span><strong>${escapeHtml(item.venue || "재고")}</strong></header><p>${item.type === "beverage_shortage" ? beverageExceptionDetail(item) : escapeHtml(item.summary || item.reason || "확인이 필요합니다.")}</p><footer>${item.eventOrderId ? renderOriginalAction(item.eventOrderId) : ""}${item.itemKind === "alert" ? `<button type="button" data-today-alert-ack data-alert-id="${escapeHtml(item.alertId || "")}">확인</button>` : ""}</footer></article>`;
+    return `<section class="today-execution-board"><div class="today-execution-heading"><h3>오늘 할 일</h3><strong>${board.tasks.length}건</strong></div><div class="today-execution-list">${board.tasks.map(taskCard).join("") || "<p>오늘 남은 실행 작업이 없습니다.</p>"}</div>${board.exceptions.length ? `<div class="today-exception-heading"><h4>확인 필요</h4><strong>${board.exceptions.length}건</strong></div><div class="today-exception-list">${board.exceptions.map(exceptionCard).join("")}</div>` : ""}</section>`;
+  }
+  function todayNextTaskAnswer(actualToday = seoulDateKey()) { return window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.todayBoardAnswer(getTodayExecutionBoard(actualToday)) || "오늘 남은 실행 작업이 없습니다."; }
   function renderTodayAgenda(active, completed) {
     const row = (block) => `<label class="operation-agenda-row" data-key="${escapeHtml(block.key)}"><input type="checkbox" data-complete><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(block.venue)}</strong> · ${escapeHtml(block.title)}</span>${isOverdue(block) ? '<small>지연</small>' : ""}</label>`;
     const completedRow = (block) => `<div class="operation-agenda-row completed" data-key="${escapeHtml(block.key)}"><time>${escapeHtml(block.time)}</time><span><strong>${escapeHtml(block.venue)}</strong> · ${escapeHtml(block.title)}</span><button type="button" data-restore-complete>되돌리기</button></div>`;
@@ -910,6 +923,8 @@
     return item;
   }
   function completeBoardItem(key, completed, boardDate = selectedDate) {
+    const persistent = state.manual.find((item) => item.key === key);
+    if (completed && persistent?.metadata?.source === "autopilot") { if (persistent.metadata?.readiness === "blocked") { alert("확인필요 항목은 해결 후 완료할 수 있습니다."); return; } const items = state.checklist.filter((item) => item.parentKey === key); if (items.length && items.some((item) => !item.completed)) { alert("체크리스트를 모두 완료한 뒤 최종 완료해주세요."); return; } }
     state.completions[key] = completed;
     let block = allBlocks(boardDate, currentEvents).find((item) => item.key === key); block = ensurePersistentSetupBlock(block); if (block) block.completed = completed;
     const manual = state.manual.find((item) => item.key === key); if (manual) manual.completed = completed;
@@ -1040,6 +1055,7 @@
         };
       });
     });
+    root.querySelectorAll("[data-today-alert-ack]").forEach((button) => button.onclick = () => { const alertItem = buildProactiveAlerts(currentEvents, seoulDateKey()).alerts.find((item) => String(item.id) === String(button.dataset.alertId)); if (alertItem) acknowledgeProactiveAlert(alertItem, seoulDateKey()); render(); });
     root.querySelector("[data-general-board-add]")?.addEventListener("click", () => openDialog());
     root.querySelector("[data-setup-create]")?.addEventListener("click", createSetupTask);
     root.querySelectorAll("[data-setup-detail]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = allBlocks(seoulDateKey(), currentEvents).find((block) => block.key === key); if (item) openDetailDialog(item); });
@@ -1167,6 +1183,8 @@
   window.BANQUET_ERP_OPERATION_BOARD.dedupePinnedSetupTasks = dedupePinnedSetupTasks;
   window.BANQUET_ERP_OPERATION_BOARD.setupCardInfo = setupCardInfo;
   window.BANQUET_ERP_OPERATION_BOARD.setupReadiness = setupReadiness;
+  window.BANQUET_ERP_OPERATION_BOARD.getTodayExecutionBoard = getTodayExecutionBoard;
+  window.BANQUET_ERP_OPERATION_BOARD.todayNextTaskAnswer = todayNextTaskAnswer;
   window.BANQUET_ERP_OPERATION_BOARD.addSetupTasks = addSetupTasks;
   window.BANQUET_ERP_OPERATION_BOARD.getPersistentSetupTasks = () => state.manual.filter((item) => item.type === "next_setup").map(applySetupOverride);
 })();

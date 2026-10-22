@@ -161,6 +161,7 @@
     function isAutopilotRegistrableApproval(text) { return /(작업\s*가능한|가능한\s*작업).*(등록|승인)/i.test(text); }
     async function answerAutopilotContext(question) {
       const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT;
+      if (autopilot?.matchesTodayQuestion(question)) return window.BANQUET_ERP_OPERATION_BOARD?.todayNextTaskAnswer?.() || "오늘 남은 실행 작업이 없습니다.";
       if (autopilot?.matchesUrgentQuestion(question)) { const plan = await runOperationsAutopilot({ force: true, display: false }); plan.queue = plan.queue.filter((item) => !skippedAutopilotKeys.has(item.sourceKey)); activeAutopilotItem = autopilot.highestPriority(plan); return autopilot.urgentAnswer(plan); }
       if (activeAutopilotItem && /(원본|파일).*(보여|열어)|^(원본|파일)\s*(보여줘|열어줘)$/i.test(question)) { const event = (state.getEvents?.() || []).find((item) => String(item.id) === String(activeAutopilotItem.eventOrderId)); if (event?.storagePath) window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" }); return event?.storagePath ? "원본 파일을 열었습니다." : "등록된 원본 파일이 없습니다."; }
       if (activeAutopilotItem && /(그건|이건)?.*(나중에|건너뛰|다음으로)/i.test(question)) { skippedAutopilotKeys.add(activeAutopilotItem.sourceKey); activeAutopilotItem = (activeAutopilotPlan?.queue || []).find((item) => !skippedAutopilotKeys.has(item.sourceKey)) || null; return activeAutopilotItem ? autopilot.urgentAnswer({ queue: [activeAutopilotItem] }) : "남은 우선 확인 항목이 없습니다."; }
