@@ -92,6 +92,44 @@
     const leftSet = normalizeVenueSet(left); const rightSet = normalizeVenueSet(right);
     return leftSet.size > 0 && rightSet.size > 0 && [...leftSet].some((space) => rightSet.has(space));
   }
+  function venueMatchRank(left, right) {
+    const leftCodes = normalizeVenueList(left); const rightCodes = normalizeVenueList(right);
+    if (!leftCodes.length || !rightCodes.length) return 0;
+    if (leftCodes.length === rightCodes.length && leftCodes.every((code) => rightCodes.includes(code))) return 3;
+    return spacesOverlap(left, right) ? 2 : 0;
+  }
+  function getActualTodaySeoul(now = new Date()) {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  }
+  function getSelectedBoardDate(value, fallback = getActualTodaySeoul()) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : fallback; }
+  function getSetupTimingStatus(task = {}, actualToday = getActualTodaySeoul()) {
+    if (task.completed === true) return "completed";
+    const scheduledDate = String(task.scheduledDate || "");
+    if (!scheduledDate) return "unscheduled";
+    if (scheduledDate < actualToday) return "overdue";
+    if (scheduledDate === actualToday) return "today";
+    return "future";
+  }
+  function getSetupTaskStatus(task = {}, { selectedDate = getActualTodaySeoul(), actualToday = getActualTodaySeoul() } = {}) {
+    const timing = getSetupTimingStatus(task, actualToday);
+    const visible = timing !== "completed" && (task.scheduledDate === selectedDate || (selectedDate === actualToday && timing === "overdue"));
+    return { timing, visible };
+  }
+  function getSetupTaskKey(task = {}) {
+    const eventOrderId = task.eventOrderId || task.nextEventOrderId || task.next?.eventOrderId || "";
+    const venue = [...normalizeVenueSet(task.venue)].sort().join("+") || comparable(task.venue);
+    return `${eventOrderId}|${venue}`;
+  }
+  function dedupeSetupCandidates(items = []) {
+    const persistent = items.filter((item) => item.kind === "manual" || item.persistent === true); const automatic = [];
+    const matches = (left, right) => { const leftEvent = left.eventOrderId || left.nextEventOrderId || left.next?.eventOrderId; const rightEvent = right.eventOrderId || right.nextEventOrderId || right.next?.eventOrderId; return !!leftEvent && String(leftEvent) === String(rightEvent || "") && spacesOverlap(left.venue, right.venue); };
+    items.filter((item) => !(item.kind === "manual" || item.persistent === true)).forEach((item) => { if (!persistent.some((saved) => matches(saved, item)) && !automatic.some((saved) => matches(saved, item))) automatic.push(item); });
+    return [...persistent, ...automatic];
+  }
+  function resolveNextEventForVenue({ venue, afterDateTime = "", candidates = [] } = {}) {
+    return candidates.filter((candidate) => venueMatchRank(venue, candidate.venue) > 0 && String(candidate.dateTime || "") > String(afterDateTime || ""))
+      .sort((left, right) => String(left.dateTime).localeCompare(String(right.dateTime)) || venueMatchRank(venue, right.venue) - venueMatchRank(venue, left.venue) || String(left.event?.id || left.eventOrderId || "").localeCompare(String(right.event?.id || right.eventOrderId || "")))[0] || null;
+  }
   function venueSearchKey(value) { return String(value || "").toLocaleLowerCase().replace(/\s+/g, ""); }
   function buildVenueOptions(query = "") {
     const search = venueSearchKey(query);
@@ -113,5 +151,6 @@
     return `${labels[0]} 외 ${labels.length - 1}`;
   }
 
-  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, formatVenueShort, formatVenueShortList, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
+  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
+  global.BANQUET_ERP_CORE_RULES = { normalizeVenue, normalizeVenueSet, spacesOverlap, venueMatchRank, getActualTodaySeoul, getSelectedBoardDate, getSetupTimingStatus, resolveNextEventForVenue, getSetupTaskKey, dedupeSetupCandidates, getSetupTaskStatus };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -13,6 +13,7 @@ const context = {
 };
 vm.createContext(context);
 const source = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
+vm.runInContext(fs.readFileSync("outputs/src/venueUtils.js", "utf8"), context);
 vm.runInContext(source, context);
 const board = context.window.BANQUET_ERP_OPERATION_BOARD;
 const date = "2026-10-15";

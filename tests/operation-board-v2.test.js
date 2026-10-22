@@ -77,7 +77,7 @@ const offset = now.getTimezoneOffset() * 60000;
 const today = new Date(now.getTime() - offset).toISOString().slice(0, 10);
 board.setSelectedDate(today);
 assert.strictEqual(board.getSelectedDate(), today);
-assert(source.includes('root.querySelector("[data-board-today]").onclick = () => { selectDate(dateKey()); render(); };'));
+assert(source.includes('root.querySelector("[data-board-today]").onclick = () => { selectDate(seoulDateKey()); render(); };'));
 assert.strictEqual(sessionMemory.get("banquet-erp-operation-board-selected-date-v2"), today);
 
 // 공간 그룹은 기존 physicalSpaceKeys 결과를 사용하고 지정 우선순위로 정렬한다.

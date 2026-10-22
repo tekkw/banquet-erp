@@ -241,7 +241,7 @@
   }
   function normalizedVenue(value) { const codes = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueList(value) || []; return codes.length ? codes.join("+") : String(value || "").toUpperCase().replace(/\s+/g, ""); }
   function venueTerm(text) { const utils = window.BANQUET_ERP_VENUE_UTILS; const codes = utils?.normalizeVenueList(text) || []; if (codes.length) return codes.map((code) => utils.venueLabel(code)).join(" + "); const normalized = normalizedVenue(text); return normalized.includes("포이어") ? "포이어" : ""; }
-  function eventVenueMatches(event, term) { if (!term) return true; const values = [event.venue, ...(event.schedule || []).map((row) => row.venue)]; const utils = window.BANQUET_ERP_VENUE_UTILS; const termSet = utils?.normalizeVenueSet(term); if (termSet?.size) return values.some((value) => utils.spacesOverlap(value, term)); return values.map(normalizedVenue).some((value) => value.includes(normalizedVenue(term))); }
+  function eventVenueMatches(event, term) { if (!term) return true; const values = [event.venue, ...(event.schedule || []).map((row) => row.venue)]; const core = window.BANQUET_ERP_CORE_RULES; const termSet = core?.normalizeVenueSet(term); if (termSet?.size) return values.some((value) => core.venueMatchRank(value, term) > 0); return values.map(normalizedVenue).some((value) => value.includes(normalizedVenue(term))); }
   function eventDateKeys(event) { return [...new Set([...(event.calendarDates || []), event.startDate, event.endDate, String(event.eventDateTime || "").slice(0, 10), ...(event.schedule || []).map((row) => row.date)].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))].sort(); }
   function eventInPeriod(event, period) {
     if (!period) return true;

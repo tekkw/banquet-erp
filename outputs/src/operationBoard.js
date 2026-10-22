@@ -21,6 +21,7 @@
   let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
   let mobileOpenGroups = loadOpenGroups();
   let activeBoardTab = "operations";
+  function coreRules() { return window.BANQUET_ERP_CORE_RULES; }
 
   function dateKey(date = new Date()) {
     const offset = date.getTimezoneOffset() * 60000;
@@ -29,8 +30,8 @@
   function storedSelectedDate() {
     try {
       const value = sessionStorage.getItem(SELECTED_DATE_KEY);
-      return /^\d{4}-\d{2}-\d{2}$/.test(value || "") ? value : dateKey();
-    } catch { return dateKey(); }
+      return coreRules()?.getSelectedBoardDate(value, coreRules()?.getActualTodaySeoul() || dateKey()) || dateKey();
+    } catch { return coreRules()?.getActualTodaySeoul() || dateKey(); }
   }
   let selectedDate = storedSelectedDate();
   function selectDate(value) {
@@ -194,7 +195,7 @@
   function spacesOverlap(currentEvent, futureEvent, currentRow = {}, futureRow = {}) {
     const venueUtils = window.BANQUET_ERP_VENUE_UTILS;
     const currentVenue = venueName(currentRow, currentEvent); const futureVenue = venueName(futureRow, futureEvent);
-    if (venueUtils?.normalizeVenueSet(currentVenue).size && venueUtils?.normalizeVenueSet(futureVenue).size) return venueUtils.spacesOverlap(currentVenue, futureVenue);
+    if (venueUtils?.normalizeVenueSet(currentVenue).size && venueUtils?.normalizeVenueSet(futureVenue).size) return coreRules().spacesOverlap(currentVenue, futureVenue);
     const existingResult = physicalSpaceKeysOverlap(physicalSpaceKeys(currentEvent, currentRow), physicalSpaceKeys(futureEvent, futureRow));
     const knowledgeResult = window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.spacesOverlapOverride(currentEvent, futureEvent, currentRow, futureRow);
     return knowledgeResult ?? existingResult;
@@ -222,8 +223,7 @@
       if (!candidateSet.size || !spacesOverlap({ venue: normalizedVenue }, { venue: candidateVenue })) return;
       eventDates(event).forEach((day) => { const time = timeValue(event.eventDateTime); const candidateTime = time || "23:59"; if (`${day}T${candidateTime}` > afterKey) candidates.push({ event, row: null, date: day, time, venue: candidateVenue, dateTime: `${day}T${candidateTime}` }); });
     });
-    candidates.sort((left, right) => left.dateTime.localeCompare(right.dateTime) || String(left.event.id).localeCompare(String(right.event.id)));
-    return candidates[0] || null;
+    return coreRules().resolveNextEventForVenue({ venue: normalizedVenue, afterDateTime: afterKey, candidates });
   }
   function getVenueGroup(rawVenue) {
     const canonical = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(rawVenue) || "";
@@ -677,9 +677,9 @@
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function allBlocks(boardDate = selectedDate, events = currentEvents) {
     const persistent = state.manual.filter((item) => (item.date === boardDate || item.type === "next_setup") && !String(item.key || "").startsWith("board-asset-ai:") && item.metadataSource !== "board_asset_ai").map(applySetupOverride);
-    const persistentSetupMatches = new Set(state.manual.filter((item) => item.type === "next_setup").map(pinnedSetupMatchKey));
-    const automatic = buildAutoBlocks(events, boardDate).filter((item) => item.type !== "next_setup" || !persistentSetupMatches.has(pinnedSetupMatchKey(item))).map(applySetupOverride);
-    return [...automatic, ...persistent].sort((a, b) => String(a.scheduledTime || a.time).localeCompare(String(b.scheduledTime || b.time)) || a.venue.localeCompare(b.venue, "ko"));
+    const automatic = buildAutoBlocks(events, boardDate).map(applySetupOverride);
+    const setups = coreRules().dedupeSetupCandidates([...persistent.filter((item) => item.type === "next_setup"), ...automatic.filter((item) => item.type === "next_setup")]);
+    return [...automatic.filter((item) => item.type !== "next_setup"), ...persistent.filter((item) => item.type !== "next_setup"), ...setups].sort((a, b) => String(a.scheduledTime || a.time).localeCompare(String(b.scheduledTime || b.time)) || a.venue.localeCompare(b.venue, "ko"));
   }
   function applySetupOverride(item) {
     const value = state.setupOverrides[item.key]; if (!value) return item;
@@ -693,8 +693,8 @@
     return block.time < currentTime;
   }
   function isSetupOverdue(item, referenceDate = selectedDate, now = new Date()) {
-    const scheduledDate = setupScheduledDate(item); if (item.completed || !scheduledDate) return false;
-    if (scheduledDate < referenceDate) return true;
+    const scheduledDate = setupScheduledDate(item); if (coreRules().getSetupTimingStatus({ scheduledDate, completed: item.completed }, referenceDate) === "overdue") return true;
+    if (item.completed || !scheduledDate) return false;
     return scheduledDate === referenceDate && referenceDate === dateKey(now) && /^\d\d:\d\d$/.test(item.next?.time || item.time || "") && (item.next?.time || item.time) < `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   }
   function sortSetupTasks(tasks, referenceDate = selectedDate) {
@@ -767,30 +767,16 @@
     window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
   function getPinnedSetupStatus(task, today = seoulDateKey()) {
-    if (task?.completed === true || state.completions[task?.key] === true) return "completed";
-    const scheduledDate = setupScheduledDate(task) || task?.plannedDate || task?.date || "";
-    if (scheduledDate > today) return "future";
-    if (scheduledDate === today) return "today";
-    return "overdue";
+    return coreRules().getSetupTimingStatus({ scheduledDate: setupScheduledDate(task) || task?.plannedDate || task?.date || "", completed: task?.completed === true || state.completions[task?.key] === true }, today);
   }
   function pinnedSetupMatchKey(item) {
-    const venue = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(item?.venue) || normalize(item?.venue).toLowerCase().replace(/\s+/g, "");
-    return [item?.eventOrderId || item?.next?.eventOrderId || "", venue].join("|");
+    return coreRules().getSetupTaskKey(item);
   }
   function dedupePinnedSetupTasks(tasks) {
-    const persistent = []; const automatic = []; const persistentIds = new Set();
-    (tasks || []).forEach((item) => {
-      if (item.kind === "manual") { const id = String(item.id || item.key || ""); if (!persistentIds.has(id)) { persistentIds.add(id); persistent.push(item); } }
-      else automatic.push(item);
-    });
-    const persistentMatches = new Set(persistent.map(pinnedSetupMatchKey)); const automaticKeys = new Set();
-    return [...persistent, ...automatic.filter((item) => { const match = pinnedSetupMatchKey(item); const key = `${match}|${item.source || item.kind || "auto"}|${item.type || "next_setup"}`; if (persistentMatches.has(match) || automaticKeys.has(key)) return false; automaticKeys.add(key); return true; })];
+    return coreRules().dedupeSetupCandidates(tasks);
   }
   function setupBoardTasks(blocks, boardDate = selectedDate, actualToday = seoulDateKey()) {
-    const visible = (blocks || []).filter((item) => {
-      const scheduledDate = setupScheduledDate(item) || item?.plannedDate || item?.date || "";
-      return state.pins[item.key] && getPinnedSetupStatus(item, actualToday) !== "completed" && (scheduledDate === boardDate || (boardDate === actualToday && scheduledDate < actualToday));
-    });
+    const visible = (blocks || []).filter((item) => state.pins[item.key] && coreRules().getSetupTaskStatus({ scheduledDate: setupScheduledDate(item) || item?.plannedDate || item?.date || "", completed: item?.completed === true || state.completions[item?.key] === true }, { selectedDate: boardDate, actualToday }).visible);
     return sortSetupTasks(dedupePinnedSetupTasks(visible), boardDate);
   }
   function setupCardInfo(item) {
@@ -935,7 +921,7 @@
     render();
   }
   function seoulDateKey(now = new Date()) {
-    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    return coreRules().getActualTodaySeoul(now);
   }
   function setupCandidateDateRange(today = seoulDateKey()) {
     const start = new Date(`${today}T12:00:00+09:00`); const day = start.getUTCDay();
@@ -1059,7 +1045,7 @@
     root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
     root.querySelector("[data-board-date]").onchange = (event) => { selectDate(event.target.value); render(); };
     root.querySelectorAll("[data-board-date-step]").forEach((button) => button.onclick = () => { selectDate(addDays(selectedDate, Number(button.dataset.boardDateStep))); render(); });
-    root.querySelector("[data-board-today]").onclick = () => { selectDate(dateKey()); render(); };
+    root.querySelector("[data-board-today]").onclick = () => { selectDate(seoulDateKey()); render(); };
     root.querySelectorAll("[data-space-group-toggle]").forEach((button) => button.onclick = () => {
       if (!window.matchMedia?.("(max-width: 768px)").matches) return;
       if (!mobileOpenGroups) mobileOpenGroups = new Set([root.querySelector("[data-space-group-toggle]")?.dataset.spaceGroupToggle].filter(Boolean));
@@ -1160,7 +1146,7 @@
     form.elements.venue.readOnly = Boolean(context?.venue || item?.eventOrderId); dialog.showModal(); form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const existing = state.manual.find((x) => x.key === data.id); const key = existing?.key || `manual:${crypto.randomUUID()}`; const venue = normalize(data.venue); const next = { key, id: key, kind: "manual", type: "manual", date: existing?.date || selectedDate, time: data.time, venue, spaceId: data.spaceId || existing?.spaceId || `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: data.eventOrderId || existing?.eventOrderId || null, title: normalize(data.title), memo: normalize(data.memo), completed: existing?.completed || false, metadataSource: "manual_board_task", createdAt: existing?.createdAt || new Date().toISOString() }; state.manual = existing ? state.manual.map((x) => x.key === key ? next : x) : [...state.manual, next]; saveState(); syncItem(next); closeDialog(); render(); };
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(value) || "", getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, getActualTodaySeoul: seoulDateKey, getSelectedBoardDate: () => selectedDate, getSetupTimingStatus: (item, today) => coreRules().getSetupTimingStatus({ scheduledDate: setupScheduledDate(item), completed: item?.completed }, today), getSetupTaskKey: pinnedSetupMatchKey, dedupeSetupCandidates: dedupePinnedSetupTasks, getSetupTaskStatus: (item, dates) => coreRules().getSetupTaskStatus({ scheduledDate: setupScheduledDate(item), completed: item?.completed }, dates), isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => coreRules().normalizeVenue(value), normalizeVenueSet: (value) => coreRules().normalizeVenueSet(value), venueMatchRank: (left, right) => coreRules().venueMatchRank(left, right), getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
   window.BANQUET_ERP_OPERATION_BOARD.getPinnedSetupStatus = getPinnedSetupStatus;
   window.BANQUET_ERP_OPERATION_BOARD.dedupePinnedSetupTasks = dedupePinnedSetupTasks;
   window.BANQUET_ERP_OPERATION_BOARD.setupCardInfo = setupCardInfo;

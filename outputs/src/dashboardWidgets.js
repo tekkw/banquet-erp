@@ -231,7 +231,7 @@
   function eventsForSpace(space, orders) {
     if (space.conventionUnit) return orders.filter((row) => conventionUnit(row.venue) === space.conventionUnit);
     const board = window.BANQUET_ERP_OPERATION_BOARD;
-    if (board?.spacesOverlap) return orders.filter((row) => board.spacesOverlap({ venue: space.space_name }, { venue: row.venue }));
+    if (window.BANQUET_ERP_CORE_RULES) return orders.filter((row) => window.BANQUET_ERP_CORE_RULES.spacesOverlap(space.space_name, row.venue));
     const key = normalizeVenue(space.space_name);
     return orders.filter((row) => normalizeVenue(row.venue).includes(key));
   }
