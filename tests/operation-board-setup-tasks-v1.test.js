@@ -31,7 +31,7 @@ assert(source.includes("renderTodayAgenda(activeAgenda, completedAgenda)") && so
 assert(source.includes('item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup"'), "setup task는 기존 operation_board_items를 사용해야 한다");
 assert(source.includes("operation_board_checklist_items"), "하위 항목은 기존 checklist 저장 구조를 사용해야 한다");
 assert(source.includes("pinned: !!state.pins[item.key]"));
-assert(source.includes("setupOverride: state.setupOverrides[item.key] || null"));
+assert(source.includes("scheduledDate, scheduledTime") && source.includes("setupOverride"));
 assert(source.includes("renderOriginalAction(item.eventOrderId)"), "원본 엑셀은 연결된 다음 행사 ID를 사용해야 한다");
 assert(source.includes("data-edit-item") && source.includes("data-delete-item") && source.includes("data-check-item"));
 assert(source.includes("data-restore-complete"), "완료된 setup task를 복원할 수 있어야 한다");
@@ -53,6 +53,9 @@ assert.notStrictEqual(board.getVenueGroup("2F 카프리 III"), "기타", "정상
 assert(source.includes('data-setup-editor') && source.includes('name="eventOrderId"'), "수정은 행사 선택 modal을 사용해야 한다");
 assert(!source.includes('prompt("연결 행사 ID"'), "행사 ID를 문자열 prompt로 수정하면 안 된다");
 assert(source.includes("eventOrderId: data.eventOrderId") && source.includes("setupEventDetails(linkedEvent)"), "선택 행사의 실제 ID와 표시 정보를 연결해야 한다");
+assert(source.includes('name="scheduledDate"') && source.includes('name="scheduledTime"'), "세팅 예정 날짜와 시간을 별도 필드로 저장해야 한다");
+assert(!source.includes("form.elements.eventDate.value = details.eventDate"), "연결 행사일로 기존 예정일을 덮어쓰면 안 된다");
+assert(source.includes("item.recordId ? `operation_board_items?id=eq."), "persistent task 수정과 완료는 task id로 갱신해야 한다");
 assert(source.includes("data-editor-child-add") && source.includes("data-editor-child-delete") && source.includes("data-editor-child-complete"), "modal에서 하위 항목을 관리할 수 있어야 한다");
 assert(source.includes('class="setup-venue-badge"') && source.includes('data-setup-detail'), "상단 카드는 compact 장소 badge와 상세 보기 동작을 제공해야 한다");
 assert(source.includes("setup-editor-dialog") && source.includes("showModal()"), "모바일도 공용 행사 선택 editor를 사용해야 한다");
@@ -118,6 +121,13 @@ board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: {} });
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-21"), "future");
 assert.strictEqual(board.setupBoardTasks([futurePinned], "2026-10-21").length, 0, "A. 예정일 전에는 상단 고정에 표시하지 않는다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned], "2026-10-22"), (item) => item.key), [futurePinned.key], "B. 예정일 당일 표시한다");
+const separatedDates = { ...futurePinned, key: "separated-dates", scheduledDate: "2026-10-23", scheduledTime: "07:00", next: { eventOrderId: "future-event", eventDate: "2026-10-24", name: "긴 미래 행사명" } };
+board._setStateForTest({ pins: { [separatedDates.key]: true }, completions: {} });
+assert.deepStrictEqual({ ...board.setupCardInfo(separatedDates) }, { eventOrderId: "future-event", title: "긴 미래 행사명", date: "2026-10-23", time: "07:00", venue: "부1", people: "" }, "행사일 10/24와 무관하게 카드에는 scheduledDate 10/23을 표시해야 한다");
+assert.strictEqual(board.setupBoardTasks([separatedDates], "2026-10-22", "2026-10-22").length, 0, "선택일 10/22에는 미래 10/23 task를 숨겨야 한다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-23", "2026-10-22"), (item) => item.key), [separatedDates.key], "선택일 10/23에는 미래 탐색 중에도 task를 표시해야 한다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-24", "2026-10-24"), (item) => item.key), [separatedDates.key], "실제 오늘 10/24에는 미완료 10/23 task를 지연 표시해야 한다");
+assert.strictEqual(board.setupBoardTasks([separatedDates], "2026-10-25", "2026-10-24").length, 0, "실제 오늘이 아닌 다른 날짜에는 지연 task를 숨겨야 한다");
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "overdue", "C. 지난 미완료 작업은 지연이다");
 board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: { [futurePinned.key]: true } });
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "completed");
@@ -131,6 +141,6 @@ assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned, separate]
 context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");
-assert(source.includes('item_kind=eq.manual&order=board_date.asc') && source.includes('x.date === boardDate || x.type === "next_setup"'), "원격과 로컬 날짜 필터 모두 setup task를 예외 처리해야 한다");
+assert(source.includes('item_kind=eq.manual&order=board_date.asc') && source.includes('item.date === boardDate || item.type === "next_setup"'), "원격과 로컬 날짜 필터 모두 setup task를 예외 처리해야 한다");
 
 console.log("operation-board setup task V1 tests passed");

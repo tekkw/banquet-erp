@@ -614,7 +614,10 @@
         if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
         if (row.metadata?.noteType === "field_note") {
           state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== row.item_key), { key: row.item_key, date: row.board_date, eventOrderId: row.event_order_id, venue: row.venue_name, content: row.memo || row.title }];
-        } else if (row.metadata?.recordType !== "board_ai_change_log" && row.item_kind === "manual") state.manual = [...state.manual.filter((x) => x.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: row.metadata?.taskType || "manual", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "" }];
+        } else if (row.metadata?.recordType !== "board_ai_change_log" && row.item_kind === "manual") {
+          const setupOverride = row.metadata?.setupOverride || {};
+          state.manual = [...state.manual.filter((x) => x.recordId !== row.id && x.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: row.metadata?.taskType || "manual", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || row.board_date, scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
+        }
       });
       state.checklist = [...state.checklist.filter((item) => item.date !== boardDate), ...(checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, date: boardDate, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }))];
       remoteLoadedDates.add(boardDate);
@@ -644,7 +647,8 @@
         state.pins[row.item_key] = !!row.metadata?.pinned;
         if (row.metadata?.setupOverride) state.setupOverrides[row.item_key] = row.metadata.setupOverride;
         if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
-        state.manual = [...state.manual.filter((item) => item.key !== row.item_key), { key: row.item_key, id: row.item_key, kind: "manual", type: "next_setup", date: row.board_date, time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "" }];
+        const setupOverride = row.metadata?.setupOverride || {};
+        state.manual = [...state.manual.filter((item) => item.recordId !== row.id && item.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: "next_setup", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || row.board_date, scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
       });
       if (setupKeys.size) {
         const checklist = await remoteRequest("operation_board_checklist_items?select=*&order=sort_order.asc");
@@ -656,8 +660,13 @@
   }
   function syncItem(item, options = {}) {
     const override = state.reminders[item.key]; const resolved = override == null || override === "default" ? defaultReminder : override;
-    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(item.time || "") ? item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", boardDate: item.date || dateKey(), venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride: state.setupOverrides[item.key] || null, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved), ...(item.metadata || {}) } };
-    const pending = remoteRequest("operation_board_items?on_conflict=board_date,item_key", { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) });
+    const setupOverride = state.setupOverrides[item.key] || null;
+    const scheduledDate = setupOverride?.scheduledDate || item.scheduledDate || (item.type === "next_setup" ? setupOverride?.eventDate || item.next?.date || item.date : null);
+    const scheduledTime = setupOverride?.scheduledTime || item.scheduledTime || (item.type === "next_setup" ? setupOverride?.time || item.next?.time || item.time : null);
+    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(scheduledTime || item.time || "") ? scheduledTime || item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { ...(item.metadata || {}), source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", boardDate: item.date || dateKey(), scheduledDate, scheduledTime, venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
+    const path = item.recordId ? `operation_board_items?id=eq.${encodeURIComponent(item.recordId)}` : "operation_board_items?on_conflict=board_date,item_key";
+    const requestOptions = item.recordId ? { method: "PATCH", body: JSON.stringify(payload) } : { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) };
+    const pending = remoteRequest(path, requestOptions);
     return options.throwOnError ? pending : pending.catch((error) => console.error("운영보드 저장 실패", error));
   }
   function syncChecklist(item, removed = false, options = {}) {
@@ -667,12 +676,15 @@
   }
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
   function allBlocks(boardDate = selectedDate, events = currentEvents) {
-    return [...buildAutoBlocks(events, boardDate), ...state.manual.filter((x) => (x.date === boardDate || x.type === "next_setup") && !String(x.key || "").startsWith("board-asset-ai:") && x.metadataSource !== "board_asset_ai")].map(applySetupOverride).sort((a, b) => String(a.time).localeCompare(String(b.time)) || a.venue.localeCompare(b.venue, "ko"));
+    const persistent = state.manual.filter((item) => (item.date === boardDate || item.type === "next_setup") && !String(item.key || "").startsWith("board-asset-ai:") && item.metadataSource !== "board_asset_ai").map(applySetupOverride);
+    const persistentSetupMatches = new Set(state.manual.filter((item) => item.type === "next_setup").map(pinnedSetupMatchKey));
+    const automatic = buildAutoBlocks(events, boardDate).filter((item) => item.type !== "next_setup" || !persistentSetupMatches.has(pinnedSetupMatchKey(item))).map(applySetupOverride);
+    return [...automatic, ...persistent].sort((a, b) => String(a.scheduledTime || a.time).localeCompare(String(b.scheduledTime || b.time)) || a.venue.localeCompare(b.venue, "ko"));
   }
   function applySetupOverride(item) {
     const value = state.setupOverrides[item.key]; if (!value) return item;
-    const linkedNext = value.eventOrderId ? { ...(item.next || {}), eventOrderId: value.eventOrderId, date: value.eventDate || item.next?.date, time: value.time || item.next?.time, name: value.eventTitle || item.next?.name, subtitle: value.eventSubtitle || item.next?.subtitle, people: value.people || item.next?.people } : item.next;
-    return { ...item, venue: value.venue || item.venue, time: value.time || item.time, title: value.title || item.title, memo: value.memo ?? item.memo, eventOrderId: value.eventOrderId || item.eventOrderId, next: linkedNext };
+    const linkedNext = value.eventOrderId ? { ...(item.next || {}), eventOrderId: value.eventOrderId, eventDate: value.eventDate || item.next?.eventDate || item.next?.date, name: value.eventTitle || item.next?.name, subtitle: value.eventSubtitle || item.next?.subtitle, people: value.people || item.next?.people } : item.next;
+    return { ...item, scheduledDate: value.scheduledDate || item.scheduledDate || value.eventDate || item.next?.date, scheduledTime: value.scheduledTime || item.scheduledTime || value.time || item.next?.time || item.time, venue: value.venue || item.venue, time: value.scheduledTime || value.time || item.time, title: value.title || item.title, memo: value.memo ?? item.memo, eventOrderId: value.eventOrderId || item.eventOrderId, next: linkedNext };
   }
   function agendaBlocks(blocks) { return (blocks || []).filter((block) => block.kind === "auto" || block.kind === "manual"); }
   function isOverdue(block, boardDate = selectedDate, now = new Date()) {
@@ -763,7 +775,7 @@
   }
   function pinnedSetupMatchKey(item) {
     const venue = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue(item?.venue) || normalize(item?.venue).toLowerCase().replace(/\s+/g, "");
-    return [item?.eventOrderId || item?.next?.eventOrderId || "", venue, setupScheduledDate(item) || item?.plannedDate || item?.date || ""].join("|");
+    return [item?.eventOrderId || item?.next?.eventOrderId || "", venue].join("|");
   }
   function dedupePinnedSetupTasks(tasks) {
     const persistent = []; const automatic = []; const persistentIds = new Set();
@@ -774,9 +786,12 @@
     const persistentMatches = new Set(persistent.map(pinnedSetupMatchKey)); const automaticKeys = new Set();
     return [...persistent, ...automatic.filter((item) => { const match = pinnedSetupMatchKey(item); const key = `${match}|${item.source || item.kind || "auto"}|${item.type || "next_setup"}`; if (persistentMatches.has(match) || automaticKeys.has(key)) return false; automaticKeys.add(key); return true; })];
   }
-  function setupBoardTasks(blocks, today = seoulDateKey()) {
-    const visible = (blocks || []).filter((item) => state.pins[item.key] && ["today", "overdue"].includes(getPinnedSetupStatus(item, today)));
-    return sortSetupTasks(dedupePinnedSetupTasks(visible), today);
+  function setupBoardTasks(blocks, boardDate = selectedDate, actualToday = seoulDateKey()) {
+    const visible = (blocks || []).filter((item) => {
+      const scheduledDate = setupScheduledDate(item) || item?.plannedDate || item?.date || "";
+      return state.pins[item.key] && getPinnedSetupStatus(item, actualToday) !== "completed" && (scheduledDate === boardDate || (boardDate === actualToday && scheduledDate < actualToday));
+    });
+    return sortSetupTasks(dedupePinnedSetupTasks(visible), boardDate);
   }
   function setupCardInfo(item) {
     const eventOrderId = item.next?.eventOrderId || item.eventOrderId;
@@ -785,19 +800,19 @@
       eventOrderId,
       title: event ? eventDisplayTitle(event) : item.next?.name || item.title || "행사",
       date: setupScheduledDate(item),
-      time: item.next?.time || item.time || "",
+      time: item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "",
       venue: window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue,
       people: item.next?.people || item.people || event?.guestCount || "",
     };
   }
   function renderSetupTaskBoard(blocks) {
-    const tasks = setupBoardTasks(blocks);
+    const tasks = setupBoardTasks(blocks, selectedDate, seoulDateKey());
     const card = (item) => {
       const info = setupCardInfo(item); const eventDate = info.date || state.setupOverrides[item.key]?.eventDate || "";
       const sourceBadge = item.metadataSource === "manual_setup_task" ? "수동" : "자동";
       const status = getPinnedSetupStatus(item); const overdueDays = status === "overdue" && eventDate ? Math.max(1, Math.round((new Date(`${seoulDateKey()}T12:00:00+09:00`) - new Date(`${eventDate}T12:00:00+09:00`)) / 86400000)) : 0;
       const metadata = [eventDate && eventDate.slice(5).replace("-", "/"), info.time, info.people && `${info.people}명`].filter(Boolean).join(" · ");
-      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(info.venue)}</span><div><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(metadata)}</small></div>${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-source-badge">${sourceBadge}</span></div><div class="setup-task-actions"><button type="button" data-setup-detail>상세 보기</button>${renderOriginalAction(info.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
+      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}" data-task-id="${escapeHtml(item.recordId || "")}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(info.venue)}</span><div><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(metadata)}</small></div>${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-source-badge">${sourceBadge}</span></div><div class="setup-task-actions"><button type="button" data-setup-detail>상세 보기</button>${renderOriginalAction(info.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
     return `<section class="setup-task-board"><div class="setup-task-heading"><h3>다음 세팅 / 고정 작업</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${tasks.map((item) => card(item)).join("") || '<p>상단에 고정된 작업이 없습니다.</p>'}</div></section>`;
   }
@@ -960,7 +975,7 @@
     const placeholder = `<option value="">대상 공간을 선택하세요</option>`;
     return placeholder + groups.map((group) => { const rows = options.filter((item) => item.group === group); return rows.length ? `<optgroup label="${group}">${rows.map((item) => `<option value="${item.label}" ${item.code === selectedCode ? "selected" : ""}>${item.label}</option>`).join("")}</optgroup>` : ""; }).join("");
   }
-  function setupScheduledDate(item) { return item?.next?.date || state.setupOverrides[item?.key]?.eventDate || item?.metadata?.setupOverride?.eventDate || ""; }
+  function setupScheduledDate(item) { const override = state.setupOverrides[item?.key] || {}; return override.scheduledDate || item?.scheduledDate || item?.metadata?.scheduledDate || item?.metadata?.setupOverride?.scheduledDate || override.eventDate || item?.metadata?.setupOverride?.eventDate || item?.next?.date || ""; }
   function findLocalSetupDuplicate(eventOrderId, venue, eventDate, blocks = null) {
     if (!blocks) { const range = setupCandidateDateRange(); blocks = []; for (let day = range.start; day <= range.end; day = addDays(day, 1)) blocks.push(...allBlocks(day)); }
     return blocks.find((item) => item.type === "next_setup" && String(item.eventOrderId) === String(eventOrderId) && normalize(item.venue) === normalize(venue) && setupScheduledDate(item) === eventDate) || null;
@@ -968,15 +983,15 @@
   async function findSetupDuplicate(eventOrderId, venue, eventDate) {
     const local = findLocalSetupDuplicate(eventOrderId, venue, eventDate); if (local) return { key: local.key, boardDate: local.date || seoulDateKey() };
     const rows = await remoteRequest(`operation_board_items?select=board_date,item_key,item_kind,event_order_id,venue_name,metadata&event_order_id=eq.${encodeURIComponent(eventOrderId)}&is_completed=eq.false`);
-    const row = (rows || []).find((item) => item.metadata?.taskType === "next_setup" && normalize(item.venue_name) === normalize(venue) && item.metadata?.setupOverride?.eventDate === eventDate);
+    const row = (rows || []).find((item) => item.metadata?.taskType === "next_setup" && normalize(item.venue_name) === normalize(venue) && (item.metadata?.scheduledDate || item.metadata?.setupOverride?.scheduledDate || item.metadata?.setupOverride?.eventDate) === eventDate);
     return row ? { key: row.item_key, boardDate: row.board_date } : null;
   }
   function createSetupTask() {
     const dialog = root.querySelector("[data-setup-editor]"); const key = `manual-setup:${crypto.randomUUID()}`; const boardDate = seoulDateKey(); let children = [];
     const childRows = () => children.map((item) => `<div class="setup-editor-child" data-item-id="${item.id}"><input type="checkbox" disabled aria-label="완료"><input data-new-child-name value="${escapeHtml(item.name)}" placeholder="세팅 항목"><input data-new-child-quantity value="${escapeHtml(item.quantity)}" placeholder="수량"><input data-new-child-unit value="${escapeHtml(item.unit)}" placeholder="단위"><button type="button" data-new-child-delete>삭제</button></div>`).join("");
-    dialog.innerHTML = `<form method="dialog" data-setup-create-form><header><div><span class="eyebrow">Manual setup</span><h3>다음 세팅 추가</h3></div><button type="button" data-setup-editor-close aria-label="닫기">×</button></header><label class="setup-venue-picker">공간<input type="search" data-setup-venue-search placeholder="공간 검색 (예: 부, 카2, 컨A)" autocomplete="off"><select name="venue" required>${renderSetupVenueOptions("")}</select></label><label>연결 행사<select name="eventOrderId" required>${renderSetupEventOptions("", "")}</select></label><p class="setup-event-secondary" data-setup-event-secondary></p><div class="setup-editor-grid"><label>예정 날짜<input name="eventDate" type="date" required></label><label>예정 시간<input name="time" type="time"></label></div><label>메모<textarea name="memo"></textarea></label><section class="setup-editor-items"><div><strong>하위 세팅 항목</strong><button type="button" data-editor-child-add>+ 세팅 항목</button></div><div data-editor-child-list></div></section><label class="setup-pin-option"><input name="pinned" type="checkbox" checked> 상단 고정</label><p class="setup-create-status" data-setup-create-status></p><footer><button type="button" data-setup-editor-close>취소</button><button type="submit" class="primary-button">저장</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" data-setup-create-form><header><div><span class="eyebrow">Manual setup</span><h3>다음 세팅 추가</h3></div><button type="button" data-setup-editor-close aria-label="닫기">×</button></header><label class="setup-venue-picker">공간<input type="search" data-setup-venue-search placeholder="공간 검색 (예: 부, 카2, 컨A)" autocomplete="off"><select name="venue" required>${renderSetupVenueOptions("")}</select></label><label>연결 행사<select name="eventOrderId" required>${renderSetupEventOptions("", "")}</select></label><p class="setup-event-secondary" data-setup-event-secondary></p><div class="setup-editor-grid"><label>예정 날짜<input name="scheduledDate" type="date" required></label><label>예정 시간<input name="scheduledTime" type="time"></label></div><label>메모<textarea name="memo"></textarea></label><section class="setup-editor-items"><div><strong>하위 세팅 항목</strong><button type="button" data-editor-child-add>+ 세팅 항목</button></div><div data-editor-child-list></div></section><label class="setup-pin-option"><input name="pinned" type="checkbox" checked> 상단 고정</label><p class="setup-create-status" data-setup-create-status></p><footer><button type="button" data-setup-editor-close>취소</button><button type="submit" class="primary-button">저장</button></footer></form>`;
     const form = dialog.querySelector("form"); const eventSelect = form.elements.eventOrderId; const childList = form.querySelector("[data-editor-child-list]");
-    const refreshEvent = (autoSelectVenue = false) => { const selected = currentEvents.find((event) => String(event.id) === eventSelect.value); const details = selected ? setupEventDetails(selected) : null; form.querySelector("[data-setup-event-secondary]").textContent = details?.subtitle || ""; if (details) { form.elements.eventDate.value = details.eventDate; form.elements.time.value = details.time; } if (autoSelectVenue && selected) { const codes = setupVenueCodes(selected); form.elements.venue.value = codes.length === 1 ? window.BANQUET_ERP_VENUE_UTILS.venueLabel(codes[0]) : ""; } };
+    const refreshEvent = (autoSelectVenue = false) => { const selected = currentEvents.find((event) => String(event.id) === eventSelect.value); const details = selected ? setupEventDetails(selected) : null; form.querySelector("[data-setup-event-secondary]").textContent = details?.subtitle || ""; if (details && !form.elements.scheduledDate.value) { form.elements.scheduledDate.value = details.eventDate; form.elements.scheduledTime.value = details.time; } if (autoSelectVenue && selected) { const codes = setupVenueCodes(selected); form.elements.venue.value = codes.length === 1 ? window.BANQUET_ERP_VENUE_UTILS.venueLabel(codes[0]) : ""; } };
     const renderChildren = () => { childList.innerHTML = childRows(); childList.querySelectorAll("[data-item-id]").forEach((row) => { const item = children.find((entry) => entry.id === row.dataset.itemId); row.querySelector("[data-new-child-name]").oninput = (event) => { item.name = event.target.value; }; row.querySelector("[data-new-child-quantity]").oninput = (event) => { item.quantity = event.target.value; }; row.querySelector("[data-new-child-unit]").oninput = (event) => { item.unit = event.target.value; }; row.querySelector("[data-new-child-delete]").onclick = () => { children = children.filter((entry) => entry.id !== item.id); renderChildren(); }; }); };
     form.elements.venue.onchange = () => { const selectedId = eventSelect.value; eventSelect.innerHTML = renderSetupEventOptions(form.elements.venue.value, selectedId); refreshEvent(); };
     eventSelect.onchange = () => refreshEvent(true);
@@ -985,32 +1000,32 @@
     form.querySelectorAll("[data-setup-editor-close]").forEach((button) => button.onclick = () => dialog.close());
     form.onsubmit = async (event) => {
       event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const linkedEvent = currentEvents.find((entry) => String(entry.id) === String(data.eventOrderId)); if (!linkedEvent) return;
-      const details = setupEventDetails(linkedEvent, data.eventDate); const venue = data.venue; let duplicate;
-      try { duplicate = await findSetupDuplicate(linkedEvent.id, venue, data.eventDate); }
+      const details = setupEventDetails(linkedEvent); const venue = data.venue; let duplicate;
+      try { duplicate = await findSetupDuplicate(linkedEvent.id, venue, data.scheduledDate); }
       catch (error) { console.error("setup duplicate lookup failed", error); alert("기존 다음 세팅 작업을 확인하지 못했습니다. 다시 시도해주세요."); return; }
       if (duplicate) {
         const status = form.querySelector("[data-setup-create-status]"); status.innerHTML = `이미 다음 세팅 작업이 있습니다. <button type="button" data-open-existing-setup>기존 작업 열기</button>`;
         status.querySelector("[data-open-existing-setup]").onclick = async () => { dialog.close(); activeBoardTab = "setup"; selectDate(duplicate.boardDate); await hydrateRemote(duplicate.boardDate); render(); requestAnimationFrame(() => root.querySelector(`[data-key="${CSS.escape(duplicate.key)}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })); };
         return;
       }
-      const item = { key, id: key, kind: "manual", type: "next_setup", date: boardDate, time: data.time || details.time || "", venue, spaceId: `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: linkedEvent.id, title: details.title || linkedEvent.eventName || "다음 세팅", memo: normalize(data.memo), completed: false, metadataSource: "manual_setup_task", metadata: { source: "manual_setup_task", recordType: "manual_next_setup" }, createdAt: new Date().toISOString() };
-      state.manual.push(item); state.pins[key] = data.pinned === "on"; state.setupOverrides[key] = { venue, eventOrderId: linkedEvent.id, eventDate: data.eventDate, time: item.time, memo: item.memo, eventTitle: details.title || "", eventSubtitle: details.subtitle || "", people: details.people || "" };
+      const item = { key, id: key, kind: "manual", type: "next_setup", date: boardDate, scheduledDate: data.scheduledDate, scheduledTime: data.scheduledTime || "", time: data.scheduledTime || "", venue, spaceId: `venue:${venue.toLowerCase().replace(/\s+/g, "")}`, eventOrderId: linkedEvent.id, title: details.title || linkedEvent.eventName || "다음 세팅", memo: normalize(data.memo), completed: false, metadataSource: "manual_setup_task", metadata: { source: "manual_setup_task", recordType: "manual_next_setup" }, createdAt: new Date().toISOString() };
+      state.manual.push(item); state.pins[key] = data.pinned === "on"; state.setupOverrides[key] = { venue, eventOrderId: linkedEvent.id, scheduledDate: data.scheduledDate, scheduledTime: item.scheduledTime, eventDate: details.eventDate || "", memo: item.memo, eventTitle: details.title || "", eventSubtitle: details.subtitle || "", people: details.people || "" };
       children = children.filter((child) => normalize(child.name)).map((child) => ({ ...child, name: normalize(child.name) })); state.checklist.push(...children); saveState();
       try { await syncItem(item, { throwOnError: true }); await Promise.all(children.map((child) => syncChecklist(child, false, { throwOnError: true }))); }
       catch (error) {
         console.error("manual setup task save failed", error); state.manual = state.manual.filter((entry) => entry.key !== key); state.checklist = state.checklist.filter((entry) => entry.parentKey !== key); delete state.pins[key]; delete state.setupOverrides[key]; saveState();
         await Promise.all([remoteRequest(`operation_board_items?board_date=eq.${boardDate}&item_key=eq.${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => null), ...children.map((child) => remoteRequest(`operation_board_checklist_items?id=eq.${child.id}`, { method: "DELETE" }).catch(() => null))]); alert("다음 세팅 작업을 저장하지 못했습니다. 다시 시도해주세요."); return;
       }
-      dialog.close(); activeBoardTab = "setup"; selectDate(boardDate); render();
+      dialog.close(); activeBoardTab = "setup"; selectDate(data.scheduledDate); render();
     };
     dialog.showModal();
   }
   function editSetupTask(item) {
     const dialog = root.querySelector("[data-setup-editor]");
     const initialVenue = window.BANQUET_ERP_VENUE_UTILS.venueLabel(item.venue);
-    dialog.innerHTML = `<form method="dialog" data-setup-editor-form data-key="${escapeHtml(item.key)}"><header><div><span class="eyebrow">Pinned setup</span><h3>세팅 작업 수정</h3></div><button type="button" data-setup-editor-close aria-label="닫기">×</button></header><label class="setup-venue-picker">공간<input type="search" data-setup-venue-search placeholder="공간 검색 (예: 부, 카2, 컨A)" autocomplete="off"><select name="venue" required>${renderSetupVenueOptions(initialVenue)}</select></label><label>연결 행사<select name="eventOrderId">${renderSetupEventOptions(initialVenue, item.eventOrderId)}</select></label><p class="setup-event-secondary" data-setup-event-secondary></p><div class="setup-editor-grid"><label>예정 날짜<input name="eventDate" type="date" value="${escapeHtml(item.next?.date || "")}"></label><label>예정 시간<input name="time" type="time" value="${escapeHtml(item.next?.time || item.time || "")}"></label></div><label>메모<textarea name="memo">${escapeHtml(item.memo || "")}</textarea></label><section class="setup-editor-items"><div><strong>하위 세팅 항목</strong><button type="button" data-editor-child-add>+ 세팅 항목</button></div><div data-editor-child-list>${renderSetupEditorChildren(item.key)}</div></section><footer><button type="button" data-setup-editor-close>취소</button><button type="submit" class="primary-button">저장</button></footer></form>`;
+    dialog.innerHTML = `<form method="dialog" data-setup-editor-form data-key="${escapeHtml(item.key)}"><header><div><span class="eyebrow">Pinned setup</span><h3>세팅 작업 수정</h3></div><button type="button" data-setup-editor-close aria-label="닫기">×</button></header><label class="setup-venue-picker">공간<input type="search" data-setup-venue-search placeholder="공간 검색 (예: 부, 카2, 컨A)" autocomplete="off"><select name="venue" required>${renderSetupVenueOptions(initialVenue)}</select></label><label>연결 행사<select name="eventOrderId">${renderSetupEventOptions(initialVenue, item.eventOrderId)}</select></label><p class="setup-event-secondary" data-setup-event-secondary></p><div class="setup-editor-grid"><label>예정 날짜<input name="scheduledDate" type="date" value="${escapeHtml(setupScheduledDate(item))}"></label><label>예정 시간<input name="scheduledTime" type="time" value="${escapeHtml(item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "")}"></label></div><label>메모<textarea name="memo">${escapeHtml(item.memo || "")}</textarea></label><section class="setup-editor-items"><div><strong>하위 세팅 항목</strong><button type="button" data-editor-child-add>+ 세팅 항목</button></div><div data-editor-child-list>${renderSetupEditorChildren(item.key)}</div></section><footer><button type="button" data-setup-editor-close>취소</button><button type="submit" class="primary-button">저장</button></footer></form>`;
     const form = dialog.querySelector("form"); const eventSelect = form.elements.eventOrderId;
-    const refreshEvent = (autoSelectVenue = false) => { const selected = currentEvents.find((event) => String(event.id) === eventSelect.value); const details = selected ? setupEventDetails(selected) : null; form.querySelector("[data-setup-event-secondary]").textContent = details?.subtitle || ""; if (details) { form.elements.eventDate.value = details.eventDate; form.elements.time.value = details.time; } if (autoSelectVenue && selected) { const codes = setupVenueCodes(selected); form.elements.venue.value = codes.length === 1 ? window.BANQUET_ERP_VENUE_UTILS.venueLabel(codes[0]) : ""; } };
+    const refreshEvent = (autoSelectVenue = false) => { const selected = currentEvents.find((event) => String(event.id) === eventSelect.value); const details = selected ? setupEventDetails(selected) : null; form.querySelector("[data-setup-event-secondary]").textContent = details?.subtitle || ""; if (autoSelectVenue && selected) { const codes = setupVenueCodes(selected); form.elements.venue.value = codes.length === 1 ? window.BANQUET_ERP_VENUE_UTILS.venueLabel(codes[0]) : ""; } };
     const bindChildren = () => {
       form.querySelectorAll("[data-editor-child-name], [data-editor-child-quantity], [data-editor-child-unit], [data-editor-child-complete]").forEach((input) => input.onchange = () => { const row = input.closest("[data-item-id]"); const child = state.checklist.find((entry) => entry.id === row.dataset.itemId); if (!child) return; child.name = normalize(row.querySelector("[data-editor-child-name]").value) || "새 세팅 항목"; child.quantity = row.querySelector("[data-editor-child-quantity]").value; child.unit = row.querySelector("[data-editor-child-unit]").value; child.completed = row.querySelector("[data-editor-child-complete]").checked; saveState(); syncChecklist(child); });
       form.querySelectorAll("[data-editor-child-delete]").forEach((button) => button.onclick = () => { const id = button.closest("[data-item-id]").dataset.itemId; const child = state.checklist.find((entry) => entry.id === id); state.checklist = state.checklist.filter((entry) => entry.id !== id); if (child) syncChecklist(child, true); saveState(); form.querySelector("[data-editor-child-list]").innerHTML = renderSetupEditorChildren(item.key); bindChildren(); });
@@ -1020,7 +1035,7 @@
     form.elements.venue.onchange = () => { const selectedId = eventSelect.value; eventSelect.innerHTML = renderSetupEventOptions(form.elements.venue.value, selectedId); refreshEvent(); };
     form.querySelector("[data-editor-child-add]").onclick = () => { const child = { id: crypto.randomUUID(), parentKey: item.key, date: selectedDate, name: "새 세팅 항목", quantity: "", unit: "", memo: "", completed: false }; state.checklist.push(child); saveState(); syncChecklist(child); form.querySelector("[data-editor-child-list]").innerHTML = renderSetupEditorChildren(item.key); bindChildren(); };
     form.querySelectorAll("[data-setup-editor-close]").forEach((button) => button.onclick = () => dialog.close()); bindChildren(); refreshEvent();
-    form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const linkedEvent = currentEvents.find((entry) => String(entry.id) === String(data.eventOrderId)); const details = linkedEvent ? setupEventDetails(linkedEvent) : {}; updateSetupTask(item.key, { venue: data.venue, eventOrderId: data.eventOrderId, eventDate: data.eventDate, time: data.time, memo: normalize(data.memo), eventTitle: details.title || "", eventSubtitle: details.subtitle || "", people: details.people || "" }); dialog.close(); };
+    form.onsubmit = (event) => { event.preventDefault(); const data = Object.fromEntries(new FormData(form)); const linkedEvent = currentEvents.find((entry) => String(entry.id) === String(data.eventOrderId)); const details = linkedEvent ? setupEventDetails(linkedEvent) : {}; updateSetupTask(item.key, { venue: data.venue, eventOrderId: data.eventOrderId, scheduledDate: data.scheduledDate, scheduledTime: data.scheduledTime, eventDate: details.eventDate || "", memo: normalize(data.memo), eventTitle: details.title || "", eventSubtitle: details.subtitle || "", people: details.people || "" }); dialog.close(); };
     dialog.showModal();
   }
   function bindEvents() {
