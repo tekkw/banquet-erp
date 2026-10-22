@@ -250,6 +250,14 @@ body {
 .global-ai-launcher [data-ai-briefing-badge][hidden] { display: none; }
 .ai-briefing-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .ai-briefing-actions button { min-height: 30px; padding: 4px 9px; border: 1px solid rgba(147, 197, 253, .38); border-radius: 999px; background: #102a40; color: #dbeafe; font: inherit; font-size: 11px; cursor: pointer; }
+.operations-autopilot-cards { display: grid; gap: 8px; margin-top: 10px; }
+.operations-autopilot-card { display: grid; gap: 5px; padding: 10px; border: 1px solid rgba(147, 197, 253, .38); border-radius: 10px; background: rgba(15, 23, 42, .5); }
+.operations-autopilot-card > small, .operations-autopilot-card .autopilot-reason { color: #94a3b8; }
+.operations-autopilot-card > p { margin: 0; white-space: normal; }
+.operations-autopilot-card .autopilot-reason { font-size: 12px; }
+.operations-autopilot-card.needs_confirmation { border-color: #f0b44d; }
+.operations-autopilot-card.needs_information { border-style: dashed; }
+.operations-autopilot-card.approved { opacity: .72; }
 
 .overlay-root .global-ai-drawer {
   position: fixed;

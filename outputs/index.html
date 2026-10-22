@@ -1126,6 +1126,7 @@
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=venue-normalization-v2"></script>
   <script src="./src/operationBoard.js?v=core-rules-v1"></script>
+  <script src="./src/operationsAutopilot.js?v=operations-autopilot-v1"></script>
   <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
   <script src="./src/dashboardWidgets.js?v=pc-today-agenda-v1"></script>
   <script>
@@ -3245,6 +3246,7 @@
 
       savedEvents = [...savedEvents.filter((eventItem) => eventItem.id !== verifiedEvent.id), verifiedEvent];
       writeEventsCache(savedEvents);
+      window.dispatchEvent(new CustomEvent("banquet:event-order-saved", { detail: { eventOrderId: verifiedEvent.id, mode: overwriteChoice } }));
       const [year, month] = selectedSaveDates[0].split("-").map(Number);
       calendarDate = new Date(year, month - 1, 1);
       renderCalendar();
