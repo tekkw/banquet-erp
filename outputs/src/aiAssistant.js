@@ -130,41 +130,53 @@
     }
 
     let activeAutopilotPlan = null;
+    let activeAutopilotItem = null;
+    const skippedAutopilotKeys = new Set();
     function autopilotSummary(plan) {
-      if (!plan?.proposals?.length) return "향후 7일 행사 중 새로 등록할 다음 세팅 제안이 없습니다.";
-      const alerts = plan.beverageAlert ? ` 음주류 알림: ${plan.beverageAlert.summary}` : "";
-      return `향후 7일 운영 준비 ${plan.proposals.length}건을 확인했습니다.${alerts}`;
+      if (!plan?.queue?.length) return "향후 7일 행사 중 새로 확인할 준비 항목이 없습니다.";
+      return `앞으로 7일 준비안입니다.\n먼저 확인할 항목이 ${plan.exceptionCount}건 있습니다.\n행사 ${plan.eventTotal}건 · 준비가능 ${plan.counts.ready}건 · 작업필요 ${plan.counts.needs_action}건 · 확인필요 ${plan.counts.blocked}건`;
     }
     function renderAutopilotCards(plan, target) {
       const wrap = document.createElement("div"); wrap.className = "operations-autopilot-cards";
-      plan.proposals.forEach((proposal) => {
+      plan.queue.forEach((proposal) => {
         const card = document.createElement("article"); card.className = `operations-autopilot-card ${proposal.status}`; card.dataset.autopilotId = proposal.id;
-        const when = `${proposal.scheduledDate.slice(5).replace("-", "/")}${proposal.scheduledTime ? ` ${proposal.scheduledTime}` : " 시간 미정"}`;
+        const when = proposal.scheduledDate ? `${proposal.scheduledDate.slice(5).replace("-", "/")}${proposal.scheduledTime ? ` ${proposal.scheduledTime}` : ""}` : "날짜 확인";
         const warnings = proposal.assetWarnings?.length ? ` · 자산 경고: ${proposal.assetWarnings.join(", ")}` : "";
-        card.innerHTML = `<strong>${escapeHtml(proposal.organizer || proposal.eventName || "행사")}</strong><small>${escapeHtml(when)} · ${escapeHtml(proposal.venue)}${proposal.people ? ` · ${escapeHtml(proposal.people)}명` : ""}</small><p>${escapeHtml(proposal.summary)}</p><p class="autopilot-reason">${escapeHtml(proposal.reason + warnings)}</p><div class="ai-briefing-actions"></div>`;
+        card.innerHTML = `<div class="autopilot-card-labels"><span>${escapeHtml(proposal.priorityLabel)}</span><span>${escapeHtml(proposal.readinessLabel)}</span></div><strong>${escapeHtml(proposal.venue || proposal.organizer || proposal.eventName || "운영 알림")}</strong><small>${escapeHtml(when)}${proposal.people ? ` · ${escapeHtml(proposal.people)}명` : ""}</small><p>${escapeHtml(proposal.summary)}</p><p class="autopilot-reason">${escapeHtml(proposal.reason + warnings)}</p><div class="ai-briefing-actions"></div>`;
         const actions = card.querySelector(".ai-briefing-actions");
-        proposal.actions.forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.dataset.autopilotAction = action; button.textContent = { approve: "등록", exclude: "제외", original: "원본 보기" }[action] || action; button.onclick = () => handleAutopilotAction(action, proposal, card); actions.append(button); }); wrap.append(card);
+        proposal.actions.filter((action) => action !== "approve" || proposal.readiness !== "blocked").forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.dataset.autopilotAction = action; button.textContent = { approve: "등록", exclude: "나중에", acknowledge: "확인", original: "원본 보기" }[action] || action; button.onclick = () => handleAutopilotAction(action, proposal, card); actions.append(button); }); wrap.append(card);
       });
-      const approvable = plan.proposals.filter((item) => item.status === "proposal");
-      if (approvable.length > 1) { const all = document.createElement("button"); all.type = "button"; all.className = "primary-button compact"; all.textContent = `제안 ${approvable.length}건 모두 등록`; all.onclick = async () => { await approveAutopilotProposals(approvable); all.disabled = true; all.textContent = "등록 완료"; }; wrap.prepend(all); }
+      const approvable = window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.registrableProposals(plan) || [];
+      if (approvable.length) { const all = document.createElement("button"); all.type = "button"; all.className = "primary-button compact"; all.textContent = `전체 작업 등록 (${approvable.length})`; all.onclick = async () => { await approveAutopilotProposals(approvable); all.disabled = true; all.textContent = "등록 완료"; }; wrap.prepend(all); }
       target.append(wrap); return wrap;
     }
     async function handleAutopilotAction(action, proposal, card) {
-      if (action === "exclude") { card.remove(); return; }
+      activeAutopilotItem = proposal;
+      if (["exclude", "acknowledge", "later"].includes(action)) { skippedAutopilotKeys.add(proposal.sourceKey); card.remove(); activeAutopilotItem = (activeAutopilotPlan?.queue || []).find((item) => !skippedAutopilotKeys.has(item.sourceKey)) || null; return; }
       if (action === "original") { const event = (state.getEvents?.() || []).find((item) => String(item.id) === String(proposal.eventOrderId)); if (event?.storagePath) window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" }); else window.alert("등록된 원본 파일이 없습니다."); return; }
       if (action === "approve") { await approveAutopilotProposals([proposal]); card.classList.add("approved"); card.querySelectorAll("button").forEach((button) => button.disabled = true); card.querySelector(".autopilot-reason").textContent = "다음 세팅 작업으로 등록했습니다."; }
     }
-    async function approveAutopilotProposals(proposals) { return window.BANQUET_ERP_OPERATION_BOARD?.addSetupTasks?.(proposals.map((proposal) => ({ ...proposal, title: proposal.organizer || proposal.eventName, metadata: { source: "autopilot", eventVersion: proposal.version } }))); }
+    async function approveAutopilotProposals(proposals) { return window.BANQUET_ERP_OPERATION_BOARD?.addSetupTasks?.(proposals.filter((proposal) => proposal.readiness !== "blocked").map((proposal) => ({ ...proposal, title: proposal.organizer || proposal.eventName, metadata: { source: "autopilot", eventVersion: proposal.version, priority: proposal.priority, readiness: proposal.readiness } }))); }
     function isAutopilotBulkApproval(text) { return Boolean(activeAutopilotPlan?.proposals?.length) && /(전부|모두|전체).*(등록|승인)|(?:등록|승인).*(전부|모두|전체)/i.test(text); }
-    async function runOperationsAutopilot({ force = false, eventOrderId = "", page = false } = {}) {
+    function isAutopilotRegistrableApproval(text) { return /(작업\s*가능한|가능한\s*작업).*(등록|승인)/i.test(text); }
+    async function answerAutopilotContext(question) {
+      const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT;
+      if (autopilot?.matchesUrgentQuestion(question)) { const plan = await runOperationsAutopilot({ force: true, display: false }); plan.queue = plan.queue.filter((item) => !skippedAutopilotKeys.has(item.sourceKey)); activeAutopilotItem = autopilot.highestPriority(plan); return autopilot.urgentAnswer(plan); }
+      if (activeAutopilotItem && /(원본|파일).*(보여|열어)|^(원본|파일)\s*(보여줘|열어줘)$/i.test(question)) { const event = (state.getEvents?.() || []).find((item) => String(item.id) === String(activeAutopilotItem.eventOrderId)); if (event?.storagePath) window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" }); return event?.storagePath ? "원본 파일을 열었습니다." : "등록된 원본 파일이 없습니다."; }
+      if (activeAutopilotItem && /(그건|이건)?.*(나중에|건너뛰|다음으로)/i.test(question)) { skippedAutopilotKeys.add(activeAutopilotItem.sourceKey); activeAutopilotItem = (activeAutopilotPlan?.queue || []).find((item) => !skippedAutopilotKeys.has(item.sourceKey)) || null; return activeAutopilotItem ? autopilot.urgentAnswer({ queue: [activeAutopilotItem] }) : "남은 우선 확인 항목이 없습니다."; }
+      if (activeAutopilotPlan && (isAutopilotRegistrableApproval(question) || isAutopilotBulkApproval(question))) { const proposals = autopilot.registrableProposals(activeAutopilotPlan); await approveAutopilotProposals(proposals); return `${proposals.length}건을 다음 세팅 작업으로 등록했습니다. 확인필요 항목은 제외했습니다.`; }
+      return "";
+    }
+    async function runOperationsAutopilot({ force = false, eventOrderId = "", page = false, display = true } = {}) {
       const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; const board = window.BANQUET_ERP_OPERATION_BOARD; if (!autopilot || !board) return null;
       const allEvents = state.getEvents?.() || []; const events = eventOrderId ? allEvents.filter((item) => String(item.id) === String(eventOrderId)) : allEvents;
       const [hallStateResult, assetResult, setupResult] = await Promise.all([safeSelectRows("hall_current_states", "select=*&limit=100"), safeSelectRows("banquet_assets", "select=id,asset_name,quantity&limit=500"), safeSelectRows("operation_board_items", "select=id,event_order_id,venue_name,is_completed,metadata&item_kind=eq.manual&is_completed=eq.false")]);
       const persistentTasks = [...(board.getPersistentSetupTasks?.() || []), ...setupResult.rows.filter((row) => row.metadata?.taskType === "next_setup").map((row) => ({ id: row.id, eventOrderId: row.event_order_id || row.metadata?.eventOrderId, venue: row.venue_name || row.metadata?.venue, scheduledDate: row.metadata?.scheduledDate, completed: row.is_completed, kind: "manual" }))];
-      const alerts = board.buildProactiveAlerts(allEvents)?.alerts || []; const plan = autopilot.buildProposals({ events, existingTasks: persistentTasks, actualToday: board.getActualTodaySeoul(), proactiveAlerts: alerts, hallStates: hallStateResult.rows, assets: assetResult.rows });
-      const unseen = force ? plan.proposals : plan.proposals.filter((proposal) => localStorage.getItem(`banquet-autopilot-seen:${proposal.eventOrderId}`) !== proposal.version); plan.proposals = unseen;
-      unseen.forEach((proposal) => localStorage.setItem(`banquet-autopilot-seen:${proposal.eventOrderId}`, proposal.version)); activeAutopilotPlan = plan;
-      if (!force && !plan.proposals.length) return plan;
+      const allAlerts = board.buildProactiveAlerts(allEvents)?.alerts || []; const alerts = eventOrderId ? allAlerts.filter((alert) => !alert.eventOrderId || String(alert.eventOrderId) === String(eventOrderId)) : allAlerts; const plan = autopilot.buildPriorityPlan({ events, existingTasks: persistentTasks, actualToday: board.getActualTodaySeoul(), proactiveAlerts: alerts, hallStates: hallStateResult.rows, assets: assetResult.rows });
+      const unseen = force ? plan.queue : plan.queue.filter((item) => localStorage.getItem(`banquet-autopilot-seen:${item.sourceKey}`) !== (item.version || item.id)); plan.queue = unseen; plan.proposals = plan.proposals.filter((item) => unseen.includes(item));
+      if (!force) { plan.counts.needs_action = unseen.filter((item) => item.eventOrderId && item.readiness === "needs_action").length; plan.counts.blocked = new Set(unseen.filter((item) => item.eventOrderId && item.readiness === "blocked").map((item) => String(item.eventOrderId))).size; plan.exceptionCount = unseen.filter((item) => item.priority === "high" || item.readiness === "blocked").length; }
+      unseen.forEach((item) => localStorage.setItem(`banquet-autopilot-seen:${item.sourceKey}`, item.version || item.id)); activeAutopilotPlan = plan; activeAutopilotItem = autopilot.highestPriority(plan);
+      if (!display || (!force && !plan.queue.length)) return plan;
       if (page) { const conversation = getActiveConversation(); if (conversation) { conversation.messages.push({ type: "assistant", text: autopilotSummary(plan), meta: { autopilot: plan } }); renderAiPageMessages(); } }
       else { const row = appendChatMessage("assistant", autopilotSummary(plan)); renderAutopilotCards(plan, row.querySelector(".chat-bubble")); }
       return plan;
@@ -232,7 +244,7 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
-        if (isAutopilotBulkApproval(question)) { loadingMessage.remove(); const proposals = activeAutopilotPlan.proposals.filter((item) => item.status === "proposal"); await approveAutopilotProposals(proposals); appendChatMessage("assistant", `${proposals.length}건을 다음 세팅 작업으로 등록했습니다.`); return; }
+        const autopilotContextAnswer = await answerAutopilotContext(question); if (autopilotContextAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = autopilotContextAnswer; return; }
         if (window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.matchesCommand(question)) { loadingMessage.remove(); await runOperationsAutopilot({ force: true }); return; }
         const briefingAnswer = window.BANQUET_ERP_OPERATION_BOARD?.dailyBriefingAnswer(question, state.getEvents?.() || []);
         if (briefingAnswer) {
@@ -782,9 +794,8 @@
       renderAiPageMessages();
       renderConversationList();
       try {
-        if (!attachmentsToSend.length && isAutopilotBulkApproval(question)) {
-          conversation.messages.pop(); const proposals = activeAutopilotPlan.proposals.filter((item) => item.status === "proposal"); await approveAutopilotProposals(proposals); conversation.messages.push({ type: "assistant", text: `${proposals.length}건을 다음 세팅 작업으로 등록했습니다.` }); return;
-        }
+        const autopilotContextAnswer = !attachmentsToSend.length ? await answerAutopilotContext(question) : "";
+        if (autopilotContextAnswer) { conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: autopilotContextAnswer }; return; }
         if (!attachmentsToSend.length && window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.matchesCommand(question)) {
           conversation.messages.pop();
           await persistAiMessage(conversation.id, "user", question, []);

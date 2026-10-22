@@ -258,6 +258,10 @@ body {
 .operations-autopilot-card.needs_confirmation { border-color: #f0b44d; }
 .operations-autopilot-card.needs_information { border-style: dashed; }
 .operations-autopilot-card.approved { opacity: .72; }
+.autopilot-card-labels { display: flex; gap: 5px; }
+.autopilot-card-labels span, .setup-readiness-badge { padding: 2px 6px; border: 1px solid rgba(147, 197, 253, .34); border-radius: 999px; color: #bfdbfe; font-size: 9px; }
+.setup-readiness-badge.blocked { border-color: rgba(240, 180, 77, .55); color: #f6d28a; }
+.setup-readiness-badge.ready { color: #a7f3d0; }
 
 .overlay-root .global-ai-drawer {
   position: fixed;
