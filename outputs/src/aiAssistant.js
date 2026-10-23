@@ -161,6 +161,8 @@
     function isAutopilotRegistrableApproval(text) { return /(작업\s*가능한|가능한\s*작업).*(등록|승인)/i.test(text); }
     async function answerAutopilotContext(question) {
       const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT;
+      const boardApi = window.BANQUET_ERP_OPERATION_BOARD; const assigneeQuery = autopilot?.assigneeQuestion?.(question, boardApi?.getAssignableUsers?.() || [], boardApi?.getCurrentUser?.());
+      if (assigneeQuery) return autopilot.assigneeBoardAnswer(boardApi?.getTodayExecutionBoard?.(), assigneeQuery);
       if (autopilot?.matchesRoleQuestion(question)) { const role = autopilot.roleFromQuestion(question); const board = window.BANQUET_ERP_OPERATION_BOARD?.getTodayExecutionBoard?.(); return autopilot.roleBoardAnswer(board, role); }
       if (autopilot?.matchesTodayQuestion(question)) return window.BANQUET_ERP_OPERATION_BOARD?.todayNextTaskAnswer?.() || "오늘 남은 실행 작업이 없습니다.";
       if (autopilot?.matchesUrgentQuestion(question)) { const plan = await runOperationsAutopilot({ force: true, display: false }); plan.queue = plan.queue.filter((item) => !skippedAutopilotKeys.has(item.sourceKey)); activeAutopilotItem = autopilot.highestPriority(plan); return autopilot.urgentAnswer(plan); }
