@@ -54,6 +54,6 @@ const mobileHtmlSource = fs.readFileSync("outputs/board/index.html", "utf8");
 assert(boardSource.includes("setup-readiness-badge"), "PC/mobile 공용 카드에 readiness badge를 표시한다");
 assert(aiSource.includes("registrableProposals"));
 assert(aiSource.includes("matchesUrgentQuestion"));
-assert(/operationsAutopilot\.js\?v=operations-autopilot-v[23]/.test(htmlSource));
-assert(/operationBoard\.js\?v=operations-autopilot-v[23]/.test(mobileHtmlSource));
+assert(/operationsAutopilot\.js\?v=operations-autopilot-v[234]/.test(htmlSource));
+assert(/operationBoard\.js\?v=operations-autopilot-v[234]/.test(mobileHtmlSource));
 console.log("operations autopilot V2 tests passed");

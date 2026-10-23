@@ -53,6 +53,6 @@ assert(source.includes("syncChecklist(item)"), "PC/mobile checklist는 기존 pe
 assert(source.includes("completeBoardItem"), "최종 완료는 기존 task 완료 경로를 사용한다");
 assert(source.includes('persistent.metadata?.readiness === "blocked"'), "BLOCKED persistent task 완료를 차단한다");
 assert(source.includes("data-today-alert-ack"));
-assert(html.includes("operationsAutopilot.js?v=operations-autopilot-v3"));
-assert(mobileHtml.includes("operationBoard.js?v=operations-autopilot-v3"));
+assert(/operationsAutopilot\.js\?v=operations-autopilot-v[34]/.test(html));
+assert(/operationBoard\.js\?v=operations-autopilot-v[34]/.test(mobileHtml));
 console.log("operations autopilot V3 tests passed");
