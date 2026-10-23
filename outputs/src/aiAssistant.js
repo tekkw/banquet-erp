@@ -142,9 +142,10 @@
         const card = document.createElement("article"); card.className = `operations-autopilot-card ${proposal.status}`; card.dataset.autopilotId = proposal.id;
         const when = proposal.scheduledDate ? `${proposal.scheduledDate.slice(5).replace("-", "/")}${proposal.scheduledTime ? ` ${proposal.scheduledTime}` : ""}` : "날짜 확인";
         const warnings = proposal.assetWarnings?.length ? ` · 자산 경고: ${proposal.assetWarnings.join(", ")}` : "";
-        card.innerHTML = `<div class="autopilot-card-labels"><span>${escapeHtml(proposal.priorityLabel)}</span><span>${escapeHtml(proposal.readinessLabel)}</span></div><strong>${escapeHtml(proposal.venue || proposal.organizer || proposal.eventName || "운영 알림")}</strong><small>${escapeHtml(when)}${proposal.people ? ` · ${escapeHtml(proposal.people)}명` : ""}</small><p>${escapeHtml(proposal.summary)}</p><p class="autopilot-reason">${escapeHtml(proposal.reason + warnings)}</p><div class="ai-briefing-actions"></div>`;
+        const operatingNotes = (proposal.operatingNotes || []).map((note) => `<li><span>⚠ 운영 참고</span> ${escapeHtml(note.message)} · 유사 행사 ${note.count}건${note.conflict ? " · 현재 이벤오더 지시 유지" : ""}</li>`).join("");
+        card.innerHTML = `<div class="autopilot-card-labels"><span>${escapeHtml(proposal.priorityLabel)}</span><span>${escapeHtml(proposal.readinessLabel)}</span></div><strong>${escapeHtml(proposal.venue || proposal.organizer || proposal.eventName || "운영 알림")}</strong><small>${escapeHtml(when)}${proposal.people ? ` · ${escapeHtml(proposal.people)}명` : ""}</small><p>${escapeHtml(proposal.summary)}</p><p class="autopilot-reason">${escapeHtml(proposal.reason + warnings)}</p>${operatingNotes ? `<details class="autopilot-operating-notes"><summary>과거 운영 참고 ${proposal.operatingNotes.length}건</summary><ul>${operatingNotes}</ul></details>` : ""}<div class="ai-briefing-actions"></div>`;
         const actions = card.querySelector(".ai-briefing-actions");
-        proposal.actions.filter((action) => action !== "approve" || proposal.readiness !== "blocked").forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.dataset.autopilotAction = action; button.textContent = { approve: "등록", exclude: "나중에", acknowledge: "확인", original: "원본 보기" }[action] || action; button.onclick = () => handleAutopilotAction(action, proposal, card); actions.append(button); }); wrap.append(card);
+        const actionsToRender = [...proposal.actions, ...(proposal.relatedReviews?.length ? ["review_history"] : []), ...(proposal.operatingNotes?.some((note) => note.conflict) ? ["apply_review_suggestion"] : []), ...(proposal.operatingNotes?.some((note) => note.count >= 3) ? ["promote_review"] : [])]; actionsToRender.filter((action) => action !== "approve" || proposal.readiness !== "blocked").forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.dataset.autopilotAction = action; button.textContent = { approve: "등록", exclude: "나중에", acknowledge: "확인", original: "원본 보기", review_history: "과거 기록 보기", apply_review_suggestion: "과거 제안 반영", promote_review: "운영 지식으로 승격" }[action] || action; button.onclick = () => handleAutopilotAction(action, proposal, card); actions.append(button); }); wrap.append(card);
       });
       const approvable = window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.registrableProposals(plan) || [];
       if (approvable.length) { const all = document.createElement("button"); all.type = "button"; all.className = "primary-button compact"; all.textContent = `전체 작업 등록 (${approvable.length})`; all.onclick = async () => { await approveAutopilotProposals(approvable); all.disabled = true; all.textContent = "등록 완료"; }; wrap.prepend(all); }
@@ -154,13 +155,18 @@
       activeAutopilotItem = proposal;
       if (["exclude", "acknowledge", "later"].includes(action)) { skippedAutopilotKeys.add(proposal.sourceKey); card.remove(); activeAutopilotItem = (activeAutopilotPlan?.queue || []).find((item) => !skippedAutopilotKeys.has(item.sourceKey)) || null; return; }
       if (action === "original") { const event = (state.getEvents?.() || []).find((item) => String(item.id) === String(proposal.eventOrderId)); if (event?.storagePath) window.openStoredExcel?.(event.storagePath, { eventOrderId: event.id, originalFilename: event.originalFilename || "" }); else window.alert("등록된 원본 파일이 없습니다."); return; }
+      if (action === "review_history") { let details = card.querySelector(".autopilot-review-history"); if (details) { details.hidden = !details.hidden; return; } details = document.createElement("div"); details.className = "autopilot-review-history"; details.innerHTML = proposal.relatedReviews.map((review) => `<p><strong>${escapeHtml(review.eventDate || review.createdAt?.slice(0, 10) || "날짜 미상")} · ${escapeHtml(review.organizer || "행사")}</strong><br>${escapeHtml(review.venueCanonical || proposal.venue)} · ${escapeHtml(review.guestCount || "-")}명<br>${escapeHtml(review.summary)}</p>`).join(""); card.insertBefore(details, card.querySelector(".ai-briefing-actions")); return; }
+      if (action === "apply_review_suggestion") { const matchers = { registration: /등록/i, table: /테이블|라운드|스쿨/i, chair: /의자/i, av: /마이크|음향|스크린|프로젝터/i, beverage: /음료|주류|생수|커피/i, service: /뷔페|코스|도시락|다과|서비스/i }; (proposal.operatingNotes || []).filter((note) => note.conflict && note.suggestedQuantity).forEach((note) => { const item = proposal.checklist.find((entry) => matchers[note.category]?.test(entry.name)); if (item) { item.quantity = note.suggestedQuantity; item.unit = note.unit || item.unit; } }); proposal.reviewOverrideApproved = true; const button = card.querySelector('[data-autopilot-action="apply_review_suggestion"]'); if (button) { button.disabled = true; button.textContent = "제안 반영됨"; } card.querySelector(".autopilot-reason").textContent = "사용자 승인으로 과거 운영 제안을 작업안에 반영했습니다."; return; }
+      if (action === "promote_review") { const patterns = (proposal.operatingNotes || []).filter((note) => note.count >= 3); if (!patterns.length) return; const now = new Date().toISOString(); const rows = patterns.map((pattern) => buildKnowledgeInsertRow({ category: "post_event_review", subject: `${proposal.venue} ${pattern.subject}`, predicate: "operating_pattern", object: pattern.suggestedQuantity ? `${pattern.suggestedQuantity}${pattern.unit || ""}` : pattern.summary, natural_language: `${pattern.summary} · 유사 행사 ${pattern.count}건 반복`, confidence: .8 }, { category: "post_event_review", interviewId: null, entityType: "venue", entityId: proposal.venue, originalAnswer: pattern.summary, approvedAt: now })); await supabaseRequest("ai_knowledge", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(rows) }); await window.BANQUET_ERP_AI_KNOWLEDGE_RULES?.load({ force: true }); const button = card.querySelector('[data-autopilot-action="promote_review"]'); if (button) { button.disabled = true; button.textContent = "승격 완료"; } return; }
       if (action === "approve") { await approveAutopilotProposals([proposal]); card.classList.add("approved"); card.querySelectorAll("button").forEach((button) => button.disabled = true); card.querySelector(".autopilot-reason").textContent = "다음 세팅 작업으로 등록했습니다."; }
     }
-    async function approveAutopilotProposals(proposals) { return window.BANQUET_ERP_OPERATION_BOARD?.addSetupTasks?.(proposals.filter((proposal) => proposal.readiness !== "blocked").map((proposal) => ({ ...proposal, title: proposal.organizer || proposal.eventName, metadata: { source: "autopilot", eventVersion: proposal.version, priority: proposal.priority, readiness: proposal.readiness } }))); }
+    async function approveAutopilotProposals(proposals) { return window.BANQUET_ERP_OPERATION_BOARD?.addSetupTasks?.(proposals.filter((proposal) => proposal.readiness !== "blocked").map((proposal) => ({ ...proposal, title: proposal.organizer || proposal.eventName, metadata: { source: "autopilot", eventVersion: proposal.version, priority: proposal.priority, readiness: proposal.readiness, reviewOverrideApproved: Boolean(proposal.reviewOverrideApproved) } }))); }
     function isAutopilotBulkApproval(text) { return Boolean(activeAutopilotPlan?.proposals?.length) && /(전부|모두|전체).*(등록|승인)|(?:등록|승인).*(전부|모두|전체)/i.test(text); }
     function isAutopilotRegistrableApproval(text) { return /(작업\s*가능한|가능한\s*작업).*(등록|승인)/i.test(text); }
     async function answerAutopilotContext(question) {
       const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT;
+      if (/(회고.*(남|있)|오늘.*끝난.*행사)/i.test(question)) { await createPostEventReviewQuestions(); await loadCurrentInterview({ preserveMessage: true }); if (isPostEventReviewInterview(currentInterview)) return currentInterview.question || "종료된 행사에 기억해둘 특이사항이 있었나요? AI 학습 인터뷰에서 바로 기록할 수 있습니다."; return "작성할 행사 회고가 없습니다."; }
+      if (/(비슷한\s*행사|과거.*(등록대|문제|주의)|주의할\s*점|전에\s*했던)/i.test(question)) { const events = state.getEvents?.() || []; const activeEvent = events.find((event) => String(event.id) === String(activeAutopilotItem?.eventOrderId)); const mentionedEvent = events.find((event) => question.includes(event.venue || "") || question.includes(event.companyName || "")); const target = activeEvent || mentionedEvent; if (!target) return "비교할 현재 행사나 행사장을 찾지 못했습니다."; const result = await safeSelectRows("event_notes", "select=id,event_order_id,content,created_at&note_type=eq.post_event_review&order=created_at.desc&limit=500"); const patterns = autopilot.reviewPatterns(target, result.rows); if (!patterns.length) return "조건이 비슷한 과거 운영 회고가 없습니다."; const top = patterns[0]; const current = activeAutopilotItem?.checklist?.find((item) => top.category === "registration" ? /등록/i.test(item.name) : top.category === "av" ? /마이크|음향|스크린|프로젝터/i.test(item.name) : false); return `${target.venue}의 유사 행사 ${top.count}건에서 ${top.summary}${top.count >= 3 ? " 기록이 반복됐습니다." : " 기록이 있습니다."}${current ? `\n이번 이벤오더에는 ${current.name} ${current.quantity || "수량 미지정"}${current.unit || ""}로 명시돼 있습니다.` : ""}`; }
       const boardApi = window.BANQUET_ERP_OPERATION_BOARD; const assigneeQuery = autopilot?.assigneeQuestion?.(question, boardApi?.getAssignableUsers?.() || [], boardApi?.getCurrentUser?.());
       if (assigneeQuery) return autopilot.assigneeBoardAnswer(boardApi?.getTodayExecutionBoard?.(), assigneeQuery);
       if (autopilot?.matchesRoleQuestion(question)) { const role = autopilot.roleFromQuestion(question); const board = window.BANQUET_ERP_OPERATION_BOARD?.getTodayExecutionBoard?.(); return autopilot.roleBoardAnswer(board, role); }
@@ -174,9 +180,9 @@
     async function runOperationsAutopilot({ force = false, eventOrderId = "", page = false, display = true } = {}) {
       const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; const board = window.BANQUET_ERP_OPERATION_BOARD; if (!autopilot || !board) return null;
       const allEvents = state.getEvents?.() || []; const events = eventOrderId ? allEvents.filter((item) => String(item.id) === String(eventOrderId)) : allEvents;
-      const [hallStateResult, assetResult, setupResult] = await Promise.all([safeSelectRows("hall_current_states", "select=*&limit=100"), safeSelectRows("banquet_assets", "select=id,asset_name,quantity&limit=500"), safeSelectRows("operation_board_items", "select=id,event_order_id,venue_name,is_completed,metadata&item_kind=eq.manual&is_completed=eq.false")]);
+      const [hallStateResult, assetResult, setupResult, reviewResult] = await Promise.all([safeSelectRows("hall_current_states", "select=*&limit=100"), safeSelectRows("banquet_assets", "select=id,asset_name,quantity&limit=500"), safeSelectRows("operation_board_items", "select=id,event_order_id,venue_name,is_completed,metadata&item_kind=eq.manual&is_completed=eq.false"), safeSelectRows("event_notes", "select=id,event_order_id,content,created_at&note_type=eq.post_event_review&order=created_at.desc&limit=500")]);
       const persistentTasks = [...(board.getPersistentSetupTasks?.() || []), ...setupResult.rows.filter((row) => row.metadata?.taskType === "next_setup").map((row) => ({ id: row.id, eventOrderId: row.event_order_id || row.metadata?.eventOrderId, venue: row.venue_name || row.metadata?.venue, scheduledDate: row.metadata?.scheduledDate, completed: row.is_completed, kind: "manual" }))];
-      const allAlerts = board.buildProactiveAlerts(allEvents)?.alerts || []; const alerts = eventOrderId ? allAlerts.filter((alert) => !alert.eventOrderId || String(alert.eventOrderId) === String(eventOrderId)) : allAlerts; const plan = autopilot.buildPriorityPlan({ events, existingTasks: persistentTasks, actualToday: board.getActualTodaySeoul(), proactiveAlerts: alerts, hallStates: hallStateResult.rows, assets: assetResult.rows });
+      const allAlerts = board.buildProactiveAlerts(allEvents)?.alerts || []; const alerts = eventOrderId ? allAlerts.filter((alert) => !alert.eventOrderId || String(alert.eventOrderId) === String(eventOrderId)) : allAlerts; const reviews = reviewResult.rows.map(autopilot.parsePostEventReview); const plan = autopilot.buildPriorityPlan({ events, existingTasks: persistentTasks, actualToday: board.getActualTodaySeoul(), proactiveAlerts: alerts, hallStates: hallStateResult.rows, assets: assetResult.rows, reviews });
       const unseen = force ? plan.queue : plan.queue.filter((item) => localStorage.getItem(`banquet-autopilot-seen:${item.sourceKey}`) !== (item.version || item.id)); plan.queue = unseen; plan.proposals = plan.proposals.filter((item) => unseen.includes(item));
       if (!force) { plan.counts.needs_action = unseen.filter((item) => item.eventOrderId && item.readiness === "needs_action").length; plan.counts.blocked = new Set(unseen.filter((item) => item.eventOrderId && item.readiness === "blocked").map((item) => String(item.eventOrderId))).size; plan.exceptionCount = unseen.filter((item) => item.priority === "high" || item.readiness === "blocked").length; }
       unseen.forEach((item) => localStorage.setItem(`banquet-autopilot-seen:${item.sourceKey}`, item.version || item.id)); activeAutopilotPlan = plan; activeAutopilotItem = autopilot.highestPriority(plan);
@@ -297,7 +303,7 @@
       renderConversationList();
       loadAiReferenceStats();
       loadCorrectionLearningSuggestions();
-      if (mode === "interview") loadCurrentInterview();
+      if (mode === "interview") { await createPostEventReviewQuestions(); await loadCurrentInterview(); }
       if (mode === "teach") renderDirectTeachPanel();
       if (aiPageChatInput && mode === "chat") aiPageChatInput.focus();
     }
@@ -2351,13 +2357,13 @@
       const textarea = document.createElement("textarea");
       textarea.rows = 4;
       textarea.placeholder = "질문에 자유롭게 답변해주세요.";
-      textarea.value = currentInterview?.answer || "";
+      textarea.value = interviewAnalysis?.originalAnswer || currentInterview?.answer || "";
       const actions = document.createElement("div");
       actions.className = "ai-interview-actions";
       const saveButton = document.createElement("button");
       saveButton.type = "submit";
       saveButton.className = "primary-button";
-      saveButton.textContent = isReviewSaving ? "저장 중..." : "답변 저장";
+      saveButton.textContent = isReviewSaving ? "저장 중..." : isPostEventReviewInterview(currentInterview) ? "짧게 기록" : "답변 저장";
       saveButton.disabled = isReviewSaving;
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -2378,7 +2384,9 @@
           loadCurrentInterview({ preserveMessage: true });
         });
         laterButton.disabled = isReviewSaving;
-        actions.append(noIssueButton, laterButton);
+        const reviewEvent = (state.getEvents?.() || []).find((event) => String(event.id) === String(currentInterview?.entity_id));
+        const originalButton = createInterviewButton("원본 보기", "secondary-button", () => { if (reviewEvent?.storagePath) window.openStoredExcel?.(reviewEvent.storagePath, { eventOrderId: reviewEvent.id, originalFilename: reviewEvent.originalFilename || "" }); else window.alert("등록된 원본 파일이 없습니다."); });
+        actions.append(noIssueButton, laterButton, originalButton);
       } else {
         const skipButton = createInterviewButton(
           isReviewSaving ? "처리 중..." : "건너뛰기",
@@ -2393,6 +2401,13 @@
     }
 
     function createInterviewConfirmationCard() {
+      if (interviewAnalysis?.postEventReview) {
+        const card = document.createElement("article"); card.className = "ai-knowledge-confirm-card";
+        card.innerHTML = `<div class="ai-knowledge-confirm-title"><h3>운영 회고</h3><p>입력한 내용에서 확인된 항목만 정리했습니다.</p></div><div class="ai-knowledge-list">${interviewAnalysis.structuredItems.map((item) => `<div class="ai-knowledge-row"><strong>${escapeHtml(item.category)}</strong><p>${escapeHtml(item.summary)}</p></div>`).join("") || '<div class="status warn">구조화할 항목이 없습니다.</div>'}</div>`;
+        const actions = document.createElement("div"); actions.className = "ai-interview-actions sticky-actions";
+        actions.append(createInterviewButton("취소", "secondary-button", () => { interviewAnalysis = null; renderInterviewPanel(); }), createInterviewButton("수정", "secondary-button", () => { interviewEditingAnswer = true; renderInterviewPanel(); }), createInterviewButton(isReviewSaving ? "저장 중..." : "저장", "primary-button", () => savePostEventReviewAnswer(interviewAnalysis.originalAnswer, interviewAnalysis.structuredItems)));
+        card.append(actions); return card;
+      }
       const card = document.createElement("article");
       card.className = "ai-knowledge-confirm-card";
       const title = document.createElement("div");
@@ -2517,7 +2532,8 @@
         return;
       }
       if (isPostEventReviewInterview(currentInterview)) {
-        await savePostEventReviewAnswer(answer);
+        if (answer === "특이사항 없음") await savePostEventReviewAnswer(answer, []);
+        else { const structuredItems = window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.structurePostEventReview?.(answer) || []; interviewAnalysis = { postEventReview: true, originalAnswer: answer, summary: answer, structuredItems }; interviewEditingAnswer = false; renderInterviewPanel(); }
         return;
       }
       interviewLoading = true;
@@ -2579,7 +2595,7 @@
       }
     }
 
-    async function savePostEventReviewAnswer(answer) {
+    async function savePostEventReviewAnswer(answer, structuredItems = []) {
       if (isReviewSaving) return;
       if (!currentInterview?.id || !currentInterview.entity_id) {
         interviewError = "행사 회고를 연결할 행사 정보를 찾지 못했습니다.";
@@ -2591,13 +2607,15 @@
       renderInterviewPanel();
       const now = new Date().toISOString();
       try {
+        const reviewEvent = (state.getEvents?.() || []).find((event) => String(event.id) === String(currentInterview.entity_id));
+        const content = window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.serializePostEventReview?.({ event: reviewEvent || { id: currentInterview.entity_id }, answer, structuredItems }) || answer;
         await supabaseRequest("event_notes", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             event_order_id: currentInterview.entity_id,
             note_type: "post_event_review",
-            content: answer,
+            content,
             created_at: now,
           }),
         });
@@ -2611,7 +2629,7 @@
             updated_at: now,
           }),
         });
-        interviewSuccess = "행사 회고가 저장되었습니다. 해당 행사의 내부 메모에 원문 그대로 추가했습니다.";
+        interviewSuccess = "행사 회고가 저장되었습니다. 원문과 구조화 항목을 같은 행사 기록에 보관했습니다.";
         currentInterview = null;
         interviewAnalysis = null;
         await loadCurrentInterview({ preserveMessage: true });
@@ -2960,21 +2978,12 @@
 
     async function createPostEventReviewQuestions() {
       try {
-        const response = await fetch(supabaseConfig.functionUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: supabaseConfig.anonKey,
-            Authorization: `Bearer ${supabaseConfig.anonKey}`,
-          },
-          body: JSON.stringify({ mode: "create_post_event_review_questions" }),
-        });
-        const body = await parseSupabaseResponse(response);
-        if (!response.ok) throw new Error(body.message || "행사 회고 질문 생성에 실패했습니다.");
-        if (Number(body.created || 0) > 0) {
-          interviewSuccess = `새 행사 회고 질문 ${body.created}건이 등록되었습니다.`;
-        }
-        return body;
+        const [reviewRows, interviewRows] = await Promise.all([supabaseRequest("event_notes?select=id,event_order_id,content,created_at&note_type=eq.post_event_review&limit=1000"), supabaseRequest("ai_interviews?select=id,entity_id,category,status&category=eq.post_event_review&limit=1000")]);
+        const existingIds = new Set((interviewRows || []).map((row) => String(row.entity_id || ""))); const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT;
+        const candidates = autopilot?.buildPostEventReviewCandidates?.({ events: state.getEvents?.() || [], reviews: reviewRows || [], now: new Date() }).filter((item) => !existingIds.has(String(item.eventOrderId))) || [];
+        if (candidates.length) await supabaseRequest("ai_interviews", { method: "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(candidates.map((item) => ({ category: "post_event_review", question: item.summary, question_reason: "행사 종료 후 짧은 운영 회고", status: "pending", priority: "normal", entity_type: "event_order", entity_id: item.eventOrderId, source_type: "event_order", source_id: item.eventOrderId, event_name: item.organizer, created_at: new Date().toISOString() }))) });
+        if (candidates.length) interviewSuccess = `새 행사 회고 질문 ${candidates.length}건이 등록되었습니다.`;
+        return { created: candidates.length };
       } catch (error) {
         console.error("post event review question creation failed:", error);
         return { created: 0, message: error.message || "행사 회고 질문 생성에 실패했습니다." };
@@ -3037,9 +3046,9 @@
 
     function sortPendingInterviews(rows) {
       const priorityRank = (row) => {
-        if (row.category === "post_event_review") return 0;
-        if (row.source_type === "event_order" && row.priority === "high") return 1;
-        if (row.source_type === "event_order") return 2;
+        if (row.source_type === "event_order" && row.priority === "high") return 0;
+        if (row.source_type === "event_order" && row.category !== "post_event_review") return 1;
+        if (row.category === "post_event_review") return 2;
         return 3;
       };
       return [...(rows || [])].sort((a, b) => {

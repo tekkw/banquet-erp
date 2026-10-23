@@ -57,6 +57,6 @@ assert(boardSource.includes("metadata.checklistRoles"), "승인 시 역할을 �
 assert(boardSource.includes("setChecklistRole") && boardSource.includes("syncItem(item)"), "수동 역할 변경도 persistent task 저장 경로를 쓴다");
 assert(boardSource.includes("data-today-role") && boardSource.includes("groupChecklistByRole"));
 assert(aiSource.includes("matchesRoleQuestion") && aiSource.includes("roleBoardAnswer"));
-assert(/operationsAutopilot\.js\?v=operations-autopilot-v[45]/.test(html));
-assert(/operationsAutopilot\.js\?v=operations-autopilot-v[45]/.test(mobileHtml) && /operationBoard\.js\?v=operations-autopilot-v[45]/.test(mobileHtml), "PC/mobile이 같은 역할/Today Board 모듈을 사용한다");
+assert(/operationsAutopilot\.js\?v=operations-autopilot-v[456]/.test(html));
+assert(/operationsAutopilot\.js\?v=operations-autopilot-v[456]/.test(mobileHtml) && /operationBoard\.js\?v=operations-autopilot-v[456]/.test(mobileHtml), "PC/mobile이 같은 역할/Today Board 모듈을 사용한다");
 console.log("operations autopilot V4 tests passed");
