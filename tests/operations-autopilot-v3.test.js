@@ -49,6 +49,7 @@ const source = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
 const html = fs.readFileSync("outputs/index.html", "utf8");
 const mobileHtml = fs.readFileSync("outputs/board/index.html", "utf8");
 assert(source.includes("renderTodayExecutionBoard"));
+assert(!source.includes("${renderTodayExecutionBoard()}"), "Today Board 계산/AI helper는 유지하되 운영보드 UI에서는 렌더링하지 않는다");
 assert(source.includes("syncChecklist(item)"), "PC/mobile checklist는 기존 persistent 저장 경로를 사용한다");
 assert(source.includes("completeBoardItem"), "최종 완료는 기존 task 완료 경로를 사용한다");
 assert(source.includes("taskCompletionVerification") && fs.readFileSync("outputs/src/operationsAutopilot.js", "utf8").includes('task.metadata?.readiness === "blocked"'), "BLOCKED persistent task 완료를 차단한다");

@@ -77,21 +77,23 @@ assert(pcOptions.includes('<optgroup label="컨벤션">') && pcOptions.includes(
 assert.deepStrictEqual({ ...board.setupCandidateDateRange("2026-10-15") }, { start: "2026-10-15", end: "2026-10-25" }, "오늘부터 다음 주 일요일까지 계산해야 한다");
 board._setEventsForTest([
   { id: "past", companyName: "지난 행사", eventName: "지난 행사명", calendarDates: ["2026-10-14"], venue: "부라노1", guestCount: 10 },
-  { id: "today", companyName: "오늘 주최", eventName: "긴 오늘 행사명", calendarDates: ["2026-10-15"], venue: "부라노1", guestCount: 20, schedule: [{ date: "2026-10-15", time: "09:00", venue: "부라노1" }] },
+  { id: "today", companyName: "오늘 주최", eventName: "긴 오늘 행사명", calendarDates: ["2026-10-15"], venue: "부라노1", guestCount: 20, schedule: [{ date: "2026-10-15", time: "09:00", venue: "부라노1", content: "행사 시작" }] },
   { id: "week", companyName: "이번주 주최", eventName: "이번주 행사", calendarDates: ["2026-10-18"], venue: "부라노1", guestCount: 30 },
   { id: "sunday", organizer: "다음주 일요일", eventName: "일요일 행사", calendarDates: ["2026-10-25"], venue: "부라노1", guestCount: 40 },
   { id: "fallback", eventName: "행사명 대체", calendarDates: ["2026-10-20"], venue: "카프리2", guestCount: 50 },
   { id: "later", companyName: "범위 밖", eventName: "이후 행사", calendarDates: ["2026-10-26"], venue: "부라노1", guestCount: 60 },
+  { id: "future-event", companyName: "미래 주최", eventName: "긴 미래 행사명", calendarDates: ["2026-10-24"], venue: "부라노1", schedule: [{ date: "2026-10-24", time: "13:00", content: "행사 시작" }] },
+  { id: "future-no-time", companyName: "시간 없는 행사", eventName: "시간 없는 행사명", calendarDates: ["2026-10-24"], venue: "부라노1" },
 ]);
 const candidates = board.setupEventCandidates("부라노1", "2026-10-15");
 assert(!candidates.some((item) => item.event.id === "past") && !candidates.some((item) => item.event.id === "later"), "과거와 다음 주 일요일 이후 행사를 제외해야 한다");
 assert(candidates.some((item) => item.event.id === "today") && candidates.some((item) => item.event.id === "week") && candidates.some((item) => item.event.id === "sunday"), "오늘, 이번 주, 다음 주 일요일 행사를 포함해야 한다");
-assert.deepStrictEqual(Array.from(candidates, (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-20", "2026-10-25"], "공간과 무관하게 전체 후보를 날짜 오름차순으로 표시해야 한다");
-assert.deepStrictEqual(Array.from(candidates.filter((item) => item.overlap), (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-25"], "같은 공간 후보는 날짜 오름차순이어야 한다");
+assert.deepStrictEqual(Array.from(candidates, (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-20", "2026-10-24", "2026-10-24", "2026-10-25"], "공간과 무관하게 전체 후보를 날짜 오름차순으로 표시해야 한다");
+assert.deepStrictEqual(Array.from(candidates.filter((item) => item.overlap), (item) => item.details.eventDate), ["2026-10-15", "2026-10-18", "2026-10-24", "2026-10-24", "2026-10-25"], "같은 공간 후보는 날짜 오름차순이어야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "today").details), "10/15 · 오늘 주최 · 부1 · 20명", "organizer와 compact venue만 기본 label에 표시해야 한다");
 assert.strictEqual(board.formatSetupCandidateLabel(candidates.find((item) => item.event.id === "fallback").details), "10/20 · 행사명 대체 · 카2 · 50명", "organizer가 없으면 event_name을 사용해야 한다");
 const organizerCard = board.setupCardInfo({ type: "next_setup", venue: "부라노1", eventOrderId: "today", next: { eventOrderId: "today", date: "2026-10-15", time: "09:00", name: "긴 오늘 행사명", people: 20 } });
-assert.deepStrictEqual({ ...organizerCard }, { eventOrderId: "today", title: "오늘 주최", date: "2026-10-15", time: "09:00", venue: "부1", people: 20 }, "B/D. 카드에는 organizer/date/time/short venue/people만 사용해야 한다");
+assert.deepStrictEqual({ ...organizerCard }, { eventOrderId: "today", title: "오늘 주최", date: "2026-10-15", time: "09:00", eventDate: "2026-10-15", eventTime: "09:00", venue: "부1", people: 20 }, "B/D. 카드는 세팅과 행사 날짜/시간을 분리해야 한다");
 const fallbackCard = board.setupCardInfo({ type: "next_setup", venue: "카프리2", eventOrderId: "fallback", next: { eventOrderId: "fallback", date: "2026-10-20", time: "13:00", name: "행사명 대체", people: 50 } });
 assert.strictEqual(fallbackCard.title, "행사명 대체", "C. organizer가 없으면 event_name을 사용해야 한다");
 assert(source.includes("LAY &amp; OUT") && source.includes("OTHERS"), "I. 긴 행사명과 LAY & OUT/OTHERS는 상세 modal에서 확인할 수 있어야 한다");
@@ -116,6 +118,12 @@ const ordering = [
   { ...persistent, key: "today", next: { date: "2026-10-21", time: "09:00" } },
 ];
 assert.deepStrictEqual(Array.from(board.sortSetupTasks(ordering, "2026-10-21"), (item) => item.key), ["overdue", "today", "future"], "지연, 오늘, 미래 순으로 정렬해야 한다");
+const overdueOrdering = [
+  { ...persistent, key: "later-time", scheduledDate: "2026-10-20", scheduledTime: "10:00" },
+  { ...persistent, key: "older", scheduledDate: "2026-10-19", scheduledTime: "18:00" },
+  { ...persistent, key: "earlier-time", scheduledDate: "2026-10-20", scheduledTime: "08:00" },
+];
+assert.deepStrictEqual(Array.from(board.sortSetupTasks(overdueOrdering, "2026-10-25"), (item) => item.key), ["older", "earlier-time", "later-time"], "지연 작업은 scheduledDate와 scheduledTime 오름차순이어야 한다");
 const futurePinned = { key: "future-pinned", id: "future-pinned", kind: "manual", type: "next_setup", date: "2026-10-21", venue: "부라노1", eventOrderId: "future-event", next: { eventOrderId: "future-event", date: "2026-10-22", name: "긴 미래 행사명" } };
 board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: {} });
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-21"), "future");
@@ -123,11 +131,14 @@ assert.strictEqual(board.setupBoardTasks([futurePinned], "2026-10-21").length, 0
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned], "2026-10-22"), (item) => item.key), [futurePinned.key], "B. 예정일 당일 표시한다");
 const separatedDates = { ...futurePinned, key: "separated-dates", scheduledDate: "2026-10-23", scheduledTime: "07:00", next: { eventOrderId: "future-event", eventDate: "2026-10-24", name: "긴 미래 행사명" } };
 board._setStateForTest({ pins: { [separatedDates.key]: true }, completions: {} });
-assert.deepStrictEqual({ ...board.setupCardInfo(separatedDates) }, { eventOrderId: "future-event", title: "긴 미래 행사명", date: "2026-10-23", time: "07:00", venue: "부1", people: "" }, "행사일 10/24와 무관하게 카드에는 scheduledDate 10/23을 표시해야 한다");
+assert.deepStrictEqual({ ...board.setupCardInfo(separatedDates) }, { eventOrderId: "future-event", title: "미래 주최", date: "2026-10-23", time: "07:00", eventDate: "2026-10-24", eventTime: "13:00", venue: "부1", people: "" }, "행사일/시간과 scheduledDate/time을 각각 표시해야 한다");
+const eventWithoutTime = board.setupCardInfo({ ...separatedDates, eventOrderId: "future-no-time", next: { eventOrderId: "future-no-time", eventDate: "2026-10-24" } });
+assert.strictEqual(eventWithoutTime.eventDate, "2026-10-24", "행사 날짜는 연결 event에서 표시해야 한다");
+assert.strictEqual(eventWithoutTime.eventTime, "", "명확한 행사 시작시간이 없으면 시간을 생성하지 않아야 한다");
 assert.strictEqual(board.setupBoardTasks([separatedDates], "2026-10-22", "2026-10-22").length, 0, "선택일 10/22에는 미래 10/23 task를 숨겨야 한다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-23", "2026-10-22"), (item) => item.key), [separatedDates.key], "선택일 10/23에는 미래 탐색 중에도 task를 표시해야 한다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-24", "2026-10-24"), (item) => item.key), [separatedDates.key], "실제 오늘 10/24에는 미완료 10/23 task를 지연 표시해야 한다");
-assert.strictEqual(board.setupBoardTasks([separatedDates], "2026-10-25", "2026-10-24").length, 0, "실제 오늘이 아닌 다른 날짜에는 지연 task를 숨겨야 한다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-25", "2026-10-24"), (item) => item.key), [separatedDates.key], "선택일이 더 늦어져도 미완료 persistent task를 유지해야 한다");
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "overdue", "C. 지난 미완료 작업은 지연이다");
 board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: { [futurePinned.key]: true } });
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-23"), "completed");

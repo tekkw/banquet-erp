@@ -703,7 +703,8 @@
   }
   function sortSetupTasks(tasks, referenceDate = selectedDate) {
     const rank = (item) => { const date = setupScheduledDate(item); return !date ? 3 : date < referenceDate ? 0 : date === referenceDate ? 1 : 2; };
-    return [...(tasks || [])].sort((left, right) => rank(left) - rank(right) || (setupScheduledDate(left) || "9999-12-31").localeCompare(setupScheduledDate(right) || "9999-12-31") || String(left.next?.time || left.time || "").localeCompare(String(right.next?.time || right.time || "")));
+    const time = (item) => item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "";
+    return [...(tasks || [])].sort((left, right) => rank(left) - rank(right) || (setupScheduledDate(left) || "9999-12-31").localeCompare(setupScheduledDate(right) || "9999-12-31") || String(time(left)).localeCompare(String(time(right))));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
@@ -747,7 +748,6 @@
       ${beverageWarning}
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      ${renderTodayExecutionBoard()}
       <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
       <section class="operation-board-tab-panel" data-board-tab-panel="operations" ${activeBoardTab === "operations" ? "" : "hidden"}>
         ${showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
@@ -781,29 +781,46 @@
     return coreRules().dedupeSetupCandidates(tasks);
   }
   function setupBoardTasks(blocks, boardDate = selectedDate, actualToday = seoulDateKey()) {
-    const visible = (blocks || []).filter((item) => state.pins[item.key] && coreRules().getSetupTaskStatus({ scheduledDate: setupScheduledDate(item) || item?.plannedDate || item?.date || "", completed: item?.completed === true || state.completions[item?.key] === true }, { selectedDate: boardDate, actualToday }).visible);
+    const visible = (blocks || []).filter((item) => {
+      if (!state.pins[item.key]) return false;
+      const scheduledDate = setupScheduledDate(item) || item?.plannedDate || item?.date || "";
+      const completed = item?.completed === true || state.completions[item?.key] === true;
+      if (completed) return false;
+      if (item.kind === "manual" || item.persistent === true || item.recordId) return Boolean(scheduledDate) && scheduledDate <= boardDate;
+      return coreRules().getSetupTaskStatus({ scheduledDate, completed }, { selectedDate: boardDate, actualToday }).visible;
+    });
     return sortSetupTasks(dedupePinnedSetupTasks(visible), boardDate);
+  }
+  function linkedEventStart(event, fallbackDate = "") {
+    if (!event) return { date: fallbackDate, time: "" };
+    const startRow = normalizedScheduleRows(event)
+      .filter(({ row }) => classifySchedule(row.content || row.title || row.name) === "start")
+      .sort((left, right) => `${left.day || ""} ${left.time || ""}`.localeCompare(`${right.day || ""} ${right.time || ""}`))[0];
+    return { date: startRow?.day || eventDates(event).sort()[0] || fallbackDate, time: startRow?.time || timeValue(String(event.eventDateTime || "").slice(11, 16)) };
   }
   function setupCardInfo(item) {
     const eventOrderId = item.next?.eventOrderId || item.eventOrderId;
     const event = currentEvents.find((entry) => String(entry.id) === String(eventOrderId));
+    const eventStart = linkedEventStart(event, state.setupOverrides[item.key]?.eventDate || item.next?.eventDate || "");
     return {
       eventOrderId,
       title: event ? eventDisplayTitle(event) : item.next?.name || item.title || "행사",
       date: setupScheduledDate(item),
       time: item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "",
+      eventDate: eventStart.date,
+      eventTime: eventStart.time,
       venue: window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue,
       people: item.next?.people || item.people || event?.guestCount || "",
     };
   }
-  function setupReadiness(item) { if (item.completed || state.completions[item.key]) return { value: "ready", label: "준비가능" }; const value = item.metadata?.readiness || (getPinnedSetupStatus(item) === "overdue" ? "blocked" : "needs_action"); return { value, label: { ready: "준비가능", needs_action: "작업필요", blocked: "확인필요" }[value] || "작업필요" }; }
+  function setupReadiness(item, referenceDate = seoulDateKey()) { if (item.completed || state.completions[item.key]) return { value: "ready", label: "준비가능" }; const value = item.metadata?.readiness || (getPinnedSetupStatus(item, referenceDate) === "overdue" ? "blocked" : "needs_action"); return { value, label: { ready: "준비가능", needs_action: "작업필요", blocked: "확인필요" }[value] || "작업필요" }; }
   function renderSetupTaskBoard(blocks) {
     const tasks = setupBoardTasks(blocks, selectedDate, seoulDateKey());
     const card = (item) => {
-      const info = setupCardInfo(item); const eventDate = info.date || state.setupOverrides[item.key]?.eventDate || "";
+      const info = setupCardInfo(item); const setupDate = info.date || "";
       const sourceBadge = item.metadataSource === "manual_setup_task" ? "수동" : "자동";
-      const status = getPinnedSetupStatus(item); const readiness = setupReadiness(item); const overdueDays = status === "overdue" && eventDate ? Math.max(1, Math.round((new Date(`${seoulDateKey()}T12:00:00+09:00`) - new Date(`${eventDate}T12:00:00+09:00`)) / 86400000)) : 0;
-      const metadata = [eventDate && eventDate.slice(5).replace("-", "/"), info.time, info.people && `${info.people}명`].filter(Boolean).join(" · ");
+      const status = getPinnedSetupStatus(item, selectedDate); const readiness = setupReadiness(item, selectedDate); const overdueDays = status === "overdue" && setupDate ? Math.max(1, Math.round((new Date(`${selectedDate}T12:00:00+09:00`) - new Date(`${setupDate}T12:00:00+09:00`)) / 86400000)) : 0;
+      const setupLabel = [setupDate && setupDate.slice(5).replace("-", "/"), info.time].filter(Boolean).join(" "); const eventLabel = [info.eventDate && info.eventDate.slice(5).replace("-", "/"), info.eventTime].filter(Boolean).join(" "); const metadata = [`세팅 ${setupLabel}`, eventLabel && `행사 ${eventLabel}`, info.people && `${info.people}명`].filter(Boolean).join(" · ");
       return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}" data-task-id="${escapeHtml(item.recordId || "")}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(info.venue)}</span><div><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(metadata)}</small></div>${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-readiness-badge ${readiness.value}">${readiness.label}</span><span class="setup-source-badge">${sourceBadge}</span></div><div class="setup-task-actions"><button type="button" data-setup-detail>상세 보기</button>${renderOriginalAction(info.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
     return `<section class="setup-task-board"><div class="setup-task-heading"><h3>다음 세팅 / 고정 작업</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${tasks.map((item) => card(item)).join("") || '<p>상단에 고정된 작업이 없습니다.</p>'}</div></section>`;
