@@ -97,6 +97,8 @@
     const conversationAgent = window.erpConversationAgent?.create({ storage: window.sessionStorage, storageKey: "banquetErp.globalAiContext.v1", maxSteps: 4 });
     const actionRegistry = window.erpActionRegistry?.create({
       get_beverage_inventory_status: ({ question, events }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+      "event.items.query": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.queryEventOrderItems(args),
+      "event.items.aggregate": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.aggregateEventOrderItems(args),
     });
     const CORRECTION_FIELDS = new Map([
       ["guestcount", "guestCount"], ["venue", "venue"], ["place", "venue"],
@@ -106,6 +108,13 @@
     let correctionSuggestions = loadCorrectionSuggestions();
     let correctionLearningLoaded = false;
     let correctionLearningLoading = false;
+    function answerEventOrderAnalytics(question) {
+      const analytics = window.BANQUET_ERP_EVENT_ORDER_ANALYTICS; const context = conversationAgent?.load?.() || {};
+      const result = analytics?.answerQuestion(question, state.getEvents?.() || [], context.analytics || null);
+      if (!result) return "";
+      conversationAgent?.save?.({ ...context, analytics: result.context, lastDomain: "eventAnalytics" });
+      return result.text;
+    }
 
     /*
      * 왜 이 함수를 만들었는지:
@@ -254,6 +263,7 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
+        const analyticsAnswer = answerEventOrderAnalytics(question); if (analyticsAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = analyticsAnswer; return; }
         const autopilotContextAnswer = await answerAutopilotContext(question); if (autopilotContextAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = autopilotContextAnswer; return; }
         if (window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.matchesCommand(question)) { loadingMessage.remove(); await runOperationsAutopilot({ force: true }); return; }
         const briefingAnswer = window.BANQUET_ERP_OPERATION_BOARD?.dailyBriefingAnswer(question, state.getEvents?.() || []);
@@ -804,6 +814,8 @@
       renderAiPageMessages();
       renderConversationList();
       try {
+        const analyticsAnswer = !attachmentsToSend.length ? answerEventOrderAnalytics(question) : "";
+        if (analyticsAnswer) { conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: analyticsAnswer }; await persistAiMessage(conversation.id, "user", question, []); await persistAiMessage(conversation.id, "assistant", analyticsAnswer, []); return; }
         const autopilotContextAnswer = !attachmentsToSend.length ? await answerAutopilotContext(question) : "";
         if (autopilotContextAnswer) { conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: autopilotContextAnswer }; return; }
         if (!attachmentsToSend.length && window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.matchesCommand(question)) {

@@ -424,14 +424,21 @@
         const items = [];
         for (let rowIndex = startIndex + 1; rowIndex < sheet.rows.length; rowIndex += 1) {
           const row = sheet.rows[rowIndex] || [];
-          if (rowHasMarker(row, "예상 매출(Expected Revenue)")) break;
+          if (rowHasMarker(row, "예상 매출(Expected Revenue)")) {
+            const expectedRevenue = cleanValue(row[6]) || cleanValue(row[7]);
+            if (expectedRevenue) items.push({ itemName: "예상 매출(Expected Revenue)", unitPrice: "", quantity: "", amount: expectedRevenue });
+            break;
+          }
 
+          const unitPrice = cleanValue(row[3]);
+          const quantity = cleanValue(row[5]);
           const item = {
-            itemName: cleanValue(row[0]) || cleanValue(row[2]),
-            unitPrice: cleanValue(row[3]),
-            quantity: cleanValue(row[5]),
-            amount: cleanValue(row[6]),
+            itemName: cleanValue(row[0]) || cleanValue(row[1]) || cleanValue(row[2]),
+            unitPrice,
+            quantity,
+            amount: cleanValue(row[6]) || cleanValue(row[7]),
           };
+          if (!item.amount && Number(String(unitPrice).replace(/[^\d.-]/g, "")) && Number(String(quantity).replace(/[^\d.-]/g, ""))) item.amount = Number(String(unitPrice).replace(/[^\d.-]/g, "")) * Number(String(quantity).replace(/[^\d.-]/g, ""));
           if (item.unitPrice || item.quantity || item.amount) items.push(item);
         }
         return items;

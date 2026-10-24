@@ -89,6 +89,8 @@
     get_current_setup: (args) => erpTools.run("getCurrentHallState", args), confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args),
     add_schedule: (args) => erpTools.run("proposeScheduleChange", args), update_schedule_time: (args) => erpTools.run("proposeScheduleChange", args), add_manual_task: (args) => erpTools.run("proposeManualTask", args),
     get_beverage_inventory_status: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+    "event.items.query": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.queryEventOrderItems({ events, ...args }),
+    "event.items.aggregate": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.aggregateEventOrderItems({ events, ...args }),
   });
   function actionResultValue(result) { if (!result?.ok) throw new Error(result?.message || "ERP 작업을 실행하지 못했습니다."); return result.requiresApproval ? result.proposal : result.data; }
   let settingAdvisorRows = [];
@@ -159,6 +161,12 @@
   function loadConversationContext() { try { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [], ...JSON.parse(sessionStorage.getItem(conversationContextKey) || "{}") }; } catch { return { event: null, setting: null, asset: null, venue: null, lastDomain: "", lastResults: [] }; } }
   function saveConversationContext(next) { conversationContext = conversationAgent.save(next); }
   function rememberDomainContext(domain, value) { saveConversationContext({ ...conversationContext, [domain]: value, lastDomain: domain }); renderAiContext(); }
+  function answerEventOrderAnalytics(question) {
+    const result = window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.answerQuestion(question, events, conversationContext.analytics || null);
+    if (!result) return "";
+    saveConversationContext({ ...conversationContext, analytics: result.context, lastDomain: "eventAnalytics" });
+    return result.text;
+  }
   function rememberSettingAdvisor(row) {
     settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
     try { sessionStorage.setItem(settingAdvisorContextKey, JSON.stringify(settingAdvisorContext)); } catch { /* session storage unavailable */ }
@@ -1152,6 +1160,8 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    const analyticsAnswer = !selectedAssetImageFile ? answerEventOrderAnalytics(text) : "";
+    if (analyticsAnswer) { showMessage(analyticsAnswer, true); aiInput.value = ""; return; }
     briefingActionInProgress = true; const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : ""; briefingActionInProgress = false;
     if (briefingAnswer) { markMobileDailyBriefingSeen(); showBriefingResult(briefingAnswer); aiInput.value = ""; return; }
     if (!selectedAssetImageFile && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(text)) {
