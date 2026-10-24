@@ -164,7 +164,30 @@ assert.deepStrictEqual(Array.from(groupedOn23.upcoming, (item) => item.key), ["t
 const groupedOn24 = board.groupPinnedSetupTasks(groupedTasks, "2026-10-24", "2026-10-24");
 assert(groupedOn24.overdue.some((item) => item.key === "today") && !groupedOn24.upcoming.some((item) => item.key === "today"), "E. 같은 task가 날짜 경과 후 예정에서 지연으로 이동한다");
 assert(!groupedOn23.overdue.some((item) => item.key === "done") && !groupedOn23.upcoming.some((item) => item.key === "done"), "D. 완료 task는 양쪽에서 제외한다");
-assert(source.indexOf('group("지연된 세팅"') < source.indexOf('group("세팅 예정"'), "F. 지연 그룹을 항상 위에 렌더링한다");
+const accordionTasks = [
+  ...Array.from({ length: 9 }, (_, index) => ({ ...futurePinned, key: `accordion-overdue-${index}`, scheduledDate: `2026-10-${String(index + 1).padStart(2, "0")}`, scheduledTime: "09:00", metadata: index < 2 ? { readiness: "blocked" } : {} })),
+  { ...futurePinned, key: "accordion-upcoming", scheduledDate: "2026-10-24", scheduledTime: "07:00" },
+];
+board.setSelectedDate("2026-10-23");
+board._setStateForTest({ pins: Object.fromEntries(accordionTasks.map((item) => [item.key, true])), completions: {} });
+board._setPinnedSetupUiForTest();
+const collapsedSetup = board.renderSetupTaskBoard(accordionTasks);
+assert(collapsedSetup.includes("지연 <strong>9</strong>") && collapsedSetup.includes("세팅 예정 <strong>1</strong>") && collapsedSetup.includes("확인 필요 <strong>2</strong>"), "A/G. PC/모바일 공용 summary가 상태별 count를 표시해야 한다");
+assert(!collapsedSetup.includes('class="setup-task-card"'), "A. 기본 상태에서는 task card를 렌더링하지 않아야 한다");
+board._setPinnedSetupUiForTest("overdue");
+const overduePanel = board.renderSetupTaskBoard(accordionTasks);
+assert(overduePanel.includes('data-setup-panel="overdue"') && !overduePanel.includes('data-setup-panel="upcoming"'), "B. 지연을 열면 지연 panel만 표시해야 한다");
+assert.strictEqual((overduePanel.match(/class="setup-task-card"/g) || []).length, 4, "D. panel은 처음 최대 4건만 렌더링해야 한다");
+assert(overduePanel.includes("+5건 더 보기"), "D. 남은 task 수를 더 보기 버튼에 표시해야 한다");
+board._setPinnedSetupUiForTest("upcoming");
+const upcomingPanel = board.renderSetupTaskBoard(accordionTasks);
+assert(upcomingPanel.includes('data-setup-panel="upcoming"') && !upcomingPanel.includes('data-setup-panel="overdue"'), "C. 예정을 열면 지연 panel이 닫혀야 한다");
+board._setPinnedSetupUiForTest("all");
+const allPanels = board.renderSetupTaskBoard(accordionTasks);
+assert(allPanels.includes('data-setup-panel="overdue"') && allPanels.includes('data-setup-panel="upcoming"') && allPanels.includes('data-setup-panel="attention"'), "전체 보기는 세 그룹을 함께 표시해야 한다");
+const withoutOneTask = accordionTasks.slice(1);
+board._setStateForTest({ pins: Object.fromEntries(withoutOneTask.map((item) => [item.key, true])), completions: {} });
+assert.strictEqual(board.pinnedSetupSummary(withoutOneTask, "2026-10-23", "2026-10-23").overdue.length, 8, "E/F. 완료 또는 고정 해제 후 summary count가 즉시 감소해야 한다");
 context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");

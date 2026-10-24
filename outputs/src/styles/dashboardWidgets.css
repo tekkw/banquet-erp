@@ -333,7 +333,12 @@ body {
 }
 
 .setup-task-board { position: sticky; top: 8px; z-index: 7; display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border: 1px solid rgba(198, 166, 103, .3); border-radius: 10px; background: rgba(11, 30, 47, .96); box-shadow: 0 7px 20px rgba(0, 0, 0, .2); }
+.setup-task-summary-bar { display: flex; align-items: center; gap: 6px; min-height: 30px; overflow-x: auto; }
+.setup-task-summary-bar button, .setup-task-more { min-height: 28px; padding: 4px 9px; border: 1px solid var(--dash-border); border-radius: 999px; background: rgba(7, 24, 42, .82); color: var(--dash-text); white-space: nowrap; cursor: pointer; }
+.setup-task-summary-bar button[aria-expanded="true"] { border-color: rgba(242, 199, 110, .75); color: #f2c76e; }
+.setup-task-summary-bar button:last-child { margin-left: auto; }
 .setup-task-group { display: grid; gap: 8px; }
+.setup-task-more { justify-self: center; border-radius: 7px; }
 .setup-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .setup-tab-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .setup-task-board h3 { margin: 0; font-size: 15px; }
@@ -401,6 +406,8 @@ body {
 
 @media (max-width: 768px) {
   .setup-task-board { position: static; z-index: auto; top: auto; padding: 8px; }
+  .setup-task-summary-bar { gap: 4px; }
+  .setup-task-summary-bar button { padding-inline: 7px; }
   .setup-task-card { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .setup-task-main { grid-template-columns: auto minmax(0, 1fr) auto; }
   .setup-task-main > div strong { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
