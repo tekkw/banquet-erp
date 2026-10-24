@@ -333,6 +333,7 @@ body {
 }
 
 .setup-task-board { position: sticky; top: 8px; z-index: 7; display: grid; gap: 8px; margin-bottom: 12px; padding: 10px; border: 1px solid rgba(198, 166, 103, .3); border-radius: 10px; background: rgba(11, 30, 47, .96); box-shadow: 0 7px 20px rgba(0, 0, 0, .2); }
+.setup-task-group { display: grid; gap: 8px; }
 .setup-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .setup-tab-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .setup-task-board h3 { margin: 0; font-size: 15px; }

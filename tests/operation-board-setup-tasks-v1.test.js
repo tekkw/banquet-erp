@@ -127,7 +127,7 @@ assert.deepStrictEqual(Array.from(board.sortSetupTasks(overdueOrdering, "2026-10
 const futurePinned = { key: "future-pinned", id: "future-pinned", kind: "manual", type: "next_setup", date: "2026-10-21", venue: "부라노1", eventOrderId: "future-event", next: { eventOrderId: "future-event", date: "2026-10-22", name: "긴 미래 행사명" } };
 board._setStateForTest({ pins: { [futurePinned.key]: true }, completions: {} });
 assert.strictEqual(board.getPinnedSetupStatus(futurePinned, "2026-10-21"), "future");
-assert.strictEqual(board.setupBoardTasks([futurePinned], "2026-10-21").length, 0, "A. 예정일 전에는 상단 고정에 표시하지 않는다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned], "2026-10-21"), (item) => item.key), [futurePinned.key], "미래 persistent pinned task도 상단 고정 대상에 포함한다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned], "2026-10-22"), (item) => item.key), [futurePinned.key], "B. 예정일 당일 표시한다");
 const separatedDates = { ...futurePinned, key: "separated-dates", scheduledDate: "2026-10-23", scheduledTime: "07:00", next: { eventOrderId: "future-event", eventDate: "2026-10-24", name: "긴 미래 행사명" } };
 board._setStateForTest({ pins: { [separatedDates.key]: true }, completions: {} });
@@ -135,7 +135,7 @@ assert.deepStrictEqual({ ...board.setupCardInfo(separatedDates) }, { eventOrderI
 const eventWithoutTime = board.setupCardInfo({ ...separatedDates, eventOrderId: "future-no-time", next: { eventOrderId: "future-no-time", eventDate: "2026-10-24" } });
 assert.strictEqual(eventWithoutTime.eventDate, "2026-10-24", "행사 날짜는 연결 event에서 표시해야 한다");
 assert.strictEqual(eventWithoutTime.eventTime, "", "명확한 행사 시작시간이 없으면 시간을 생성하지 않아야 한다");
-assert.strictEqual(board.setupBoardTasks([separatedDates], "2026-10-22", "2026-10-22").length, 0, "선택일 10/22에는 미래 10/23 task를 숨겨야 한다");
+assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-22", "2026-10-22"), (item) => item.key), [separatedDates.key], "선택일 이후의 persistent pinned task는 세팅 예정 그룹 대상이다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-23", "2026-10-22"), (item) => item.key), [separatedDates.key], "선택일 10/23에는 미래 탐색 중에도 task를 표시해야 한다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-24", "2026-10-24"), (item) => item.key), [separatedDates.key], "실제 오늘 10/24에는 미완료 10/23 task를 지연 표시해야 한다");
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([separatedDates], "2026-10-25", "2026-10-24"), (item) => item.key), [separatedDates.key], "선택일이 더 늦어져도 미완료 persistent task를 유지해야 한다");
@@ -149,6 +149,22 @@ assert.deepStrictEqual(Array.from(board.setupBoardTasks([automaticDuplicate, fut
 const separate = { ...futurePinned, key: "separate", id: "separate" };
 board._setStateForTest({ pins: { [futurePinned.key]: true, [separate.key]: true }, completions: { [futurePinned.key]: true } });
 assert.deepStrictEqual(Array.from(board.setupBoardTasks([futurePinned, separate], "2026-10-22"), (item) => item.key), [separate.key], "F. 별도 persistent task는 하나를 완료해도 유지한다");
+const groupedTasks = [
+  { ...futurePinned, key: "past-old", scheduledDate: "2026-10-20", scheduledTime: "09:00", venue: "카프리1" },
+  { ...futurePinned, key: "past-near", scheduledDate: "2026-10-22", scheduledTime: "08:00", venue: "부라노1" },
+  { ...futurePinned, key: "today", scheduledDate: "2026-10-23", scheduledTime: "18:00", venue: "페스타" },
+  { ...futurePinned, key: "future-a", scheduledDate: "2026-10-24", scheduledTime: "07:00", venue: "카프리2" },
+  { ...futurePinned, key: "future-b", scheduledDate: "2026-10-24", scheduledTime: "07:00", venue: "부라노1" },
+  { ...futurePinned, key: "done", scheduledDate: "2026-10-19", completed: true },
+];
+board._setStateForTest({ pins: Object.fromEntries(groupedTasks.map((item) => [item.key, true])), completions: {} });
+const groupedOn23 = board.groupPinnedSetupTasks(groupedTasks, "2026-10-23", "2026-10-23");
+assert.deepStrictEqual(Array.from(groupedOn23.overdue, (item) => item.key), ["past-old", "past-near"], "A/G. 지연은 오래된 scheduledDate/time 순이다");
+assert.deepStrictEqual(Array.from(groupedOn23.upcoming, (item) => item.key), ["today", "future-b", "future-a"], "B/C/H. 예정은 가까운 날짜/time/venue 순이다");
+const groupedOn24 = board.groupPinnedSetupTasks(groupedTasks, "2026-10-24", "2026-10-24");
+assert(groupedOn24.overdue.some((item) => item.key === "today") && !groupedOn24.upcoming.some((item) => item.key === "today"), "E. 같은 task가 날짜 경과 후 예정에서 지연으로 이동한다");
+assert(!groupedOn23.overdue.some((item) => item.key === "done") && !groupedOn23.upcoming.some((item) => item.key === "done"), "D. 완료 task는 양쪽에서 제외한다");
+assert(source.indexOf('group("지연된 세팅"') < source.indexOf('group("세팅 예정"'), "F. 지연 그룹을 항상 위에 렌더링한다");
 context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");
