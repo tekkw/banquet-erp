@@ -452,6 +452,12 @@
       workspaceDeleteButton,
       workspaceNameInput,
       workspaceNewButton,
+      workspaceImportBaseButton,
+      workspaceImportBaseModal,
+      workspaceImportBaseSelect,
+      workspaceImportBaseConfirmButton,
+      workspaceImportBaseCancelButton,
+      workspaceCompositeAlignButtons,
       workspaceSaveButton,
       workspaceSaveAsButton,
       workspacePreviewButton,
@@ -671,6 +677,18 @@
     let workspaceDimensionMode = "selected";
     let workspaceDimensionUnit = "m";
     let workspaceIncludeDimensionsInExport = true;
+    let compositeFloorplans = [];
+    const compositeGeometryCache = new Map();
+
+    function isCompositeGroup(object) { return object?.objectType === "base_plan_group" && Boolean(object?.metadata?.sourceBasePlanId); }
+    function isCompositeChild(object) { return Boolean(object?.metadata?.compositeBaseChild); }
+    function rotateCompositePoint(point, rotation) {
+      const radians = normalizeDegrees(rotation) * Math.PI / 180; const cos = Math.cos(radians); const sin = Math.sin(radians);
+      return { x: Number(point.x || 0) * cos - Number(point.y || 0) * sin, y: Number(point.x || 0) * sin + Number(point.y || 0) * cos };
+    }
+    function compositeObjectBounds(object) { const width = Number(object.widthM || 0) * 1000; const height = Number(object.heightM || 0) * 1000; return { left: object.x - width / 2, right: object.x + width / 2, top: object.y - height / 2, bottom: object.y + height / 2, width, height }; }
+    function transformCompositePoint(point, group) { const rotated = rotateCompositePoint(point, group.metadata?.rotation ?? group.rotation); return { x: rotated.x + Number(group.metadata?.offsetX || 0), y: rotated.y + Number(group.metadata?.offsetY || 0) }; }
+    function compositeReferencePayload(group) { return { sourceBasePlanId: group.metadata.sourceBasePlanId, offsetX: Math.round(Number(group.metadata.offsetX || 0)), offsetY: Math.round(Number(group.metadata.offsetY || 0)), rotation: normalizeDegrees(group.metadata.rotation ?? group.rotation), locked: true }; }
 
     function bindEvents() {
       window.addEventListener("banquet:open-floorplan-editor", (event) => {
@@ -1063,6 +1081,11 @@
       window.addEventListener("pointercancel", endWorkspaceDrag);
       workspaceSvg?.addEventListener("wheel", handleWorkspaceWheel, { passive: false });
       workspaceNewButton?.addEventListener("click", openWorkspaceNewLayoutModal);
+      workspaceImportBaseButton?.addEventListener("click", openCompositeBasePlanModal);
+      workspaceImportBaseConfirmButton?.addEventListener("click", importSelectedCompositeBasePlan);
+      workspaceImportBaseCancelButton?.addEventListener("click", closeCompositeBasePlanModal);
+      workspaceImportBaseModal?.addEventListener("click", (event) => { if (event.target === workspaceImportBaseModal) closeCompositeBasePlanModal(); });
+      workspaceCompositeAlignButtons?.forEach((button) => button.addEventListener("click", () => alignSelectedCompositeGroups(button.dataset.compositeAlign)));
       workspaceNewCreateButton?.addEventListener("click", createWorkspaceLayoutFromModal);
       workspaceNewCancelButton?.addEventListener("click", closeWorkspaceNewLayoutModal);
       workspaceNewCancelFooterButton?.addEventListener("click", closeWorkspaceNewLayoutModal);
@@ -1945,6 +1968,124 @@
       workspaceGuideLayer.append(group);
     }
 
+    async function loadCompositePlanGeometry(floorplanId, lineage = []) {
+      const id = String(floorplanId || "");
+      if (!id) return [];
+      if (lineage.includes(id)) throw new Error("기본도면 순환 참조는 허용되지 않습니다.");
+      if (compositeGeometryCache.has(id)) return JSON.parse(JSON.stringify(compositeGeometryCache.get(id)));
+      const rows = await loggedSupabaseRequest("composite base objects", `venue_floorplan_objects?select=*&floorplan_id=eq.${encodeURIComponent(id)}&is_active=eq.true&order=sort_order.asc`).catch(() => []);
+      const result = [];
+      for (const row of rows || []) {
+        if (row.object_type === "hall_outline") {
+          const points = Array.isArray(row.metadata?.points) ? row.metadata.points : [];
+          points.slice(1).forEach((end, index) => {
+            const start = points[index]; const length = Math.hypot(Number(end.x) - Number(start.x), Number(end.y) - Number(start.y));
+            result.push({ instanceId: `${row.id || id}_outline_${index}`, masterObjectId: "", objectType: "wall", label: row.label || "외곽선", x: (Number(start.x) + Number(end.x)) / 2, y: (Number(start.y) + Number(end.y)) / 2, widthM: length / 1000, heightM: .15, rotation: Math.atan2(Number(end.y) - Number(start.y), Number(end.x) - Number(start.x)) * 180 / Math.PI, seatCount: 0, zIndex: Number(row.sort_order || 0), locked: true, metadata: { start_x_mm: Number(start.x), start_y_mm: Number(start.y), end_x_mm: Number(end.x), end_y_mm: Number(end.y), thickness_mm: 150, baseFloorplanObject: true } });
+          });
+        } else if (row.object_type === "base_plan_group" && row.metadata?.sourceBasePlanId) {
+          const nested = await loadCompositePlanGeometry(row.metadata.sourceBasePlanId, [...lineage, id]);
+          const nestedGroup = { rotation: Number(row.metadata.rotation || row.rotation || 0), metadata: row.metadata };
+          nested.forEach((object) => result.push(transformCompositeLocalObject(object, nestedGroup)));
+        } else {
+          result.push(dbObjectToWorkspaceObject(row, false));
+        }
+      }
+      compositeGeometryCache.set(id, JSON.parse(JSON.stringify(result)));
+      return result;
+    }
+
+    function transformCompositeLocalObject(source, group) {
+      const object = JSON.parse(JSON.stringify(source)); const center = transformCompositePoint({ x: source.x, y: source.y }, group);
+      object.x = center.x; object.y = center.y; object.rotation = normalizeDegrees(Number(source.rotation || 0) + Number((group.metadata?.rotation ?? group.rotation) || 0));
+      if (["wall", "calibration"].includes(object.objectType)) {
+        const metadata = migrateLegacyWallMetadata(source); const start = transformCompositePoint({ x: metadata.start_x_mm, y: metadata.start_y_mm }, group); const end = transformCompositePoint({ x: metadata.end_x_mm, y: metadata.end_y_mm }, group);
+        object.metadata = { ...object.metadata, start_x_mm: Math.round(start.x), start_y_mm: Math.round(start.y), end_x_mm: Math.round(end.x), end_y_mm: Math.round(end.y) };
+        syncWorkspaceLineObjectFromMetadata(object);
+      }
+      return object;
+    }
+
+    function compositeGeometryBounds(objects) {
+      if (!objects.length) return { left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000 };
+      const boxes = objects.map(compositeObjectBounds); const left = Math.min(...boxes.map((box) => box.left)); const right = Math.max(...boxes.map((box) => box.right)); const top = Math.min(...boxes.map((box) => box.top)); const bottom = Math.max(...boxes.map((box) => box.bottom));
+      return { left, right, top, bottom, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+    }
+
+    function refreshCompositeGroupChildren(group) {
+      if (!isCompositeGroup(group) || !Array.isArray(group._compositeGeometry)) return;
+      workspaceObjects = workspaceObjects.filter((object) => object.metadata?.compositeGroupId !== group.instanceId);
+      const children = group._compositeGeometry.map((source, index) => {
+        const object = transformCompositeLocalObject(source, group);
+        object.instanceId = `${group.instanceId}:child:${index}`; object.locked = true;
+        object.metadata = { ...(object.metadata || {}), baseFloorplanObject: true, compositeBaseChild: true, compositeGroupId: group.instanceId, sourceBasePlanId: group.metadata.sourceBasePlanId };
+        return object;
+      });
+      const bounds = compositeGeometryBounds(children); group.x = (bounds.left + bounds.right) / 2; group.y = (bounds.top + bounds.bottom) / 2; group.widthM = bounds.width / 1000; group.heightM = bounds.height / 1000;
+      group.rotation = 0; group.opacity = .06; workspaceObjects.push(...children);
+    }
+
+    function syncCompositeGroupFromObject(group, snap = false) {
+      if (!isCompositeGroup(group) || !Array.isArray(group._compositeGeometry)) return;
+      const originGroup = { rotation: 0, metadata: { offsetX: 0, offsetY: 0, rotation: Number(group.metadata.rotation || 0) } };
+      const originBounds = compositeGeometryBounds(group._compositeGeometry.map((object) => transformCompositeLocalObject(object, originGroup)));
+      let nextX = group.x; let nextY = group.y;
+      if (snap) {
+        const moving = compositeObjectBounds(group); const tolerance = 250;
+        workspaceObjects.filter((object) => isCompositeGroup(object) && object.instanceId !== group.instanceId).some((other) => {
+          const fixed = compositeObjectBounds(other); const candidates = [{ delta: fixed.right - moving.left, axis: "x" }, { delta: fixed.left - moving.right, axis: "x" }, { delta: fixed.bottom - moving.top, axis: "y" }, { delta: fixed.top - moving.bottom, axis: "y" }].sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
+          if (Math.abs(candidates[0].delta) > tolerance) return false;
+          if (candidates[0].axis === "x") nextX += candidates[0].delta; else nextY += candidates[0].delta;
+          return true;
+        });
+      }
+      group.metadata.offsetX = Math.round(nextX - (originBounds.left + originBounds.right) / 2);
+      group.metadata.offsetY = Math.round(nextY - (originBounds.top + originBounds.bottom) / 2);
+      refreshCompositeGroupChildren(group);
+    }
+
+    function alignSelectedCompositeGroups(mode) {
+      const groups = [...workspaceSelectedIds].map(findWorkspaceObject).filter(isCompositeGroup); if (groups.length < 2) { setStatus("정렬할 기본도면 그룹을 두 개 이상 선택해주세요.", "warn"); return; }
+      pushWorkspaceHistory(); const anchor = compositeObjectBounds(groups[0]);
+      groups.slice(1).forEach((group) => {
+        const box = compositeObjectBounds(group); let dx = 0; let dy = 0;
+        if (mode === "left") dx = anchor.left - box.left; if (mode === "right") dx = anchor.right - box.right;
+        if (mode === "top") dy = anchor.top - box.top; if (mode === "bottom") dy = anchor.bottom - box.bottom;
+        if (mode === "center-x") dx = (anchor.left + anchor.right - box.left - box.right) / 2;
+        if (mode === "center-y") dy = (anchor.top + anchor.bottom - box.top - box.bottom) / 2;
+        group.x += dx; group.y += dy; syncCompositeGroupFromObject(group, false);
+      });
+      markWorkspaceDirty(); renderWorkspace();
+    }
+
+    async function hydrateCompositeGroup(group) {
+      group._compositeGeometry = await loadCompositePlanGeometry(group.metadata.sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")].filter(Boolean));
+      group.metadata = { ...(group.metadata || {}), baseFloorplanObject: true, compositeBasePlanGroup: true, locked: true };
+      refreshCompositeGroupChildren(group);
+    }
+
+    async function hydrateCompositeGroups(objects) {
+      for (const group of objects.filter(isCompositeGroup)) await hydrateCompositeGroup(group);
+    }
+
+    async function openCompositeBasePlanModal() {
+      if (!workspaceFloorplanRecord?.id || workspaceEditMode !== "base") { setStatus("기본도면 편집 모드에서 불러올 수 있습니다.", "warn"); return; }
+      compositeFloorplans = await loggedSupabaseRequest("composite floorplan list", "venue_floorplans?select=*&is_active=eq.true&order=floorplan_name.asc").catch(() => []);
+      const available = compositeFloorplans.filter((row) => String(row.id) !== String(workspaceFloorplanRecord.id));
+      workspaceImportBaseSelect.innerHTML = '<option value="">기본도면 선택</option>' + available.map((row) => `<option value="${escapeAttribute(row.id)}">${escapeHtml(row.floorplan_name || "기본도면")}</option>`).join("");
+      workspaceImportBaseModal.hidden = false; workspaceImportBaseModal.classList.add("visible");
+    }
+    function closeCompositeBasePlanModal() { if (!workspaceImportBaseModal) return; workspaceImportBaseModal.hidden = true; workspaceImportBaseModal.classList.remove("visible"); }
+    async function importSelectedCompositeBasePlan() {
+      const sourceBasePlanId = workspaceImportBaseSelect?.value || ""; const floorplan = compositeFloorplans.find((row) => String(row.id) === sourceBasePlanId);
+      if (!floorplan) return;
+      try {
+        const geometry = await loadCompositePlanGeometry(sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")]);
+        const localBounds = compositeGeometryBounds(geometry); const existingGroups = workspaceObjects.filter(isCompositeGroup); const right = existingGroups.length ? Math.max(...existingGroups.map((group) => compositeObjectBounds(group).right)) + 500 : 0;
+        const group = { instanceId: crypto.randomUUID ? crypto.randomUUID() : `base_group_${Date.now()}`, masterObjectId: "", objectType: "base_plan_group", label: floorplan.floorplan_name || "기본도면", x: 0, y: 0, widthM: localBounds.width / 1000, heightM: localBounds.height / 1000, rotation: 0, seatCount: 0, zIndex: getWorkspaceMinZIndex() - 1, locked: true, opacity: .06, metadata: { baseFloorplanObject: true, compositeBasePlanGroup: true, sourceBasePlanId, offsetX: Math.round(right - localBounds.left), offsetY: Math.round(-localBounds.top), rotation: 0, locked: true }, _compositeGeometry: geometry };
+        pushWorkspaceHistory(); workspaceObjects.push(group); refreshCompositeGroupChildren(group); workspaceBaseObjects = workspaceObjects.filter(isWorkspaceBaseObject); workspaceSelectedIds = new Set([group.instanceId]); workspaceSelectedId = group.instanceId; markWorkspaceDirty(); closeCompositeBasePlanModal(); renderWorkspace();
+      } catch (error) { setStatus(error.message || "기본도면을 불러오지 못했습니다.", "error"); }
+    }
+
     async function loadWorkspaceFloorplanState() {
       const isGeometryFloorplan = workspaceSourceRow?._workspaceSourceKind === "geometry";
       if (!isGeometryFloorplan && !workspaceSourceFile?.id) return;
@@ -1973,13 +2114,12 @@
         .filter((row) => row.object_type !== "hall_outline")
         .map((row) => dbObjectToWorkspaceObject(row, true))
         .map((object) => ({ ...object, locked: true, metadata: { ...(object.metadata || {}), baseFloorplanObject: true } }));
-      workspaceBaseObjects = JSON.parse(JSON.stringify(fixedObjects));
+      const existingLayoutObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
+      workspaceObjects = [...fixedObjects, ...existingLayoutObjects];
+      await hydrateCompositeGroups(fixedObjects);
+      workspaceBaseObjects = JSON.parse(JSON.stringify(workspaceObjects.filter(isWorkspaceBaseObject)));
       workspaceCalibration = null;
       fixedObjects.filter((object) => object.objectType === "calibration").forEach(applyWorkspaceCalibrationFromObject);
-      workspaceObjects = [
-        ...fixedObjects,
-        ...workspaceObjects.filter((object) => !isWorkspaceBaseObject(object)),
-      ];
       renderWorkspace();
     }
 
@@ -2047,7 +2187,7 @@
       workspaceSaveAsButton.disabled = true;
       updateWorkspaceStatus("저장 중");
       try {
-        const fixedObjects = workspaceObjects.filter(isWorkspaceBaseObject);
+        const fixedObjects = workspaceObjects.filter((object) => isWorkspaceBaseObject(object) && !isCompositeChild(object));
         const layoutOnlyObjects = workspaceObjects.filter((object) => !isWorkspaceBaseObject(object));
         if (workspaceSourceRow?._workspaceSourceKind !== "geometry") {
           workspaceFloorplanRecord = await upsertWorkspaceFloorplan();
@@ -2123,7 +2263,7 @@
           body: JSON.stringify({ floorplan_name: name, actual_width: workspaceDrawingWidthMm / 1000, actual_height: workspaceDrawingHeightMm / 1000 }),
         });
         workspaceFloorplanRecord = rows?.[0] || workspaceFloorplanRecord;
-        const structures = workspaceObjects.filter(isWorkspaceBaseObject).map(workspaceObjectToDbShape);
+        const structures = workspaceObjects.filter((object) => isWorkspaceBaseObject(object) && !isCompositeChild(object)).map(workspaceObjectToDbShape);
         await replaceFloorplanStructures(workspaceFloorplanRecord.id, structures);
         workspaceDirty = false;
         resetWorkspaceHistory();
@@ -3133,7 +3273,7 @@
         box.setAttribute("pointer-events", "none");
         group.append(box);
         if (workspaceSelectedIds.size === 1 && canWorkspaceEditObject(object)) {
-          group.append(createWorkspaceResizeHandle(object, width, height));
+          if (!isCompositeGroup(object)) group.append(createWorkspaceResizeHandle(object, width, height));
           group.append(createWorkspaceRotateHandle(object, height));
         }
         workspaceSelectionLayer.append(group);
@@ -3523,6 +3663,7 @@
             selectedObject.y = start.y + boundedDelta.y;
           }
         });
+        starts.map((start) => findWorkspaceObject(start.id)).filter(isCompositeGroup).forEach((group) => syncCompositeGroupFromObject(group, true));
         workspaceDragState.moved = true;
       }
       markWorkspaceDirty();
@@ -3765,16 +3906,20 @@
       if (!canWorkspaceEditObject(object)) {
         inputs.concat(buttons).forEach((el) => { if (el) el.disabled = true; });
       }
+      if (isCompositeGroup(object)) {
+        [workspaceWidthInput, workspaceHeightInput, workspaceSeatCountInput, workspaceZIndexInput, workspaceOpacityInput, workspaceDuplicateButton, workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton].forEach((input) => { if (input) input.disabled = true; });
+        if (panelHelp) panelHelp.textContent = `기본도면: ${object.label} · 내부 구조물 잠금`;
+      }
       const isWallLike = ["wall", "calibration"].includes(object.objectType);
       [workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput].forEach((input) => {
         if (input && isWallLike) input.disabled = true;
       });
       workspaceLabelInput.value = object.label || "";
-      workspaceXInput.value = roundNumber(object.x);
-      workspaceYInput.value = roundNumber(object.y);
+      workspaceXInput.value = isCompositeGroup(object) ? Math.round(Number(object.metadata.offsetX || 0)) : roundNumber(object.x);
+      workspaceYInput.value = isCompositeGroup(object) ? Math.round(Number(object.metadata.offsetY || 0)) : roundNumber(object.y);
       workspaceWidthInput.value = roundNumber(object.widthM);
       workspaceHeightInput.value = roundNumber(object.heightM);
-      workspaceRotationInput.value = Math.round(object.rotation || 0);
+      workspaceRotationInput.value = Math.round(isCompositeGroup(object) ? Number(object.metadata.rotation || 0) : Number(object.rotation || 0));
       workspaceSeatCountInput.value = object.seatCount || 0;
       workspaceZIndexInput.value = object.zIndex || 0;
       if (workspaceOpacityInput) workspaceOpacityInput.value = Math.round(getWorkspaceObjectOpacity(object) * 100);
@@ -3814,6 +3959,12 @@
       if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
       object.label = workspaceLabelInput.value.trim() || object.label;
+      if (isCompositeGroup(object)) {
+        object.metadata.offsetX = Math.round(toWorkspaceNumber(workspaceXInput.value, object.metadata.offsetX || 0));
+        object.metadata.offsetY = Math.round(toWorkspaceNumber(workspaceYInput.value, object.metadata.offsetY || 0));
+        object.metadata.rotation = normalizeDegrees(toWorkspaceNumber(workspaceRotationInput.value, object.metadata.rotation || 0));
+        refreshCompositeGroupChildren(object); markWorkspaceDirty(); renderWorkspace(); return;
+      }
       object.x = clampNumber(toWorkspaceNumber(workspaceXInput.value, object.x), 0, workspaceSize.width);
       object.y = clampNumber(toWorkspaceNumber(workspaceYInput.value, object.y), 0, workspaceSize.height);
       object.widthM = Math.max(0.1, toWorkspaceNumber(workspaceWidthInput.value, object.widthM));
@@ -3825,6 +3976,7 @@
         object.opacity = clampNumber(toWorkspaceNumber(workspaceOpacityInput.value, getWorkspaceObjectOpacity(object) * 100) / 100, 0, 1);
         object.metadata = { ...(object.metadata || {}), opacity: object.opacity };
       }
+      if (isCompositeGroup(object)) syncCompositeGroupFromObject(object, true);
       markWorkspaceDirty();
       renderWorkspace();
     }
@@ -3947,7 +4099,8 @@
       const object = findWorkspaceObject(workspaceSelectedId);
       if (!object || !canWorkspaceEditObject(object)) return;
       pushWorkspaceHistory();
-      object.rotation = normalizeDegrees(Number(object.rotation || 0) + 90);
+      if (isCompositeGroup(object)) { object.metadata.rotation = normalizeDegrees(Number(object.metadata.rotation || 0) + 90); refreshCompositeGroupChildren(object); }
+      else object.rotation = normalizeDegrees(Number(object.rotation || 0) + 90);
       markWorkspaceDirty();
       renderWorkspace();
     }
@@ -3956,7 +4109,7 @@
       const deletableIds = new Set([...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject).map((object) => object.instanceId));
       if (!deletableIds.size) return;
       pushWorkspaceHistory();
-      workspaceObjects = workspaceObjects.filter((object) => !deletableIds.has(object.instanceId));
+      workspaceObjects = workspaceObjects.filter((object) => !deletableIds.has(object.instanceId) && !deletableIds.has(object.metadata?.compositeGroupId));
       workspaceSelectedIds.clear();
       workspaceSelectedId = "";
       markWorkspaceDirty();
