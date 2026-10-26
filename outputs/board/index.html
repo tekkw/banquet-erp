@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=operations-autopilot-v6-pinned-setup-accordion">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=qwen3-tts-cloud-v1">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=browser-tts-quality-v3">
   <link rel="stylesheet" href="../src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body class="operation-board-page">
@@ -38,6 +38,15 @@
           <option value="qwen">Qwen</option>
           <option value="browser">브라우저</option>
         </select>
+        <label for="boardBrowserVoice">음성</label>
+        <select id="boardBrowserVoice"><option value="">자동 추천</option></select>
+        <label for="boardTtsRate">속도</label>
+        <select id="boardTtsRate">
+          <option value="0.9">느리게</option>
+          <option value="0.96">보통</option>
+          <option value="1.05">빠르게</option>
+        </select>
+        <button id="boardVoiceTestButton" type="button">음성 테스트</button>
         <span id="boardVoiceReplyStatus" aria-live="polite" hidden></span>
       </div>
       <div id="boardVisualCamera" class="board-visual-camera" hidden>
@@ -87,6 +96,6 @@
   <script src="../src/erpActionRegistry.js?v=1"></script>
   <script src="../src/erpConversationAgent.js?v=voice-conversation-v2"></script>
   <script src="../src/eventOrderAnalytics.js?v=event-order-analytics-v1"></script>
-  <script src="../src/operationBoardPage.js?v=qwen3-tts-cloud-v1"></script>
+  <script src="../src/operationBoardPage.js?v=browser-tts-quality-v3"></script>
 </body>
 </html>

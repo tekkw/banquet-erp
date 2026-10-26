@@ -18,9 +18,9 @@ assert(page.includes("window.speechSynthesis"));
 assert(page.includes("window.SpeechSynthesisUtterance"));
 assert(page.includes('utterance.lang = "ko-KR"'));
 assert(page.includes("utterance.rate = ttsSettings.speed"));
-assert(page.includes('.toLowerCase().startsWith("ko")'));
+assert(page.includes('/^ko(?:-|$)/i.test'));
 assert(page.includes("speechSynthesisApi.cancel()"));
-assert(page.includes("spokenText === lastSpokenText"));
+assert(page.includes("isNearDuplicateSpeech(spokenText)"));
 
 assert(page.includes("storedVoiceReplyEnabled()"));
 assert(page.includes("localStorage.setItem(voiceReplyStorageKey"));

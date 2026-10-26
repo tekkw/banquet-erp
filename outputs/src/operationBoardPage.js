@@ -32,6 +32,9 @@
   const voiceReplyButton = document.getElementById("boardVoiceReplyButton");
   const voiceReplyStatus = document.getElementById("boardVoiceReplyStatus");
   const ttsQualitySelect = document.getElementById("boardTtsQuality");
+  const browserVoiceSelect = document.getElementById("boardBrowserVoice");
+  const ttsRateSelect = document.getElementById("boardTtsRate");
+  const voiceTestButton = document.getElementById("boardVoiceTestButton");
   const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
   const voiceReplyStorageKey = "banquetBoard.voiceReplyEnabled";
   const ttsSettingsStorageKey = "banquetBoard.ttsSettings.v1";
@@ -120,6 +123,8 @@
   let highQualityAudio = null;
   let highQualityAudioUrl = "";
   let ttsPlaybackId = 0;
+  let cachedKoreanVoices = [];
+  let selectedBrowserVoice = null;
 
   function escapeHtml(value) { return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char])); }
   function storedUser() { try { const value = JSON.parse(localStorage.getItem(constants.authStorageKey) || "null"); return constants.loginAccounts.find((account) => account.id === value?.id && account.role === value?.role) || null; } catch { return null; } }
@@ -294,7 +299,8 @@
     pendingEventQuery = null; const answer = `${result.period?.label || "오늘"} 행사는 ${result.events.length}건입니다.`;
     saveConversationContext({ ...conversationContext, event: { period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period), venue: eventVenue(event), organizer: eventOrganizer(event) })) });
     renderAiContext(); aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(result.period?.label || "오늘")} 행사</h3><p>${escapeHtml(answer)}</p><ul>${result.events.map((event) => `<li>${escapeHtml(eventVoiceLabel(event))}</li>`).join("")}</ul></div>`;
-    rememberConversation(userText, answer); speakBoardReply(`${answer} ${result.events.map(eventVoiceLabel).join(", ")}입니다.`); finishFieldAiAnswer();
+    const eventListTts = result.events.map((event) => `${window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(eventVenue(event)) || eventVenue(event)}, ${eventOrganizer(event)}.`).join(" ");
+    rememberConversation(userText, answer); speakBoardReply(`${answer} ${eventListTts}`); finishFieldAiAnswer();
   }
   function textValues(row) { return Object.values(row || {}).filter((value) => ["string", "number"].includes(typeof value)).map(String); }
   function explicitLayoutTexts(event) {
@@ -680,14 +686,16 @@
   }
   function storedVoiceReplyEnabled() { try { return localStorage.getItem(voiceReplyStorageKey) === "true"; } catch { return false; } }
   function loadTtsSettings() {
-    const defaults = { provider: "qwen", voice: "Cherry", gender: "current", tone: "current", speed: 1 };
+    const defaults = { provider: "qwen", voice: "Cherry", browserVoiceName: "", gender: "current", tone: "current", speed: 0.96 };
     try {
       const saved = JSON.parse(localStorage.getItem(ttsSettingsStorageKey) || "null");
-      return saved && typeof saved === "object" ? { ...defaults, ...saved, provider: saved.provider === "browser" ? "browser" : "qwen" } : defaults;
+      if (!saved || typeof saved !== "object") return defaults;
+      const speed = [0.9, 0.96, 1.05].includes(Number(saved.speed)) ? Number(saved.speed) : defaults.speed;
+      return { ...defaults, ...saved, speed, provider: saved.provider === "browser" ? "browser" : "qwen" };
     } catch { return defaults; }
   }
   function saveTtsSettings(settings) {
-    ttsSettings = settings; ttsQualitySelect.value = settings.provider;
+    ttsSettings = settings; ttsQualitySelect.value = settings.provider; browserVoiceSelect.value = settings.browserVoiceName || ""; ttsRateSelect.value = String(settings.speed);
     try { localStorage.setItem(ttsSettingsStorageKey, JSON.stringify(settings)); } catch { /* storage unavailable */ }
   }
   function updateVoiceReplyButton() { voiceReplyButton.textContent = voiceReplyEnabled ? "🔊 음성 답변 ON" : "🔊 음성 답변 OFF"; voiceReplyButton.setAttribute("aria-pressed", String(voiceReplyEnabled)); }
@@ -698,24 +706,62 @@
     if (highQualityAudio) { highQualityAudio.pause(); highQualityAudio = null; }
     if (highQualityAudioUrl) { URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; }
   }
-  function conciseBoardReply(text) {
-    const clean = String(text || "").replace(/조회 결과는 총\s*(\d+)건입니다\.?/g, "$1건이에요.").replace(/해당 행사에 대한 데이터가 존재하지 않습니다\.?/g, "현재 저장된 정보에서는 찾지 못했어요.").replace(/등록된 이벤오더에서 ([^.]+)을 찾지 못했습니다\.?/g, "현재 저장된 정보에서는 $1을 찾지 못했어요.").replace(/\s+/g, " ").trim();
+  function spokenKoreanCount(value) { return ({ 1: "한", 2: "두", 3: "세", 4: "네", 5: "다섯", 6: "여섯", 7: "일곱", 8: "여덟", 9: "아홉", 10: "열" }[Number(value)] || value); }
+  function spokenClock(hourText, minuteText) {
+    const hour = Number(hourText); const minute = Number(minuteText); const period = hour < 12 ? "오전" : "오후"; const displayHour = hour % 12 || 12;
+    const koreanHour = ({ 1: "한", 2: "두", 3: "세", 4: "네", 5: "다섯", 6: "여섯", 7: "일곱", 8: "여덟", 9: "아홉", 10: "열", 11: "열한", 12: "열두" }[displayHour] || displayHour);
+    return `${period} ${koreanHour} 시${minute === 0 ? "" : minute === 30 ? " 반" : ` ${minute}분`}`;
+  }
+  function formatTtsForSpeech(text) {
+    const clean = String(text || "")
+      .replace(/조회 결과는 총\s*(\d+)건입니다\.?/g, (_, count) => `오늘 행사는 ${spokenKoreanCount(count)} 건이에요.`)
+      .replace(/오늘 행사는\s*(\d+)건입니다\.?/g, (_, count) => `오늘 행사는 ${spokenKoreanCount(count)} 건이에요.`)
+      .replace(/(?:해당 행사에 대한 데이터가 존재하지|확인되지) 않습니다\.?/g, "현재 저장된 정보에서는 찾지 못했어요.")
+      .replace(/등록된 이벤오더에서 ([^.]+)을 찾지 못했습니다\.?/g, "현재 저장된 정보에서는 $1을 찾지 못했어요.")
+      .replace(/선택하여 주십시오\.?/g, "어느 행사인지 말씀해 주세요.")
+      .replace(/세팅 완료하셨나요\?/g, "세팅은 끝났나요?")
+      .replace(/컨\s*AB/gi, "컨벤션 에이비").replace(/부\s*ALL/gi, "부라노 전체")
+      .replace(/카\s*1/g, "카프리 원").replace(/카\s*2/g, "카프리 투").replace(/카\s*3/g, "카프리 쓰리")
+      .replace(/(\d+)\s*EA\b/gi, (_, count) => `${spokenKoreanCount(count)} 개`)
+      .replace(/(\d+)\s*T\b/g, (_, count) => `테이블 ${spokenKoreanCount(count)} 개`)
+      .replace(/\b(\d{1,2}):(\d{2})\b/g, (_, hour, minute) => spokenClock(hour, minute))
+      .replace(/\b(\d{1,2})\/(\d{1,2})\b/g, (_, month, day) => `${Number(month)}월 ${Number(day)}일`)
+      .replace(/\s+/g, " ").trim();
     if (clean.length <= 220) return clean;
     const firstSentence = clean.match(/^.{1,180}?(?:[.!?]|다\.|요\.|니다\.)/)?.[0] || `${clean.slice(0, 180).trim()}…`;
     return `${firstSentence} 자세한 내용은 화면을 확인해주세요.`;
   }
+  function conciseBoardReply(text) { return formatTtsForSpeech(text); }
   function formatQwenTtsText(text) {
-    const spokenCount = (value) => ({ 1: "한", 2: "두", 3: "세", 4: "네", 5: "다섯", 6: "여섯", 7: "일곱", 8: "여덟", 9: "아홉", 10: "열" }[Number(value)] || value);
     return String(text || "")
       .replace(/컨\s*AB/gi, "컨벤션 에이비")
       .replace(/부\s*ALL/gi, "부라노 전체")
       .replace(/카\s*1/g, "카프리 원")
-      .replace(/(\d+)\s*EA\b/gi, (_, count) => `${spokenCount(count)} 개`)
-      .replace(/(\d+)\s*T\b/g, (_, count) => `테이블 ${spokenCount(count)} 개`);
+      .replace(/(\d+)\s*EA\b/gi, (_, count) => `${spokenKoreanCount(count)} 개`)
+      .replace(/(\d+)\s*T\b/g, (_, count) => `테이블 ${spokenKoreanCount(count)} 개`);
   }
-  function ttsChunks(text) { return String(text || "").match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || []; }
+  function ttsChunks(text) {
+    const sentences = String(text || "").match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || []; const chunks = [];
+    for (let index = 0; index < sentences.length; index += 2) { const pair = sentences.slice(index, index + 2).join(" "); if (pair.length <= 140) chunks.push(pair); else chunks.push(...sentences.slice(index, index + 2)); }
+    return chunks;
+  }
+  function selectBestKoreanVoice(voices) {
+    const korean = Array.from(voices || []).filter((voice) => /^ko(?:-|$)/i.test(String(voice.lang || "")));
+    return korean.sort((left, right) => {
+      const score = (voice) => Number(String(voice.lang).toLowerCase() === "ko-kr") * 16 + Number(Boolean(voice.localService)) * 8 + Number(/natural|neural|google|samsung|microsoft/i.test(voice.name || "")) * 4 + Number(Boolean(voice.default)) * 2;
+      return score(right) - score(left);
+    })[0] || null;
+  }
+  function loadBrowserVoices() {
+    cachedKoreanVoices = Array.from(speechSynthesisApi?.getVoices() || []).filter((voice) => /^ko(?:-|$)/i.test(String(voice.lang || "")));
+    const preferred = ttsSettings.browserVoiceName ? cachedKoreanVoices.find((voice) => voice.name === ttsSettings.browserVoiceName) : null;
+    selectedBrowserVoice = preferred || selectBestKoreanVoice(cachedKoreanVoices);
+    browserVoiceSelect.innerHTML = `<option value="">자동 추천</option>${cachedKoreanVoices.map((voice) => `<option value="${escapeHtml(voice.name)}">${escapeHtml(voice.name)}</option>`).join("")}`;
+    browserVoiceSelect.value = preferred ? preferred.name : "";
+  }
   function preferredKoreanVoice() {
-    return speechSynthesisApi?.getVoices().filter((voice) => String(voice.lang || "").toLowerCase().startsWith("ko")).sort((left, right) => Number(Boolean(right.localService)) - Number(Boolean(left.localService)))[0] || null;
+    if (ttsSettings.browserVoiceName) { const chosen = cachedKoreanVoices.find((voice) => voice.name === ttsSettings.browserVoiceName); if (chosen) return chosen; }
+    return selectedBrowserVoice || selectBestKoreanVoice(speechSynthesisApi?.getVoices() || []);
   }
   function voicePlaybackEnded(playbackId) {
     if (playbackId !== ttsPlaybackId) return;
@@ -729,10 +775,9 @@
     return new Promise((resolve) => {
       const speakNext = (index) => {
         if (playbackId !== ttsPlaybackId || index >= chunks.length) { resolve(); return; }
-        const utterance = new SpeechSynthesisUtteranceApi(chunks[index]); utterance.lang = "ko-KR"; utterance.rate = ttsSettings.speed; utterance.pitch = 1; utterance.volume = 1;
-        if (voiceConversationEnabled) utterance.rate = Math.min(1, Math.max(.95, utterance.rate));
+        const utterance = new SpeechSynthesisUtteranceApi(chunks[index]); utterance.lang = "ko-KR"; utterance.rate = ttsSettings.speed || 0.96; utterance.pitch = 1; utterance.volume = 1;
         if (koreanVoice) utterance.voice = koreanVoice;
-        utterance.onend = () => speakNext(index + 1);
+        utterance.onend = () => setTimeout(() => speakNext(index + 1), 120);
         utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board browser TTS failed", event.error); resolve(); };
         speechSynthesisApi.speak(utterance);
       };
@@ -760,9 +805,13 @@
     }
   }
   const ttsProviders = { qwen: playQwenTts, browser: playBrowserTts };
+  function isNearDuplicateSpeech(text) {
+    const compact = (value) => String(value || "").replace(/[\s.,!?]/g, ""); const next = compact(text); const previous = compact(lastSpokenText);
+    return Boolean(next && previous && (next === previous || (Math.min(next.length, previous.length) / Math.max(next.length, previous.length) >= 0.85 && (next.includes(previous) || previous.includes(next)))));
+  }
   async function speakBoardReply(text) {
     const spokenText = conciseBoardReply(text);
-    if (!voiceReplyEnabled || !spokenText || spokenText === lastSpokenText) return;
+    if (!voiceReplyEnabled || !spokenText || isNearDuplicateSpeech(spokenText)) return;
     cancelBoardSpeech(); const playbackId = ttsPlaybackId; lastSpokenText = spokenText; voiceTtsSpeaking = true; if (voiceConversationEnabled) setSpeechStatus("AI 답변 중...");
     if (speechRecognition && speechListening) { fieldAiAutoSubmit = false; try { speechRecognition.abort(); } catch { /* already stopped */ } }
     try {
@@ -774,6 +823,10 @@
     }
     voicePlaybackEnded(playbackId);
   }
+  async function testBrowserVoice() {
+    cancelBoardSpeech(); const playbackId = ttsPlaybackId;
+    try { await playBrowserTts(formatTtsForSpeech("오늘 행사는 네 건이에요. 카프리 원 충남대학교 행사가 있습니다."), playbackId); } catch (error) { console.warn("browser voice test failed", error); }
+  }
   function ttsSettingsProposal(text) {
     if (!/(?:목소리|음성|말(?:하는)?\s*속도|천천히|빠르게|고품질|브라우저).*(?:바꿔|변경|해줘|말해|유지)|(?:천천히|빠르게)\s*말해|말(?:하는)?\s*속도\s*(?:빠르게|천천히|느리게|빨리)/i.test(text)) return null;
     const next = { ...ttsSettings }; const changes = [];
@@ -783,8 +836,8 @@
       if (/여성/.test(text)) { next.gender = "female"; next.voice = "Cherry"; next.provider = "qwen"; changes.push("여성형 Qwen 음성"); }
       if (/차분|편안/.test(text)) { next.tone = "calm"; changes.push("차분한 말투"); }
       if (/밝게|활기/.test(text)) { next.tone = "bright"; changes.push("밝은 말투"); }
-      if (/천천히|느리게/.test(text)) { next.speed = 0.85; changes.push("느린 속도"); }
-      if (/빠르게|빨리/.test(text)) { next.speed = 1.15; changes.push("빠른 속도"); }
+      if (/천천히|느리게/.test(text)) { next.speed = 0.9; changes.push("느린 속도"); }
+      if (/빠르게|빨리/.test(text)) { next.speed = 1.05; changes.push("빠른 속도"); }
       if (/고품질|Qwen|큐웬/i.test(text)) { next.provider = "qwen"; changes.push("Qwen 음성"); }
       if (/기본\s*브라우저|브라우저\s*음성/.test(text)) { next.provider = "browser"; changes.push("기본 브라우저 음성"); }
     }
@@ -1226,6 +1279,12 @@
   voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
   ttsQualitySelect.value = ttsSettings.provider;
   ttsQualitySelect.addEventListener("change", () => saveTtsSettings({ ...ttsSettings, provider: ttsQualitySelect.value === "browser" ? "browser" : "qwen" }));
+  ttsRateSelect.value = [0.9, 0.96, 1.05].includes(Number(ttsSettings.speed)) ? String(ttsSettings.speed) : "0.96";
+  ttsRateSelect.addEventListener("change", () => saveTtsSettings({ ...ttsSettings, speed: Number(ttsRateSelect.value) || 0.96 }));
+  browserVoiceSelect.addEventListener("change", () => { saveTtsSettings({ ...ttsSettings, browserVoiceName: browserVoiceSelect.value }); loadBrowserVoices(); });
+  voiceTestButton.addEventListener("click", testBrowserVoice);
+  loadBrowserVoices();
+  speechSynthesisApi?.addEventListener?.("voiceschanged", loadBrowserVoices);
   visualCameraButton.addEventListener("click", async () => { aiPlusMenu.hidden = true; aiPlusButton.setAttribute("aria-expanded", "false"); try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
   aiPlusButton?.addEventListener("click", () => { const open = aiPlusMenu.hidden; aiPlusMenu.hidden = !open; aiPlusButton.setAttribute("aria-expanded", String(open)); });
   aiContextClearButton?.addEventListener("click", clearRecentEventSettingContext);

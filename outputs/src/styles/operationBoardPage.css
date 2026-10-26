@@ -38,7 +38,7 @@ body.operation-board-page { min-width: 0; margin: 0; background: #081a2b; color:
 .board-ai-panel { position: fixed; z-index: 30; right: 0; bottom: var(--mobile-bottom-nav-height); left: 0; width: min(100%, 720px); margin: 0 auto; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(150,180,205,.2); background: rgba(8,26,43,.97); backdrop-filter: blur(14px); }
 .board-ai-quick-actions [data-mobile-ai-briefing-badge] { display: inline-grid; min-width: 18px; height: 18px; margin-left: 3px; padding: 0 4px; border-radius: 999px; background: #f97316; color: #fff; font-size: 10px; place-items: center; }
 .board-ai-quick-actions [data-mobile-ai-briefing-badge][hidden] { display: none; }
-.board-ai-voice-settings { display: flex; justify-content: flex-end; gap: 7px; align-items: center; margin-bottom: 5px; }
+.board-ai-voice-settings { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 7px; align-items: center; margin-bottom: 5px; }
 .board-ai-voice-settings button { min-height: 28px; padding: 0 9px; border: 1px solid rgba(150,180,205,.28); border-radius: 999px; background: #173955; color: #bfdbfe; font: inherit; font-size: 11px; font-weight: 700; }
 .board-ai-voice-settings button[aria-pressed="true"] { border-color: rgba(52,211,153,.55); color: #a7f3d0; }
 .board-ai-voice-settings button:disabled { cursor: not-allowed; opacity: .5; }
