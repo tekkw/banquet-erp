@@ -680,10 +680,10 @@
   }
   function storedVoiceReplyEnabled() { try { return localStorage.getItem(voiceReplyStorageKey) === "true"; } catch { return false; } }
   function loadTtsSettings() {
-    const defaults = { provider: "browser", voice: "marin", gender: "current", tone: "current", speed: 1 };
+    const defaults = { provider: "qwen", voice: "Cherry", gender: "current", tone: "current", speed: 1 };
     try {
       const saved = JSON.parse(localStorage.getItem(ttsSettingsStorageKey) || "null");
-      return saved && typeof saved === "object" ? { ...defaults, ...saved, provider: saved.provider === "high_quality" ? "high_quality" : "browser" } : defaults;
+      return saved && typeof saved === "object" ? { ...defaults, ...saved, provider: saved.provider === "browser" ? "browser" : "qwen" } : defaults;
     } catch { return defaults; }
   }
   function saveTtsSettings(settings) {
@@ -703,6 +703,15 @@
     if (clean.length <= 220) return clean;
     const firstSentence = clean.match(/^.{1,180}?(?:[.!?]|다\.|요\.|니다\.)/)?.[0] || `${clean.slice(0, 180).trim()}…`;
     return `${firstSentence} 자세한 내용은 화면을 확인해주세요.`;
+  }
+  function formatQwenTtsText(text) {
+    const spokenCount = (value) => ({ 1: "한", 2: "두", 3: "세", 4: "네", 5: "다섯", 6: "여섯", 7: "일곱", 8: "여덟", 9: "아홉", 10: "열" }[Number(value)] || value);
+    return String(text || "")
+      .replace(/컨\s*AB/gi, "컨벤션 에이비")
+      .replace(/부\s*ALL/gi, "부라노 전체")
+      .replace(/카\s*1/g, "카프리 원")
+      .replace(/(\d+)\s*EA\b/gi, (_, count) => `${spokenCount(count)} 개`)
+      .replace(/(\d+)\s*T\b/g, (_, count) => `테이블 ${spokenCount(count)} 개`);
   }
   function ttsChunks(text) { return String(text || "").match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || []; }
   function preferredKoreanVoice() {
@@ -730,20 +739,27 @@
       speakNext(0);
     });
   }
-  async function playHighQualityTts(spokenText, playbackId) {
-    const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, {
-      method: "POST",
-      headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: "board_tts", text: spokenText, voice: ttsSettings.voice, tone: ttsSettings.tone, speed: ttsSettings.speed }),
-    });
-    if (!response.ok) throw new Error(`high quality TTS failed (${response.status})`);
-    const blob = await response.blob();
-    if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
-    highQualityAudioUrl = URL.createObjectURL(blob); highQualityAudio = new Audio(highQualityAudioUrl);
-    await new Promise((resolve, reject) => { highQualityAudio.addEventListener("ended", resolve, { once: true }); highQualityAudio.addEventListener("error", reject, { once: true }); highQualityAudio.play().catch(reject); });
-    if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; highQualityAudio = null;
+  async function playQwenTts(spokenText, playbackId) {
+    const controller = new AbortController(); const timeoutId = setTimeout(() => controller.abort(), 9000);
+    try {
+      const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, {
+        method: "POST", signal: controller.signal,
+        headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "board_tts", text: formatQwenTtsText(spokenText), language: "ko", provider: "qwen", voice: ttsSettings.voice, speed: ttsSettings.speed }),
+      });
+      if (!response.ok) throw new Error(`Qwen TTS failed (${response.status})`);
+      const blob = await response.blob();
+      if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
+      highQualityAudioUrl = URL.createObjectURL(blob); highQualityAudio = new Audio(highQualityAudioUrl);
+      await new Promise((resolve, reject) => { highQualityAudio.addEventListener("ended", resolve, { once: true }); highQualityAudio.addEventListener("error", reject, { once: true }); highQualityAudio.play().catch(reject); });
+      if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; highQualityAudio = null;
+    } finally {
+      clearTimeout(timeoutId);
+      if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl);
+      highQualityAudioUrl = ""; highQualityAudio = null;
+    }
   }
-  const ttsProviders = { browser: playBrowserTts, high_quality: playHighQualityTts };
+  const ttsProviders = { qwen: playQwenTts, browser: playBrowserTts };
   async function speakBoardReply(text) {
     const spokenText = conciseBoardReply(text);
     if (!voiceReplyEnabled || !spokenText || spokenText === lastSpokenText) return;
@@ -763,13 +779,13 @@
     const next = { ...ttsSettings }; const changes = [];
     if (/지금\s*(?:목소리|음성).*(?:유지|그대로)/.test(text)) changes.push("현재 음성 설정 유지");
     else {
-      if (/남성/.test(text)) { next.gender = "male"; next.voice = "cedar"; next.provider = "high_quality"; changes.push("차분한 남성형 음성"); }
-      if (/여성/.test(text)) { next.gender = "female"; next.voice = "marin"; next.provider = "high_quality"; changes.push("차분한 여성형 음성"); }
+      if (/남성/.test(text)) { next.gender = "male"; next.voice = "Ethan"; next.provider = "qwen"; changes.push("남성형 Qwen 음성"); }
+      if (/여성/.test(text)) { next.gender = "female"; next.voice = "Cherry"; next.provider = "qwen"; changes.push("여성형 Qwen 음성"); }
       if (/차분|편안/.test(text)) { next.tone = "calm"; changes.push("차분한 말투"); }
       if (/밝게|활기/.test(text)) { next.tone = "bright"; changes.push("밝은 말투"); }
       if (/천천히|느리게/.test(text)) { next.speed = 0.85; changes.push("느린 속도"); }
       if (/빠르게|빨리/.test(text)) { next.speed = 1.15; changes.push("빠른 속도"); }
-      if (/고품질/.test(text)) { next.provider = "high_quality"; changes.push("고품질 음성"); }
+      if (/고품질|Qwen|큐웬/i.test(text)) { next.provider = "qwen"; changes.push("Qwen 음성"); }
       if (/기본\s*브라우저|브라우저\s*음성/.test(text)) { next.provider = "browser"; changes.push("기본 브라우저 음성"); }
     }
     return { settings: next, summary: [...new Set(changes)].join(", ") || "현재 음성 설정 유지" };
@@ -1209,7 +1225,7 @@
 
   voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
   ttsQualitySelect.value = ttsSettings.provider;
-  ttsQualitySelect.addEventListener("change", () => saveTtsSettings({ ...ttsSettings, provider: ttsQualitySelect.value === "high_quality" ? "high_quality" : "browser" }));
+  ttsQualitySelect.addEventListener("change", () => saveTtsSettings({ ...ttsSettings, provider: ttsQualitySelect.value === "browser" ? "browser" : "qwen" }));
   visualCameraButton.addEventListener("click", async () => { aiPlusMenu.hidden = true; aiPlusButton.setAttribute("aria-expanded", "false"); try { await openVisualCamera(); } catch (error) { console.error("camera open failed", error); showMessage(error.name === "NotAllowedError" ? "카메라 권한이 필요합니다." : error.message || "카메라를 열지 못했습니다."); } });
   aiPlusButton?.addEventListener("click", () => { const open = aiPlusMenu.hidden; aiPlusMenu.hidden = !open; aiPlusButton.setAttribute("aria-expanded", String(open)); });
   aiContextClearButton?.addEventListener("click", clearRecentEventSettingContext);

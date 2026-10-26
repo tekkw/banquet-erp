@@ -16,6 +16,12 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const OPENAI_MODEL = "gpt-4.1-mini";
+const DASHSCOPE_API_KEY = Deno.env.get("DASHSCOPE_API_KEY") ?? "";
+const DASHSCOPE_TTS_ENDPOINT = Deno.env.get("DASHSCOPE_TTS_ENDPOINT") ?? "";
+const TTS_PROVIDER = (Deno.env.get("TTS_PROVIDER") ?? "browser").toLowerCase();
+const QWEN_TTS_MODEL = "qwen3-tts-flash";
+const QWEN_TTS_VOICES = new Set(["Cherry", "Serena", "Ethan", "Chelsie", "Momo", "Vivian", "Moon", "Maia", "Kai"]);
+const BOARD_TTS_TIMEOUT_MS = 8000;
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -27,13 +33,12 @@ Deno.serve(async (request) => {
   }
 
   try {
-    assertServerConfig();
-
     const payload = await request.json();
     const { question, mode, analysisData, attachments, eventContext } = payload;
     if (mode === "board_tts") {
       return synthesizeBoardSpeech(payload);
     }
+    assertServerConfig();
     if (mode === "event_order_analysis") {
       const [banquetAssets, recommendItems, approvedKnowledge] = await Promise.all([
         loadBanquetAssets(),
@@ -151,25 +156,39 @@ Deno.serve(async (request) => {
   }
 });
 
-const BOARD_TTS_VOICES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse", "marin", "cedar"]);
-
 async function synthesizeBoardSpeech(payload: Record<string, unknown>) {
   const input = String(payload.text ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!input) return jsonResponse({ message: "음성으로 읽을 내용이 없습니다." }, 400);
-  const requestedVoice = String(payload.voice ?? "marin");
-  const voice = BOARD_TTS_VOICES.has(requestedVoice) ? requestedVoice : "marin";
-  const speed = Math.min(1.25, Math.max(0.75, Number(payload.speed) || 1));
-  const tone = payload.tone === "calm" ? "calm and composed" : payload.tone === "bright" ? "bright and friendly" : "natural";
-  const response = await fetch("https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "gpt-4o-mini-tts", voice, input, instructions: `Speak in Korean with a ${tone} hotel concierge tone.`, response_format: "mp3", speed }),
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error?.message || "OpenAI speech generation failed");
+  if (TTS_PROVIDER !== "qwen" || !DASHSCOPE_API_KEY || !DASHSCOPE_TTS_ENDPOINT) {
+    return jsonResponse({ message: "Qwen TTS가 설정되지 않았습니다.", fallback: "browser" }, 503);
   }
-  return new Response(await response.arrayBuffer(), { status: 200, headers: { ...corsHeaders, "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+  const speed = Math.min(1.25, Math.max(0.75, Number(payload.speed) || 1));
+  const requestedVoice = String(payload.voice ?? "Cherry");
+  const voice = QWEN_TTS_VOICES.has(requestedVoice) ? requestedVoice : "Cherry";
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BOARD_TTS_TIMEOUT_MS);
+  try {
+    const response = await fetch(DASHSCOPE_TTS_ENDPOINT, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${DASHSCOPE_API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: QWEN_TTS_MODEL, input: { text: input, voice, format: "mp3", sample_rate: 24000, rate: speed } }),
+    });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(result?.message || result?.code || `DashScope TTS failed (${response.status})`);
+    const audioUrl = String(result?.output?.audio?.url ?? "");
+    if (!audioUrl) throw new Error("DashScope TTS audio URL missing");
+    const audioResponse = await fetch(audioUrl, { signal: controller.signal });
+    if (!audioResponse.ok) throw new Error(`DashScope TTS audio download failed (${audioResponse.status})`);
+    console.info("board TTS", { provider: "qwen", success: true, latencyMs: Date.now() - startedAt, characterCount: input.length });
+    return new Response(await audioResponse.arrayBuffer(), { status: 200, headers: { ...corsHeaders, "Content-Type": audioResponse.headers.get("Content-Type") || "audio/mpeg", "Cache-Control": "no-store", "X-TTS-Provider": "qwen" } });
+  } catch (error) {
+    console.warn("board TTS", { provider: "qwen", success: false, latencyMs: Date.now() - startedAt, characterCount: input.length, reason: error instanceof DOMException && error.name === "AbortError" ? "timeout" : "request_failed" });
+    return jsonResponse({ message: error instanceof DOMException && error.name === "AbortError" ? "Qwen TTS timeout" : "Qwen TTS failed", fallback: "browser" }, 502);
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 function assertServerConfig() {

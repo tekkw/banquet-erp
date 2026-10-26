@@ -7,7 +7,7 @@ const css = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8")
 
 assert(html.includes('id="boardVoiceReplyButton"'));
 assert(html.includes('id="boardTtsQuality"'));
-assert(html.includes('value="high_quality"'));
+assert(html.includes('value="qwen"'));
 assert(html.includes("🔊 음성 답변 OFF"));
 assert(/operationBoardPage\.js\?v=[^"]+/.test(html));
 assert(/operationBoardPage\.css\?v=[^"]+/.test(html));
@@ -27,8 +27,8 @@ assert(page.includes("localStorage.setItem(voiceReplyStorageKey"));
 assert(page.includes('mode: "board_tts"'));
 assert(page.includes("ttsProviders[ttsSettings.provider]"));
 assert(page.includes("preferred board TTS failed; using browser fallback"));
-assert(page.includes('next.voice = "cedar"'));
-assert(page.includes('next.voice = "marin"'));
+assert(page.includes('next.voice = "Ethan"'));
+assert(page.includes('next.voice = "Cherry"'));
 assert(page.includes("data-tts-settings-approve"));
 assert(page.indexOf("saveTtsSettings(proposal.settings)") > page.indexOf("data-tts-settings-approve"));
 
