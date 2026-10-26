@@ -1,6 +1,7 @@
 (function initializeOperationBoardPage() {
   const constants = window.BANQUET_ERP_CONSTANTS;
   const board = window.BANQUET_ERP_OPERATION_BOARD;
+  const eventBlockBoard = window.BANQUET_ERP_EVENT_BLOCK_BOARD;
   const settingAdvisor = window.BANQUET_ERP_SETTING_ADVISOR;
   const cacheKey = "banquet-erp-events-cache-v6";
   const layoutRecommendations = window.BANQUET_ERP_BOARD_LAYOUT_RECOMMENDATIONS;
@@ -117,7 +118,12 @@
   function storedUser() { try { const value = JSON.parse(localStorage.getItem(constants.authStorageKey) || "null"); return constants.loginAccounts.find((account) => account.id === value?.id && account.role === value?.role) || null; } catch { return null; } }
   function cachedEvents() { try { const value = JSON.parse(localStorage.getItem(cacheKey) || "null"); return Array.isArray(value?.events) ? value.events : []; } catch { return []; } }
   function formatDate(value) { return new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(new Date(`${value}T00:00:00`)); }
-  function render() { window.BANQUET_ERP_BEVERAGE_INVENTORY?.setEvents(events); board.render({ events }); dateLabel.textContent = formatDate(board.getSelectedDate()); }
+  function render() { window.BANQUET_ERP_BEVERAGE_INVENTORY?.setEvents(events); board.render({ events }); eventBlockBoard?.render({ events }); dateLabel.textContent = formatDate(board.getSelectedDate()); }
+  function setBoardView(view) {
+    document.querySelectorAll("[data-board-view]").forEach((button) => button.setAttribute("aria-selected", String(button.dataset.boardView === view)));
+    document.querySelectorAll("[data-board-view-panel]").forEach((panel) => { panel.hidden = panel.dataset.boardViewPanel !== view; });
+    if (view === "blocks") eventBlockBoard?.render({ events });
+  }
   function localDateKey(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`; }
   function moveBoardDate(step) {
     const current = board.getSelectedDate();
@@ -1283,6 +1289,7 @@
     if (event.target.closest("[data-ai-approve]") && pendingProposal) { const proposal = pendingProposal; showTransientMessage("승인된 변경을 저장하고 있습니다…"); try { await applyProposal(proposal); } catch (error) { console.error("board AI apply failed", { code: error.code, error }); showMessage(error.code === "schedule_duplicate" ? error.message : error.code === "schedule_not_found" || error.code === "schedule_target_missing" ? "변경할 일정을 찾지 못했습니다. 최신 일정을 다시 불러와주세요." : error.code === "schedule_patch_failed" || error.code === "schedule_insert_failed" ? "일정 저장에 실패했습니다. 기존 일정은 유지됩니다." : "변경 저장에 실패했습니다. 기존 데이터는 유지됩니다.", true); } }
   });
   document.querySelectorAll("[data-board-page-step]").forEach((button) => button.onclick = () => moveBoardDate(Number(button.dataset.boardPageStep)));
+  document.querySelectorAll("[data-board-view]").forEach((button) => button.onclick = () => setBoardView(button.dataset.boardView));
   document.querySelector("[data-board-page-today]").onclick = () => { board.setSelectedDate(new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)); render(); };
   document.getElementById("boardLoginForm").onsubmit = (event) => { event.preventDefault(); const id = document.getElementById("boardLoginId").value.trim(); const password = document.getElementById("boardLoginPassword").value; const account = constants.loginAccounts.find((item) => item.id === id && item.password === password); if (!account) { document.getElementById("boardLoginError").textContent = "아이디 또는 비밀번호가 올바르지 않습니다."; return; } localStorage.setItem(constants.authStorageKey, JSON.stringify({ id: account.id, role: account.role, label: account.label })); start(); };
   window.openStoredExcel = (_path, context = {}) => {
