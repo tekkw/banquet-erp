@@ -1,0 +1,71 @@
+:root { color-scheme: dark; font-family: Inter, Pretendard, "Noto Sans KR", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; background: #061522; }
+body { color: #eaf7fb; overflow-x: hidden; }
+
+.slime-prototype {
+  position: relative;
+  min-height: 100vh;
+  padding: max(18px, env(safe-area-inset-top)) 18px max(18px, env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 35%, rgba(36, 107, 129, .17), transparent 38%),
+    linear-gradient(180deg, #081b2a, #04101a);
+}
+
+.slime-prototype__header { position: absolute; z-index: 3; top: max(22px, env(safe-area-inset-top)); left: clamp(20px, 5vw, 58px); pointer-events: none; }
+.slime-prototype__header span { color: rgba(144, 204, 221, .62); font-size: 10px; font-weight: 800; letter-spacing: .18em; }
+.slime-prototype__header h1 { margin: 8px 0 4px; font-size: clamp(19px, 3vw, 30px); line-height: 1.1; letter-spacing: -.035em; }
+.slime-prototype__header p { margin: 0; color: rgba(183, 209, 218, .68); font-size: 12px; }
+
+.slime-stage {
+  position: relative;
+  width: min(100%, 1180px);
+  height: calc(100vh - 36px);
+  min-height: 620px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(148, 205, 220, .13);
+  border-radius: 28px;
+  background: #061522;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .035), 0 28px 80px rgba(0, 6, 12, .42);
+}
+.slime-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+.slime-canvas:active { cursor: grabbing; }
+.slime-fallback { position: absolute; inset: 48% 20px auto; color: #9bb3bd; text-align: center; }
+.slime-fps { position: absolute; z-index: 2; left: 18px; bottom: 16px; padding: 6px 9px; border: 1px solid rgba(138, 198, 216, .14); border-radius: 9px; color: #77a5b5; background: rgba(3, 14, 23, .58); font: 700 10px/1 ui-monospace, monospace; backdrop-filter: blur(8px); }
+
+.slime-controls {
+  position: absolute;
+  z-index: 4;
+  top: 24px;
+  right: clamp(24px, 5vw, 62px);
+  width: 188px;
+  max-height: calc(100vh - 50px);
+  overflow: auto;
+  border: 1px solid rgba(154, 210, 224, .17);
+  border-radius: 16px;
+  color: #d7e9ef;
+  background: rgba(5, 20, 31, .76);
+  box-shadow: 0 15px 38px rgba(0, 5, 12, .28);
+  backdrop-filter: blur(15px);
+}
+.slime-controls summary { padding: 12px 14px; color: #b9d4de; cursor: pointer; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.slime-controls > div { padding: 1px 13px 10px; }
+.slime-controls label { display: grid; grid-template-columns: 1fr auto; gap: 3px 8px; margin: 0 0 9px; color: #8ba7b2; font-size: 9px; }
+.slime-controls label output { color: #cce2e9; font: 700 9px/1 ui-monospace, monospace; }
+.slime-controls input { grid-column: 1 / -1; width: 100%; height: 3px; accent-color: #59bfca; }
+.slime-controls button { width: calc(100% - 26px); min-height: 34px; margin: 0 13px 13px; border: 1px solid rgba(150, 211, 224, .17); border-radius: 10px; color: #d8edf2; background: rgba(74, 149, 166, .18); font-size: 10px; font-weight: 800; }
+
+@media (max-width: 640px) {
+  .slime-prototype { padding: 0; }
+  .slime-stage { height: 100vh; min-height: 560px; border: 0; border-radius: 0; }
+  .slime-prototype__header { top: max(15px, env(safe-area-inset-top)); left: 16px; }
+  .slime-prototype__header h1 { max-width: 230px; }
+  .slime-controls { top: auto; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: 172px; max-height: 54vh; }
+  .slime-controls:not([open]) { width: 142px; }
+  .slime-fps { bottom: max(14px, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slime-controls, .slime-fps { backdrop-filter: none; }
+}

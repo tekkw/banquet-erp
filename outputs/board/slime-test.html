@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#061522">
+  <title>Slime Renderer Prototype V1</title>
+  <link rel="stylesheet" href="../src/styles/slimePrototype.css?v=slime-prototype-v1">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.1/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main class="slime-prototype">
+    <header class="slime-prototype__header">
+      <span>WEBGL MATERIAL LAB</span>
+      <h1>Slime Renderer Prototype V1</h1>
+      <p>단일 2×2 solid jelly · 터치해서 눌러보세요</p>
+    </header>
+    <section id="slimeStage" class="slime-stage" aria-label="3D 슬라임 렌더 테스트">
+      <p id="slimeFallback" class="slime-fallback" hidden>WebGL을 사용할 수 없어 3D 슬라임을 표시할 수 없습니다.</p>
+      <output id="slimeFps" class="slime-fps" aria-label="초당 프레임">-- FPS</output>
+    </section>
+    <details class="slime-controls">
+      <summary>Jelly tuning</summary>
+      <div id="slimeControlFields"></div>
+      <button id="slimeReset" type="button">다시 떨어뜨리기</button>
+    </details>
+  </main>
+  <script type="module" src="../src/slimePrototype.js?v=slime-prototype-v1"></script>
+</body>
+</html>
