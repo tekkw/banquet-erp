@@ -4,10 +4,11 @@
   const physics = window.BANQUET_ERP_EVENT_BLOCK_PHYSICS;
   const NS = "http://www.w3.org/2000/svg";
   const COMPLETE_KEY = "banquetBoard.eventBlocks.completed.v1";
-  const CELL = 14;
-  const GAP = 1.4;
+  const CELL = 15;
+  const GAP = 0;
   const FLOOR = 328;
   const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  const jellyQuality = !prefersReducedMotion?.matches && (navigator.hardwareConcurrency || 4) >= 6 ? "high" : "normal";
   let events = [];
   let layout = [];
   let previousRows = new Map();
@@ -63,36 +64,77 @@
   }
 
   function pieceColor(index) {
-    return `url(#eventBlockGradient${index % 4})`;
+    return `url(#eventBlockJelly${index % 5})`;
   }
 
   function addDefinitions(svg) {
     const defs = svgNode("defs");
     [
-      ["#3b88a2", "#1f536e"], ["#9074bc", "#4e427d"],
-      ["#4b9b83", "#256052"], ["#b78358", "#765035"],
+      ["#91dded", "#3187a6", "#174d6c"], ["#d2b6f4", "#8b68bd", "#4c387c"],
+      ["#8ce0c7", "#3e9a7d", "#205c52"], ["#f0c391", "#b77a4f", "#70442f"],
+      ["#ed9fae", "#b95f75", "#713445"],
     ].forEach((colors, index) => {
-      const gradient = svgNode("linearGradient", { id: `eventBlockGradient${index}`, x1: "0", y1: "0", x2: "0", y2: "1" });
-      gradient.append(svgNode("stop", { offset: "0", "stop-color": colors[0] }), svgNode("stop", { offset: "1", "stop-color": colors[1] }));
+      const gradient = svgNode("linearGradient", { id: `eventBlockJelly${index}`, x1: "0", y1: "0", x2: "0", y2: "1" });
+      gradient.append(
+        svgNode("stop", { offset: "0", "stop-color": colors[0], "stop-opacity": ".9" }),
+        svgNode("stop", { offset: ".24", "stop-color": colors[0], "stop-opacity": ".78" }),
+        svgNode("stop", { offset: ".62", "stop-color": colors[1], "stop-opacity": ".86" }),
+        svgNode("stop", { offset: "1", "stop-color": colors[2], "stop-opacity": ".94" }),
+      );
       defs.append(gradient);
     });
-    const shadow = svgNode("filter", { id: "eventBlockShadow", x: "-30%", y: "-30%", width: "160%", height: "180%" });
-    shadow.append(svgNode("feDropShadow", { dx: "0", dy: "3", stdDeviation: "2.5", "flood-color": "#020813", "flood-opacity": ".48" }));
+    const gloss = svgNode("linearGradient", { id: "eventBlockJellyGloss", x1: "0", y1: "0", x2: ".2", y2: "1" });
+    gloss.append(
+      svgNode("stop", { offset: "0", "stop-color": "#ffffff", "stop-opacity": ".58" }),
+      svgNode("stop", { offset: ".18", "stop-color": "#ffffff", "stop-opacity": ".24" }),
+      svgNode("stop", { offset: ".42", "stop-color": "#ffffff", "stop-opacity": "0" }),
+      svgNode("stop", { offset: "1", "stop-color": "#ffffff", "stop-opacity": ".03" }),
+    );
+    defs.append(gloss);
+    const depthShade = svgNode("linearGradient", { id: "eventBlockJellyShade", x1: "0", y1: "0", x2: ".12", y2: "1" });
+    depthShade.append(svgNode("stop", { offset: ".55", "stop-color": "#00131e", "stop-opacity": "0" }), svgNode("stop", { offset: "1", "stop-color": "#00131e", "stop-opacity": ".28" }));
+    defs.append(depthShade);
+    const shadow = svgNode("filter", { id: "eventBlockJellyShadow", x: "-35%", y: "-35%", width: "170%", height: "190%" });
+    shadow.append(svgNode("feGaussianBlur", { stdDeviation: "3.4" }));
     defs.append(shadow);
+    const depth = svgNode("filter", { id: "eventBlockJellyHigh", x: "-18%", y: "-18%", width: "136%", height: "142%", "color-interpolation-filters": "sRGB" });
+    const inverse = svgNode("feComponentTransfer", { in: "SourceAlpha", result: "inverseAlpha" });
+    inverse.append(svgNode("feFuncA", { type: "table", tableValues: "1 0" }));
+    const lighting = svgNode("feSpecularLighting", { in: "SourceAlpha", surfaceScale: "3", specularConstant: ".34", specularExponent: "22", "lighting-color": "#eefcff", result: "specular" });
+    lighting.append(svgNode("feDistantLight", { azimuth: "225", elevation: "48" }));
+    const merge = svgNode("feMerge");
+    merge.append(svgNode("feMergeNode", { in: "SourceGraphic" }), svgNode("feMergeNode", { in: "innerShadow" }), svgNode("feMergeNode", { in: "specularIn" }));
+    depth.append(
+      inverse,
+      svgNode("feGaussianBlur", { in: "inverseAlpha", stdDeviation: "1.5", result: "innerBlur" }),
+      svgNode("feOffset", { in: "innerBlur", dx: "-1.1", dy: "-1.4", result: "innerOffset" }),
+      svgNode("feComposite", { in: "innerOffset", in2: "SourceAlpha", operator: "in", result: "innerMask" }),
+      svgNode("feColorMatrix", { in: "innerMask", type: "matrix", values: "0 0 0 0 0 0 0 0 0 0.08 0 0 0 0 0.13 0 0 0 .42 0", result: "innerShadow" }),
+      lighting,
+      svgNode("feComposite", { in: "specular", in2: "SourceAlpha", operator: "in", result: "specularIn" }),
+      merge,
+    );
+    defs.append(depth);
     svg.append(defs);
   }
 
   function renderPiece(svg, piece, index, isNew) {
-    const group = svgNode("g", { class: "event-block-piece", role: "button", tabindex: "0", "data-event-block-id": piece.id, "aria-label": `${piece.venueLabel} ${piece.organizerLabel}` });
-    piece.cells.forEach((cell) => {
-      group.append(svgNode("rect", {
-        class: "event-block-cell", x: cell.x * (CELL + GAP), y: (piece.height - cell.y - 1) * (CELL + GAP),
-        width: CELL, height: CELL, rx: 3.6, fill: pieceColor(index), "data-cell-x": cell.x, "data-cell-y": cell.y,
-      }));
-      group.append(svgNode("path", {
-        class: "event-block-shine", d: `M${cell.x * (CELL + GAP) + 3} ${(piece.height - cell.y - 1) * (CELL + GAP) + 3}h${CELL - 6}`,
-      }));
-    });
+    const group = svgNode("g", { class: "event-block-piece", role: "button", tabindex: "0", "data-event-block-id": piece.id, "data-jelly-quality": jellyQuality, "aria-label": `${piece.venueLabel} ${piece.organizerLabel}` });
+    const contourCells = piece.cells.map((cell) => ({ x: cell.x, y: piece.height - cell.y - 1 }));
+    const contour = physics.buildPieceContour(contourCells, { cellSize: CELL, radius: CELL * .22 });
+    const jelly = svgNode("g", { class: "event-block-jelly-layers", "aria-hidden": "true" });
+    const shadow = svgNode("path", { class: "event-block-jelly-shadow", d: contour });
+    const base = svgNode("path", { class: "event-block-jelly-base", d: contour, fill: pieceColor(index) });
+    if (jellyQuality === "high") base.setAttribute("filter", "url(#eventBlockJellyHigh)");
+    jelly.append(
+      shadow,
+      base,
+      svgNode("path", { class: "event-block-jelly-depth", d: contour, fill: "url(#eventBlockJellyShade)" }),
+      svgNode("path", { class: "event-block-jelly-gloss", d: contour, fill: "url(#eventBlockJellyGloss)" }),
+      svgNode("path", { class: "event-block-jelly-bottom-rim", d: contour }),
+      svgNode("path", { class: "event-block-jelly-rim", d: contour }),
+    );
+    group.append(jelly);
     const [labelRow, rowCells] = physics.widestRow(piece);
     if (rowCells.length >= 2) {
       const min = Math.min(...rowCells.map((cell) => cell.x));
@@ -123,23 +165,36 @@
     if (isNew || oldRow !== piece.targetRow) {
       animate(duration, (progress) => {
         const y = fromY + (targetY(piece) - fromY) * easeSpring(progress);
-        group.setAttribute("transform", pieceTransform(piece, y));
+        const stretching = progress < .92;
+        group.setAttribute("transform", pieceTransform(piece, y, stretching ? .96 : 1, stretching ? 1.06 : 1));
       }, () => landingSquash(group, piece), delay);
     }
   }
 
+  function jellyFrame(progress, frames) {
+    const nextIndex = Math.min(frames.length - 1, frames.findIndex((frame) => frame.at >= progress));
+    const next = frames[nextIndex < 0 ? frames.length - 1 : nextIndex];
+    const previous = frames[Math.max(0, (nextIndex < 0 ? frames.length - 1 : nextIndex) - 1)];
+    const distance = Math.max(.0001, next.at - previous.at);
+    const amount = Math.min(1, Math.max(0, (progress - previous.at) / distance));
+    return { sx: previous.sx + (next.sx - previous.sx) * amount, sy: previous.sy + (next.sy - previous.sy) * amount };
+  }
+
   function landingSquash(group, piece) {
-    animate(140, (progress) => {
-      const pulse = Math.sin(progress * Math.PI);
-      group.setAttribute("transform", pieceTransform(piece, targetY(piece), 1 + pulse * 0.06, 1 - pulse * 0.06));
-    }, () => group.setAttribute("transform", pieceTransform(piece)));
+    const frames = [{ at: 0, sx: .96, sy: 1.06 }, { at: .34, sx: 1.10, sy: .90 }, { at: .72, sx: .98, sy: 1.03 }, { at: 1, sx: 1, sy: 1 }];
+    group.classList.add("is-landing");
+    animate(230, (progress) => {
+      const scale = jellyFrame(progress, frames);
+      group.setAttribute("transform", pieceTransform(piece, targetY(piece), scale.sx, scale.sy));
+    }, () => { group.classList.remove("is-landing"); group.setAttribute("transform", pieceTransform(piece)); });
   }
 
   function tapPiece(group, piece) {
     navigator.vibrate?.(10);
-    animate(100, (progress) => {
-      const pulse = Math.sin(progress * Math.PI);
-      group.setAttribute("transform", pieceTransform(piece, targetY(piece), 1 - pulse * 0.035, 1 - pulse * 0.035));
+    const frames = [{ at: 0, sx: 1, sy: 1 }, { at: .4, sx: 1.04, sy: .96 }, { at: .72, sx: .985, sy: 1.015 }, { at: 1, sx: 1, sy: 1 }];
+    animate(190, (progress) => {
+      const scale = jellyFrame(progress, frames);
+      group.setAttribute("transform", pieceTransform(piece, targetY(piece), scale.sx, scale.sy));
     }, () => { group.setAttribute("transform", pieceTransform(piece)); openDetail(piece); });
   }
 
@@ -174,14 +229,11 @@
     const group = [...mount.querySelectorAll("[data-event-block-id]")].find((node) => node.dataset.eventBlockId === piece.id);
     if (!group) return;
     navigator.vibrate?.(20);
-    const cells = [...group.querySelectorAll(".event-block-cell, .event-block-shine")];
+    const frames = [{ at: 0, sx: 1, sy: 1 }, { at: .34, sx: 1.10, sy: 1.10 }, { at: 1, sx: .85, sy: .85 }];
     animate(260, (progress) => {
-      group.style.opacity = String(1 - progress);
-      group.setAttribute("transform", pieceTransform(piece, targetY(piece), 1 + progress * 0.08, 1 + progress * 0.08));
-      cells.forEach((cell, index) => {
-        const direction = index % 2 ? 1 : -1;
-        cell.style.transform = `translate(${direction * progress * (5 + index % 4)}px, ${-progress * (4 + index % 3)}px)`;
-      });
+      const scale = jellyFrame(progress, frames);
+      group.style.opacity = String(progress < .3 ? 1 : 1 - (progress - .3) / .7);
+      group.setAttribute("transform", pieceTransform(piece, targetY(piece), scale.sx, scale.sy));
     }, () => { saveCompleted(piece.id); render({ events }); });
   }
 

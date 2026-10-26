@@ -50,10 +50,16 @@
 
 .event-block-board { min-height: 58vh; padding: 8px 5px 4px; touch-action: manipulation; }
 .event-block-svg { display: block; width: 100%; min-height: 56vh; overflow: visible; }
-.event-block-piece { cursor: pointer; filter: url(#eventBlockShadow); outline: none; }
-.event-block-piece:focus-visible .event-block-cell { stroke: #d9f5ff; stroke-width: 1.5; }
-.event-block-cell { stroke: rgba(219, 246, 255, .17); stroke-width: .65; }
-.event-block-shine { fill: none; stroke: rgba(255, 255, 255, .25); stroke-width: 1; stroke-linecap: round; pointer-events: none; }
+.event-block-piece { cursor: pointer; outline: none; }
+.event-block-jelly-layers { pointer-events: none; }
+.event-block-jelly-shadow { fill: rgba(0, 5, 12, .58); filter: url(#eventBlockJellyShadow); transform: translateY(3px) scale(.985, .97); transform-box: fill-box; transform-origin: center bottom; }
+.event-block-jelly-base { stroke: rgba(225, 250, 255, .26); stroke-width: .7; stroke-linejoin: round; }
+.event-block-jelly-depth { opacity: .9; }
+.event-block-jelly-gloss { mix-blend-mode: screen; opacity: .92; }
+.event-block-jelly-rim { fill: none; stroke: rgba(235, 253, 255, .42); stroke-width: .8; stroke-linejoin: round; }
+.event-block-jelly-bottom-rim { fill: none; stroke: rgba(0, 21, 31, .42); stroke-width: 1.6; stroke-linejoin: round; transform: translateY(.7px); }
+.event-block-piece:focus-visible .event-block-jelly-rim { stroke: #e6fbff; stroke-width: 1.4; }
+.event-block-piece.is-landing .event-block-jelly-shadow { opacity: .72; transform: translateY(3px) scale(1.08, .82); }
 .event-block-label { fill: #f2fbff; font: 800 6px/1 system-ui, sans-serif; paint-order: stroke; stroke: rgba(7, 20, 30, .48); stroke-width: 1.25px; stroke-linejoin: round; pointer-events: none; }
 .event-block-label tspan + tspan { fill: rgba(239, 249, 252, .8); font-size: 4.6px; font-weight: 650; }
 .event-block-floor { stroke: rgba(149, 202, 221, .23); stroke-width: 1; stroke-dasharray: 3 3; }
@@ -89,5 +95,5 @@
 .event-block-detail-actions [data-event-block-complete] { border-color: transparent; color: #fff; background: linear-gradient(145deg, #397d73, #245c58); box-shadow: inset 0 1px rgba(255,255,255,.12); }
 
 @media (prefers-reduced-motion: reduce) {
-  .event-block-piece, .event-block-cell { animation: none !important; transition: none !important; }
+  .event-block-piece, .event-block-jelly-layers { animation: none !important; transition: none !important; }
 }

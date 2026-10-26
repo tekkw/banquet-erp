@@ -124,5 +124,72 @@
     return false;
   }
 
-  return { ATOM_COLUMNS, BOARD_COLUMNS, dateKey, eventDates, venueAtoms, occupancyForEvent, placePieces, buildLayout, widestRow, hasOverlap };
+  function contourEdges(cells) {
+    const occupied = new Set(cells.map((cell) => `${cell.x}:${cell.y}`));
+    const edges = [];
+    cells.forEach(({ x, y }) => {
+      if (!occupied.has(`${x}:${y - 1}`)) edges.push({ from: [x, y], to: [x + 1, y], direction: 0 });
+      if (!occupied.has(`${x + 1}:${y}`)) edges.push({ from: [x + 1, y], to: [x + 1, y + 1], direction: 1 });
+      if (!occupied.has(`${x}:${y + 1}`)) edges.push({ from: [x + 1, y + 1], to: [x, y + 1], direction: 2 });
+      if (!occupied.has(`${x - 1}:${y}`)) edges.push({ from: [x, y + 1], to: [x, y], direction: 3 });
+    });
+    return edges;
+  }
+
+  function buildContourLoops(cells) {
+    const remaining = contourEdges(cells).map((edge, index) => ({ ...edge, index }));
+    const loops = [];
+    while (remaining.length) {
+      remaining.sort((a, b) => a.from[1] - b.from[1] || a.from[0] - b.from[0] || a.direction - b.direction);
+      const first = remaining.shift();
+      const loop = [first.from, first.to];
+      let current = first;
+      let guard = 0;
+      while ((current.to[0] !== first.from[0] || current.to[1] !== first.from[1]) && guard < 1000) {
+        const candidates = remaining.filter((edge) => edge.from[0] === current.to[0] && edge.from[1] === current.to[1]);
+        const priorities = [(current.direction + 1) % 4, current.direction, (current.direction + 3) % 4, (current.direction + 2) % 4];
+        const next = candidates.sort((a, b) => priorities.indexOf(a.direction) - priorities.indexOf(b.direction))[0];
+        if (!next) break;
+        remaining.splice(remaining.indexOf(next), 1);
+        current = next;
+        loop.push(next.to);
+        guard += 1;
+      }
+      if (loop.length > 3 && loop.at(-1)[0] === loop[0][0] && loop.at(-1)[1] === loop[0][1]) loop.pop();
+      loops.push(loop);
+    }
+    return loops;
+  }
+
+  function roundedLoopPath(points, cellSize, radius) {
+    if (points.length < 3) return "";
+    const simplified = points.filter((point, index) => {
+      const previous = points[(index - 1 + points.length) % points.length];
+      const next = points[(index + 1) % points.length];
+      return (point[0] - previous[0]) * (next[1] - point[1]) !== (point[1] - previous[1]) * (next[0] - point[0]);
+    });
+    const scaled = simplified.map(([x, y]) => ({ x: x * cellSize, y: y * cellSize }));
+    const corners = scaled.map((point, index) => {
+      const previous = scaled[(index - 1 + scaled.length) % scaled.length];
+      const next = scaled[(index + 1) % scaled.length];
+      const beforeLength = Math.hypot(previous.x - point.x, previous.y - point.y);
+      const afterLength = Math.hypot(next.x - point.x, next.y - point.y);
+      const cornerRadius = Math.min(radius, beforeLength / 2, afterLength / 2);
+      return {
+        point,
+        before: { x: point.x + (previous.x - point.x) * cornerRadius / beforeLength, y: point.y + (previous.y - point.y) * cornerRadius / beforeLength },
+        after: { x: point.x + (next.x - point.x) * cornerRadius / afterLength, y: point.y + (next.y - point.y) * cornerRadius / afterLength },
+      };
+    });
+    const number = (value) => Number(value.toFixed(2));
+    return corners.map((corner, index) => `${index ? "L" : "M"}${number(corner.before.x)} ${number(corner.before.y)} Q${number(corner.point.x)} ${number(corner.point.y)} ${number(corner.after.x)} ${number(corner.after.y)}`).join(" ") + " Z";
+  }
+
+  function buildPieceContour(cells, options = {}) {
+    const cellSize = Number(options.cellSize) || 1;
+    const radius = Math.max(0, Number(options.radius) || cellSize * 0.2);
+    return buildContourLoops(cells).map((loop) => roundedLoopPath(loop, cellSize, radius)).filter(Boolean).join(" ");
+  }
+
+  return { ATOM_COLUMNS, BOARD_COLUMNS, dateKey, eventDates, venueAtoms, occupancyForEvent, placePieces, buildLayout, widestRow, hasOverlap, contourEdges, buildContourLoops, buildPieceContour };
 });

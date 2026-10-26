@@ -58,6 +58,23 @@ const reflowed = physics.buildLayout([
 assert.strictEqual(reflowed[0].id, "later");
 assert.strictEqual(reflowed[0].targetRow, 0, "piece above a completed event must reflow to the floor");
 
+// Connected occupancy is converted to one rounded outer contour with shared edges removed.
+const adjacentCells = [{ x: 0, y: 0 }, { x: 1, y: 0 }];
+assert.strictEqual(physics.contourEdges(adjacentCells).length, 6, "adjacent cells must remove their two shared internal edges");
+assert.strictEqual(physics.buildContourLoops(adjacentCells).length, 1, "adjacent cells must create one connected contour");
+const adjacentContour = physics.buildPieceContour(adjacentCells, { cellSize: 10, radius: 2 });
+assert.strictEqual((adjacentContour.match(/M/g) || []).length, 1, "connected cells must render as one silhouette path");
+assert(adjacentContour.includes("Q"), "outer contour corners must be rounded");
+
+const lCells = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+const lContour = physics.buildPieceContour(lCells, { cellSize: 10, radius: 2 });
+assert.strictEqual(physics.buildContourLoops(lCells).length, 1, "L occupancy must remain one contour");
+assert(lContour.includes("Q10 10"), "L contour must retain and round its concave corner");
+
+const stepCells = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }];
+assert.strictEqual(physics.buildContourLoops(stepCells).length, 1, "step occupancy must remain one contour");
+assert.strictEqual((physics.buildPieceContour(stepCells, { cellSize: 10 }).match(/M/g) || []).length, 1, "step shape must be a single silhouette");
+
 const html = fs.readFileSync(path.join(root, "outputs/board/index.html"), "utf8");
 const boardScript = fs.readFileSync(path.join(root, "outputs/src/eventBlockBoard.js"), "utf8");
 const pageScript = fs.readFileSync(path.join(root, "outputs/src/operationBoardPage.js"), "utf8");
@@ -71,13 +88,18 @@ assert(pageScript.includes("eventBlockBoard?.render({ events })"), "event refres
 // H-L. Animation and interaction capabilities remain visible as explicit implementation contracts.
 assert(boardScript.includes("requestAnimationFrame") && boardScript.includes("easeSpring"), "drop must use rAF spring motion");
 assert(boardScript.includes("Math.max(450, Math.min(750"), "drop duration must remain within the 450-750ms range");
-assert(boardScript.includes("landingSquash") && boardScript.includes("pulse * 0.06"), "landing squash is required");
-assert(boardScript.includes("completePiece") && boardScript.includes("progress * 0.08") && boardScript.includes("translate(${direction"), "completion must pop and scatter cells");
+assert(boardScript.includes("landingSquash") && boardScript.includes("sx: 1.10, sy: .90") && boardScript.includes("animate(230"), "strong jelly landing squash is required");
+assert(boardScript.includes("tapPiece") && boardScript.includes("sx: 1.04, sy: .96") && boardScript.includes("animate(190"), "tap must compress like jelly");
+assert(boardScript.includes("completePiece") && boardScript.includes("sx: 1.10, sy: 1.10") && boardScript.includes("sx: .85, sy: .85"), "completion must inflate then contract and fade");
 assert(boardScript.includes("previousRows") && boardScript.includes("oldRow !== piece.targetRow"), "completion re-layout must animate gravity movement");
 assert(boardScript.includes("tapPiece") && boardScript.includes("openDetail(piece)"), "tap must squash before opening details");
 assert(boardScript.includes("prefers-reduced-motion: reduce") && boardScript.includes("prefersReducedMotion?.matches"), "reduced motion must bypass animation");
 assert(boardScript.includes("openStoredExcel") && boardScript.includes("eventBlockDetail"), "detail must reuse original Excel flow");
 assert(boardScript.includes("IntersectionObserver"), "off-screen animation visibility must be observed");
-assert(css.includes("event-block-cell") && css.includes("linear-gradient") && css.includes("border-radius"), "gummy SVG presentation is required");
+assert(boardScript.includes("physics.buildPieceContour") && !boardScript.includes('svgNode("rect"'), "piece must use one contour instead of cell rectangles");
+assert(boardScript.includes("const GAP = 0"), "piece-internal cell gaps must be eliminated");
+assert(boardScript.indexOf("group.append(jelly)") < boardScript.indexOf("group.append(label)"), "text must be a separate layer above filtered jelly paths");
+assert(boardScript.includes("jellyQuality") && boardScript.includes("eventBlockJellyHigh"), "high and normal jelly quality paths must be available");
+assert(css.includes("event-block-jelly-base") && css.includes("event-block-jelly-gloss") && css.includes("event-block-jelly-rim"), "layered jelly presentation is required");
 
 console.log("event block board V1 tests passed");
