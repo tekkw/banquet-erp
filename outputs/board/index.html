@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../src/styles/variables.css">
   <link rel="stylesheet" href="../src/styles/dashboard.css">
   <link rel="stylesheet" href="../src/styles/dashboardWidgets.css?v=operations-autopilot-v6-pinned-setup-accordion">
-  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=proactive-briefing-trigger-v1">
+  <link rel="stylesheet" href="../src/styles/operationBoardPage.css?v=voice-conversation-v2">
   <link rel="stylesheet" href="../src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body class="operation-board-page">
@@ -68,7 +68,7 @@
         </div>
         <input id="boardAssetPhotoInput" type="file" accept="image/*" hidden>
         <textarea id="boardAiInput" rows="1" maxlength="300" placeholder="현장 AI에게 물어보기..." aria-label="현장 AI에게 물어보기"></textarea>
-        <button id="boardSpeechButton" class="board-field-ai-button" type="button" aria-label="현장 AI 음성 질문">🎙</button>
+        <button id="boardSpeechButton" class="board-field-ai-button" type="button" aria-label="음성 대화 켜기" aria-pressed="false">🎙 음성 OFF</button>
         <button class="board-ai-send-button" type="submit" aria-label="보내기">↑</button>
       </form>
     </section>
@@ -85,8 +85,8 @@
   <script src="../src/boardLayoutRecommendations.js?v=1"></script>
   <script src="../src/settingAdvisor.js?v=3"></script>
   <script src="../src/erpActionRegistry.js?v=1"></script>
-  <script src="../src/erpConversationAgent.js?v=venue-normalization-v2"></script>
+  <script src="../src/erpConversationAgent.js?v=voice-conversation-v2"></script>
   <script src="../src/eventOrderAnalytics.js?v=event-order-analytics-v1"></script>
-  <script src="../src/operationBoardPage.js?v=proactive-briefing-trigger-v1"></script>
+  <script src="../src/operationBoardPage.js?v=voice-conversation-v2"></script>
 </body>
 </html>

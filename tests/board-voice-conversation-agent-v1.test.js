@@ -30,7 +30,7 @@ assert(page.includes('console.debug("conversation route", { rawTranscript: speec
 const ttsStart = page.indexOf("function buildEventSelectionTts");
 const ttsEnd = page.indexOf("function eventVenue", ttsStart);
 const ttsBlock = page.slice(ttsStart, ttsEnd);
-assert(ttsBlock.includes("event.eventName"));
+assert(ttsBlock.includes("eventOrganizer(event)"), "음성 안내는 event name보다 organizer를 우선해야 한다");
 assert(ttsBlock.includes("eventVenue(event)"));
 for (const forbidden of ["guestCount", "schedule", "items", "notes", "storagePath"]) assert(!ttsBlock.includes(forbidden));
 assert(page.includes('queryType === "find_events_by_period_space" ? buildEventSelectionTts(event, period).text'));

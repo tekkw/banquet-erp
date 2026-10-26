@@ -53,7 +53,7 @@
   function hasRecentReference(text) { return /그럼|그\s*(?:행사|거|세팅)|이\s*행사|다음\s*세팅|이벤\s*오더에|해당\s*행사|아까\s*(?:거|것)|아까(?:\s*\S+){0,2}\s*행사|거기|그\s*곳/.test(String(text || "")); }
   function ordinalIndex(text, length) {
     const value = compact(text); if (/마지막(?:거|행사)?/.test(value)) return length ? length - 1 : -1;
-    const numeric = value.match(/(\d+)번째/); if (numeric) return Number(numeric[1]) - 1;
+    const numeric = value.match(/(\d+)(?:번째|번)/); if (numeric) return Number(numeric[1]) - 1;
     const word = Object.keys(ORDINALS).find((key) => value.includes(key)); return word ? ORDINALS[word] : -1;
   }
   function venueIn(text) { const utils = global.BANQUET_ERP_VENUE_UTILS; if (utils?.normalizeVenueList) { const codes = utils.normalizeVenueList(text); return codes.length ? codes.map((code) => utils.venueLabel(code)).join("+") : compact(text).match(/(?:포이어)/i)?.[0] || ""; } return compact(text).match(/(?:컨벤션(?:A|B|C|[123])?|부라노(?:[123])?|카프리(?:[123](?:\+[123])*)?|페스타|포이어)/i)?.[0] || ""; }
@@ -67,7 +67,7 @@
     function load() { try { return { ...DEFAULT_CONTEXT, ...JSON.parse(storage?.getItem(key) || "{}") }; } catch { return { ...DEFAULT_CONTEXT }; } }
     function save(context) { const next = { ...DEFAULT_CONTEXT, ...context, lastResults: Array.isArray(context?.lastResults) ? context.lastResults.slice(0, 20) : [] }; try { storage?.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ } return next; }
     function plan(text, fastRoute = "") {
-      const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+번째|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
+      const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+(?:번째|번)|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
       const contextVenue = venueIn(context.event?.venue || ""); const venueMatchesContext = global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(venue).size && global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(contextVenue).size ? global.BANQUET_ERP_VENUE_UTILS.spacesOverlap(venue, contextVenue) : compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || venueMatchesContext);
       const explicitEventTarget = Boolean(venue || /(?:오늘|내일|어제|이번|다음|지난)\s*(?:주|달)?|\d{1,2}\s*월|\d{4}[-./년]/.test(value));
       const selectedEventQuery = context.event?.eventOrderId && !explicitEventTarget && !/(추가|변경|수정|등록|메모\s*남겨)/.test(value);

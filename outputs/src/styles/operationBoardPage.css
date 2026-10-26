@@ -45,7 +45,7 @@ body.operation-board-page { min-width: 0; margin: 0; background: #081a2b; color:
 .board-ai-voice-settings label { color: #bfdbfe; font-size: 11px; }
 .board-ai-voice-settings select { min-height: 28px; padding: 0 7px; border: 1px solid rgba(150,180,205,.28); border-radius: 8px; background: #173955; color: #fff; font: inherit; font-size: 11px; }
 .board-ai-voice-settings span { color: #fda4af; font-size: 11px; }
-.board-field-ai-button { min-width: 42px; min-height: 42px; padding: 0; border: 1px solid rgba(96,165,250,.65); border-radius: 12px; background: #173955; color: #fff; font: inherit; font-size: 18px; font-weight: 800; }
+.board-field-ai-button { min-width: 42px; min-height: 42px; padding: 0 10px; border: 1px solid rgba(96,165,250,.65); border-radius: 12px; background: #173955; color: #fff; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .board-ai-context { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; margin-bottom: 6px; padding: 3px 7px 3px 9px; border: 1px solid rgba(52,211,153,.35); border-radius: 999px; background: rgba(6,78,59,.28); color: #a7f3d0; font-size: 11px; white-space: nowrap; }
 .board-ai-context span { overflow: hidden; text-overflow: ellipsis; }
 .board-ai-context button { width: 20px; min-width: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: inherit; cursor: pointer; }

@@ -103,6 +103,12 @@
   let speechErrorMessage = "";
   let speechRawTranscript = "";
   let speechSubmitPending = false;
+  let voiceConversationEnabled = false;
+  let voiceRequestProcessing = false;
+  let voiceTtsSpeaking = false;
+  let speechStartPending = false;
+  let voiceRestartTimer = null;
+  let voiceStartFailures = 0;
   let speechVenueAliases = [];
   let speechNormalization = { matchedVenue: "", confidence: 0 };
   let fieldAiAutoSubmit = false;
@@ -273,9 +279,23 @@
   function isEventQueryRequest(text) { if (/(바꿔|변경|수정)/.test(text)) return false; if (/(추가|넣어|생겼|등록해)/.test(text) && /(일정|커피\s*브레이크|커피브레이크|체크인|중식|석식|프리미팅|리허설|행사\s*(?:시작|종료))/.test(text)) return false; const hasContextReference = window.erpConversationAgent.hasRecentReference(text) && activeEventContexts.length > 0 && (conversationContext.lastDomain === "event" || conversationContext.lastDomain === "setting" || /행사|이벤\s*오더|이벤트\s*오더|다음\s*세팅/.test(text)); const explicitEventData = /행사|이벤\s*오더|이벤트\s*오더|원본|엑셀|실제\s*세팅|현장\s*기록|몇\s*명|인원|점심|중식|런치|lunch|음료|마이크|장비|비고|요청|커피\s*브레이크|커피브레이크/.test(text); return Boolean(hasContextReference || ((explicitEventData || (queryPeriod(text) && (venueTerm(text) || /레이아웃|배치/.test(text)))) && (queryPeriod(text) || venueTerm(text)))); }
   function referencedRecentEvent(text) { if (!window.erpConversationAgent.hasRecentReference(text)) return null; const venue = venueTerm(text); const context = venue ? activeEventContexts.find((item) => eventVenueMatches({ venue: item.venue, schedule: [] }, venue)) : activeEventContexts[0]; return context ? events.find((event) => String(event.id) === String(context.eventOrderId)) || null : null; }
   function displayEventDate(event, period = null) { const keys = eventDateKeys(event); const key = (period ? keys.find((value) => value >= period.start && value <= period.end) : "") || keys[0] || "날짜 미등록"; return /^\d{4}-/.test(key) ? `${Number(key.slice(5, 7))}/${Number(key.slice(8, 10))}` : key; }
-  function buildEventSelectionTts(event, period = null) { const key = (period ? eventDateKeys(event).find((value) => value >= period.start && value <= period.end) : "") || eventDateKeys(event)[0] || ""; const date = /^\d{4}-\d{2}-\d{2}$/.test(key) ? `${Number(key.slice(5, 7))}월 ${Number(key.slice(8, 10))}일` : "날짜 미등록"; return { text: `${date}, ${event.eventName || "행사명 미등록"}, ${eventVenue(event)}.` }; }
+  function eventOrganizer(event) { return String(event.companyName || event.organizer || event.eventName || "주최 미등록").trim(); }
+  function buildEventSelectionTts(event, period = null) { const key = (period ? eventDateKeys(event).find((value) => value >= period.start && value <= period.end) : "") || eventDateKeys(event)[0] || ""; const date = /^\d{4}-\d{2}-\d{2}$/.test(key) ? `${Number(key.slice(5, 7))}월 ${Number(key.slice(8, 10))}일` : "날짜 미등록"; return { text: `${date}, ${window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(eventVenue(event)) || eventVenue(event)}, ${eventOrganizer(event)}.` }; }
   function eventVenue(event) { return event.venue || event.schedule?.map((row) => row.venue).find(Boolean) || "장소 미등록"; }
   function eventChoiceLabel(event, period = null) { return `${displayEventDate(event, period)} ${eventVenue(event)} ${event.eventName || "행사명 미등록"}`; }
+  function eventVoiceLabel(event) { return `${window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(eventVenue(event)) || eventVenue(event)} ${eventOrganizer(event)}`; }
+  function eventReferenceMatches(text) {
+    const compact = String(text || "").replace(/\s+/g, "").replace(/(?:행사|자세히|알려줘?|보여줘?|원본|엑셀|열어줘?|그거|그것)/g, "").replace(/[?.!,]/g, "");
+    if (compact.length < 2) return [];
+    return events.filter((event) => [event.companyName, event.organizer, event.eventName].filter(Boolean).some((value) => { const name = String(value).replace(/\s+/g, ""); return name.includes(compact) || compact.includes(name); }));
+  }
+  function isCompactEventListQuestion(text) { return /오늘.*(?:행사|일정).*(?:뭐|알려|있어|보여)|오늘.*(?:뭐|어떤).*(?:행사|일정)/.test(String(text || "")); }
+  function showEventList(result, userText) {
+    pendingEventQuery = null; const answer = `${result.period?.label || "오늘"} 행사는 ${result.events.length}건입니다.`;
+    saveConversationContext({ ...conversationContext, event: { period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period), venue: eventVenue(event), organizer: eventOrganizer(event) })) });
+    renderAiContext(); aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(result.period?.label || "오늘")} 행사</h3><p>${escapeHtml(answer)}</p><ul>${result.events.map((event) => `<li>${escapeHtml(eventVoiceLabel(event))}</li>`).join("")}</ul></div>`;
+    rememberConversation(userText, answer); speakBoardReply(`${answer} ${result.events.map(eventVoiceLabel).join(", ")}입니다.`); finishFieldAiAnswer();
+  }
   function textValues(row) { return Object.values(row || {}).filter((value) => ["string", "number"].includes(typeof value)).map(String); }
   function explicitLayoutTexts(event) {
     const pattern = /(레이아웃|배치|스쿨식|극장식|라운드|U\s*자|좌석|테이블)/i;
@@ -291,7 +311,8 @@
     saveConversationContext({ ...conversationContext, event: { period: result.period ? { start: result.period.start, end: result.period.end, label: result.period.label } : null, venue: result.venue || "" }, lastDomain: "event", lastResults: result.events.map((event) => ({ id: event.id, domain: "event", label: eventChoiceLabel(event, result.period) })) });
     renderAiContext();
     aiResult.innerHTML = `<div class="board-event-query-result"><h3>${escapeHtml(label || "등록 행사 검색")}</h3><p>${escapeHtml(answer)} 하나를 선택해주세요.</p><div class="board-ai-choices">${result.events.map((event, index) => `<button class="board-ai-choice" type="button" data-event-query-choice="${index}">${escapeHtml(eventChoiceLabel(event, result.period))}</button>`).join("")}</div></div>`;
-    rememberConversation(userText, answer); speakBoardReply(`${answer} 화면에서 하나를 선택해주세요.`); finishFieldAiAnswer();
+    const choicesTts = result.events.map((event, index) => `${index + 1}번은 ${eventVoiceLabel(event)}`).join(", ");
+    rememberConversation(userText, answer); speakBoardReply(`${answer} ${choicesTts}입니다. 어느 행사인가요?`); finishFieldAiAnswer();
   }
   async function showEventAnswer(event, queryType, userText, period = null) {
     rememberActiveEvent(event); pendingEventQuery = null; let answer = ""; let details = ""; let sourceBadge = ""; let attachmentActions = "";
@@ -311,15 +332,21 @@
     rememberConversation(userText, answer); speakBoardReply(ttsText); finishFieldAiAnswer();
   }
   async function handleEventQuery(text, selectedEvent = null, forcedType = "") {
+    if (pendingEventQuery && !selectedEvent) {
+      const candidates = pendingEventQuery.result.events; const ordinal = window.erpConversationAgent.ordinalIndex(text, candidates.length); const pendingVenue = venueTerm(text);
+      const pendingSelected = ordinal >= 0 ? candidates[ordinal] : pendingVenue ? candidates.find((event) => eventVenueMatches(event, pendingVenue)) : null;
+      if (pendingSelected) { await showEventAnswer(pendingSelected, pendingEventQuery.result.queryType, text, pendingEventQuery.result.period); return; }
+    }
     const queryType = forcedType || eventQueryType(text); const anchorDate = board.getSelectedDate(); const hasRelativePeriod = /(이번|다음|지난)\s*(?:주|달)/.test(text); let period = queryPeriod(text, anchorDate); const venue = venueTerm(text); const allowAll = /전체\s*(?:보여|알려|검색)?/.test(text); let matches = [];
     if (hasRelativePeriod && !period) { showMessage("요청한 기간을 해석하지 못했습니다. 이번 주, 다음 주처럼 다시 말씀해주세요.", true); return; }
     if (!period && venue && !allowAll) period = queryPeriod("이번 주", anchorDate);
-    const namedMatches = events.filter((event) => String(event.eventName || "").length >= 2 && String(text || "").replace(/\s+/g, "").includes(String(event.eventName).replace(/\s+/g, "")));
+    const namedMatches = eventReferenceMatches(text);
     if (selectedEvent && !namedMatches.length) matches = [selectedEvent]; else if (namedMatches.length) matches = namedMatches; else if (!period && !venue && activeEventContexts[0]) matches = events.filter((event) => event.id === activeEventContexts[0].eventOrderId); else matches = events.filter((event) => eventInPeriod(event, period) && eventVenueMatches(event, venue));
     matches.sort((left, right) => { const leftDate = eventDateKeys(left).find((key) => !period || (key >= period.start && key <= period.end)) || eventDateKeys(left)[0] || "9999-99-99"; const rightDate = eventDateKeys(right).find((key) => !period || (key >= period.start && key <= period.end)) || eventDateKeys(right)[0] || "9999-99-99"; return leftDate.localeCompare(rightDate) || String(left.eventName).localeCompare(String(right.eventName), "ko"); });
     console.debug("event query debug", { inputText: text, anchorDate, resolvedPeriod: period, venueTerm: venue, totalEvents: events.length, periodMatched: events.filter((event) => eventInPeriod(event, period)).length, venueMatched: events.filter((event) => eventVenueMatches(event, venue)).length, finalMatched: matches.length });
     if (!matches.length) { const answer = "등록된 이벤오더에서 조건에 맞는 행사를 찾지 못했습니다."; rememberConversation(text, answer); showMessage(answer, true); return; }
     const queryResult = { queryType, resolvedPeriod: period ? { start: period.start, end: period.end } : null, matchedCount: matches.length, period, venue, events: matches };
+    if (matches.length > 1 && queryType === "find_events_by_period_space" && isCompactEventListQuestion(text)) { showEventList(queryResult, text); return; }
     if (matches.length > 1) { showEventChoices(queryResult, text); return; }
     await showEventAnswer(matches[0], queryType, text, period);
   }
@@ -410,6 +437,8 @@
   function isRecordFieldSetupRequest(text) { const facts = fieldSetupFacts(text); return Boolean(((facts.layoutType || facts.tables != null || facts.rows != null || facts.columns != null || facts.seatsPerTable != null) && /세팅|해놨|해보니|해보니까|들어가|들어가더라|실제로|완료|아니고|정정/i.test(text)) || (conversationContext.setting && /이렇게.*(?:되네|됐어)|이\s*상태로.*완료/i.test(text))); }
   function isFieldSetupHistoryQuery(text) { return /예전|이전|과거|해봤|실제\s*사례/.test(text) && /세팅|라운드|스쿨|테이블|몇\s*개/.test(text); }
   function boardAiRoute(text) {
+    if (typeof pendingEventQuery !== "undefined" && pendingEventQuery && (window.erpConversationAgent.ordinalIndex(text, pendingEventQuery.result.events.length) >= 0 || venueTerm(text))) return "event_query";
+    if (typeof eventReferenceMatches === "function" && eventReferenceMatches(text).length) return "event_query";
     if (isRecordFieldSetupRequest(text)) return "record_field_setup";
     if (isFieldSetupHistoryQuery(text)) return "field_setup_history";
     if (isConfirmCurrentSetupRequest(text)) return "confirm_current_setup";
@@ -664,24 +693,42 @@
   function updateVoiceReplyButton() { voiceReplyButton.textContent = voiceReplyEnabled ? "🔊 음성 답변 ON" : "🔊 음성 답변 OFF"; voiceReplyButton.setAttribute("aria-pressed", String(voiceReplyEnabled)); }
   function cancelBoardSpeech() {
     ttsPlaybackId += 1;
+    voiceTtsSpeaking = false;
     if (speechSynthesisApi) speechSynthesisApi.cancel();
     if (highQualityAudio) { highQualityAudio.pause(); highQualityAudio = null; }
     if (highQualityAudioUrl) { URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; }
   }
   function conciseBoardReply(text) {
-    const clean = String(text || "").replace(/\s+/g, " ").trim();
+    const clean = String(text || "").replace(/조회 결과는 총\s*(\d+)건입니다\.?/g, "$1건이에요.").replace(/해당 행사에 대한 데이터가 존재하지 않습니다\.?/g, "현재 저장된 정보에서는 찾지 못했어요.").replace(/등록된 이벤오더에서 ([^.]+)을 찾지 못했습니다\.?/g, "현재 저장된 정보에서는 $1을 찾지 못했어요.").replace(/\s+/g, " ").trim();
     if (clean.length <= 220) return clean;
     const firstSentence = clean.match(/^.{1,180}?(?:[.!?]|다\.|요\.|니다\.)/)?.[0] || `${clean.slice(0, 180).trim()}…`;
     return `${firstSentence} 자세한 내용은 화면을 확인해주세요.`;
   }
-  function playBrowserTts(spokenText) {
+  function ttsChunks(text) { return String(text || "").match(/[^.!?]+[.!?]?/g)?.map((value) => value.trim()).filter(Boolean) || []; }
+  function preferredKoreanVoice() {
+    return speechSynthesisApi?.getVoices().filter((voice) => String(voice.lang || "").toLowerCase().startsWith("ko")).sort((left, right) => Number(Boolean(right.localService)) - Number(Boolean(left.localService)))[0] || null;
+  }
+  function voicePlaybackEnded(playbackId) {
+    if (playbackId !== ttsPlaybackId) return;
+    voiceTtsSpeaking = false;
+    if (voiceConversationEnabled) startVoiceRecognitionSafely(250);
+  }
+  function playBrowserTts(spokenText, playbackId) {
     if (!speechSynthesisApi || !SpeechSynthesisUtteranceApi) throw new Error("browser speech synthesis unavailable");
     speechSynthesisApi.cancel();
-    const utterance = new SpeechSynthesisUtteranceApi(spokenText); utterance.lang = "ko-KR"; utterance.rate = ttsSettings.speed;
-    const koreanVoice = speechSynthesisApi.getVoices().find((voice) => String(voice.lang || "").toLowerCase().startsWith("ko"));
-    if (koreanVoice) utterance.voice = koreanVoice;
-    utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board browser TTS failed", event.error); };
-    speechSynthesisApi.speak(utterance);
+    const chunks = ttsChunks(spokenText); const koreanVoice = preferredKoreanVoice();
+    return new Promise((resolve) => {
+      const speakNext = (index) => {
+        if (playbackId !== ttsPlaybackId || index >= chunks.length) { resolve(); return; }
+        const utterance = new SpeechSynthesisUtteranceApi(chunks[index]); utterance.lang = "ko-KR"; utterance.rate = ttsSettings.speed; utterance.pitch = 1; utterance.volume = 1;
+        if (voiceConversationEnabled) utterance.rate = Math.min(1, Math.max(.95, utterance.rate));
+        if (koreanVoice) utterance.voice = koreanVoice;
+        utterance.onend = () => speakNext(index + 1);
+        utterance.onerror = (event) => { if (!["canceled", "interrupted"].includes(event.error)) console.warn("board browser TTS failed", event.error); resolve(); };
+        speechSynthesisApi.speak(utterance);
+      };
+      speakNext(0);
+    });
   }
   async function playHighQualityTts(spokenText, playbackId) {
     const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, {
@@ -693,21 +740,23 @@
     const blob = await response.blob();
     if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
     highQualityAudioUrl = URL.createObjectURL(blob); highQualityAudio = new Audio(highQualityAudioUrl);
-    highQualityAudio.addEventListener("ended", () => { if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; highQualityAudio = null; }, { once: true });
-    await highQualityAudio.play();
+    await new Promise((resolve, reject) => { highQualityAudio.addEventListener("ended", resolve, { once: true }); highQualityAudio.addEventListener("error", reject, { once: true }); highQualityAudio.play().catch(reject); });
+    if (highQualityAudioUrl) URL.revokeObjectURL(highQualityAudioUrl); highQualityAudioUrl = ""; highQualityAudio = null;
   }
   const ttsProviders = { browser: playBrowserTts, high_quality: playHighQualityTts };
   async function speakBoardReply(text) {
     const spokenText = conciseBoardReply(text);
-    if (speechListening || !voiceReplyEnabled || !spokenText || spokenText === lastSpokenText) return;
-    cancelBoardSpeech(); const playbackId = ttsPlaybackId; lastSpokenText = spokenText;
+    if (!voiceReplyEnabled || !spokenText || spokenText === lastSpokenText) return;
+    cancelBoardSpeech(); const playbackId = ttsPlaybackId; lastSpokenText = spokenText; voiceTtsSpeaking = true; if (voiceConversationEnabled) setSpeechStatus("AI 답변 중...");
+    if (speechRecognition && speechListening) { fieldAiAutoSubmit = false; try { speechRecognition.abort(); } catch { /* already stopped */ } }
     try {
       await ttsProviders[ttsSettings.provider](spokenText, playbackId);
     } catch (error) {
       console.warn("preferred board TTS failed; using browser fallback", error);
       if (playbackId !== ttsPlaybackId || !voiceReplyEnabled) return;
-      try { playBrowserTts(spokenText); } catch (fallbackError) { console.warn("board TTS fallback failed", fallbackError); }
+      try { await playBrowserTts(spokenText, playbackId); } catch (fallbackError) { console.warn("board TTS fallback failed", fallbackError); }
     }
+    voicePlaybackEnded(playbackId);
   }
   function ttsSettingsProposal(text) {
     if (!/(?:목소리|음성|말(?:하는)?\s*속도|천천히|빠르게|고품질|브라우저).*(?:바꿔|변경|해줘|말해|유지)|(?:천천히|빠르게)\s*말해|말(?:하는)?\s*속도\s*(?:빠르게|천천히|느리게|빨리)/i.test(text)) return null;
@@ -741,16 +790,38 @@
   }
   function setSpeechButtonState(state) {
     speechButton.dataset.state = state;
-    speechButton.textContent = state === "listening" ? "🔴" : state === "processing" ? "●" : "🎙";
-    speechButton.setAttribute("aria-label", state === "listening" ? "음성 입력 중지" : state === "processing" ? "음성을 텍스트로 변환 중" : "음성 입력");
+    speechButton.textContent = `🎙 음성 ${voiceConversationEnabled ? "ON" : "OFF"}`;
+    speechButton.setAttribute("aria-pressed", String(voiceConversationEnabled));
+    speechButton.setAttribute("aria-label", voiceConversationEnabled ? "음성 대화 끄기" : "음성 대화 켜기");
   }
   function speechInputValue(transcript) { return [speechBaseText, transcript.trim()].filter(Boolean).join(" "); }
   function resizeAiInput() { aiInput.style.height = "auto"; aiInput.style.height = `${Math.min(aiInput.scrollHeight, 112)}px`; }
+  function clearVoiceRestartTimer() { if (voiceRestartTimer) clearTimeout(voiceRestartTimer); voiceRestartTimer = null; }
+  function resetSpeechCapture() { fieldAiAutoSubmit = true; speechSubmitPending = false; speechBaseText = ""; speechRawTranscript = ""; speechFinalText = ""; speechNormalization = { matchedVenue: "", confidence: 0 }; speechErrorMessage = ""; }
+  function startVoiceRecognitionSafely(delay = 0) {
+    clearVoiceRestartTimer();
+    if (!voiceConversationEnabled || voiceTtsSpeaking || voiceRequestProcessing || speechListening || speechStartPending) return;
+    voiceRestartTimer = setTimeout(() => {
+      voiceRestartTimer = null;
+      if (!voiceConversationEnabled || voiceTtsSpeaking || voiceRequestProcessing || speechListening || speechStartPending) return;
+      const recognition = ensureSpeechRecognition(); if (!recognition) { setVoiceConversationEnabled(false, "이 브라우저에서는 음성 입력을 지원하지 않습니다."); return; }
+      resetSpeechCapture(); speechStartPending = true; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
+      try { recognition.start(); }
+      catch (error) { speechStartPending = false; voiceStartFailures += 1; console.warn("voice recognition restart failed", error); if (voiceStartFailures >= 2) setVoiceConversationEnabled(false, "음성 입력을 다시 시작하지 못했습니다."); else startVoiceRecognitionSafely(500); }
+    }, delay);
+  }
+  function setVoiceConversationEnabled(enabled, message = "") {
+    const recognitionWasActive = speechListening || speechStartPending; voiceConversationEnabled = Boolean(enabled); clearVoiceRestartTimer(); setSpeechButtonState("idle");
+    if (voiceConversationEnabled) { setVoiceReplyEnabled(true); voiceStartFailures = 0; setSpeechStatus(message || "음성 대화 ON"); startVoiceRecognitionSafely(0); return; }
+    voiceRequestProcessing = false; speechStartPending = false; fieldAiAutoSubmit = false;
+    if (speechRecognition && recognitionWasActive) { try { speechRecognition.stop(); } catch { /* already stopped */ } }
+    setSpeechStatus(message || "음성 대화 OFF", Boolean(message));
+  }
   function ensureSpeechRecognition() {
     if (speechRecognition || !SpeechRecognitionApi) return speechRecognition;
     speechRecognition = new SpeechRecognitionApi();
     speechRecognition.lang = "ko-KR"; speechRecognition.interimResults = true; speechRecognition.continuous = false;
-    speechRecognition.onstart = () => { speechListening = true; setSpeechButtonState("listening"); setSpeechStatus("듣고 있습니다..."); };
+    speechRecognition.onstart = () => { speechStartPending = false; voiceStartFailures = 0; speechListening = true; setSpeechButtonState("listening"); setSpeechStatus("듣는 중..."); };
     speechRecognition.onresult = (event) => {
       let finalText = ""; let interimText = "";
       for (let index = 0; index < event.results.length; index += 1) {
@@ -760,28 +831,27 @@
       if (finalText.trim()) speechRawTranscript = finalText.trim(); const normalized = window.erpConversationAgent.normalizeSpeechTranscript(speechRawTranscript, speechVenueAliases); speechFinalText = normalized.text; speechNormalization = normalized; aiInput.value = speechInputValue(`${speechFinalText} ${interimText}`); resizeAiInput();
     };
     speechRecognition.onerror = (event) => {
+      speechStartPending = false;
+      if (event.error === "no-speech") { speechErrorMessage = ""; setSpeechStatus("듣는 중..."); return; }
       fieldAiAutoSubmit = false; fieldAiAwaitingAnswer = false;
-      speechErrorMessage = event.error === "not-allowed" || event.error === "service-not-allowed" ? "마이크 권한이 필요합니다." : event.error === "no-speech" || event.error === "audio-capture" ? "음성을 인식하지 못했습니다. 다시 시도해주세요." : "음성 입력 중 오류가 발생했습니다. 다시 시도해주세요.";
-      setSpeechStatus(speechErrorMessage, true);
+      speechErrorMessage = event.error === "not-allowed" || event.error === "service-not-allowed" ? "마이크 권한이 필요합니다." : event.error === "network" ? "음성 인식 네트워크를 확인해주세요." : event.error === "audio-capture" ? "마이크를 사용할 수 없습니다." : "음성 입력 중 오류가 발생했습니다.";
+      if (["not-allowed", "service-not-allowed", "network", "audio-capture"].includes(event.error)) setVoiceConversationEnabled(false, speechErrorMessage); else setSpeechStatus(speechErrorMessage, true);
     };
     speechRecognition.onend = () => {
-      speechListening = false; setSpeechButtonState("idle");
+      speechListening = false; speechStartPending = false; setSpeechButtonState("idle");
       if (speechFinalText) {
         aiInput.value = speechInputValue(speechFinalText); resizeAiInput();
-        if (fieldAiAutoSubmit && !speechSubmitPending) { fieldAiAutoSubmit = false; speechSubmitPending = true; fieldAiAwaitingAnswer = true; setSpeechButtonState("processing"); setSpeechStatus(`● 확인 중 · “${speechFinalText}”`); console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence }); aiForm.requestSubmit(); }
+        if (fieldAiAutoSubmit && !speechSubmitPending) { fieldAiAutoSubmit = false; speechSubmitPending = true; fieldAiAwaitingAnswer = true; voiceRequestProcessing = voiceConversationEnabled; setSpeechButtonState("processing"); setSpeechStatus("AI 처리 중..."); console.debug("conversation speech", { rawTranscript: speechRawTranscript, normalizedTranscript: speechFinalText, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence }); aiForm.requestSubmit(); }
         else setSpeechStatus("인식된 문장을 확인한 후 보내기를 눌러주세요.");
       }
-      else { aiInput.value = speechBaseText; resizeAiInput(); if (!speechErrorMessage) setSpeechStatus("음성을 인식하지 못했습니다. 다시 시도해주세요.", true); }
+      else { aiInput.value = speechBaseText; resizeAiInput(); if (voiceConversationEnabled && !speechErrorMessage) startVoiceRecognitionSafely(250); else if (!speechErrorMessage) setSpeechStatus("음성을 인식하지 못했습니다. 다시 시도해주세요.", true); }
     };
     return speechRecognition;
   }
   function toggleSpeechRecognition() {
-    if (speechListening) { setSpeechButtonState("processing"); setSpeechStatus("텍스트 변환 중..."); speechRecognition.stop(); return; }
-    fieldAiAwaitingAnswer = false; cancelBoardSpeech();
-    const recognition = ensureSpeechRecognition();
-    if (!recognition) { setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); return; }
-    fieldAiAutoSubmit = true; speechSubmitPending = false; speechBaseText = ""; speechRawTranscript = ""; speechFinalText = ""; speechNormalization = { matchedVenue: "", confidence: 0 }; speechErrorMessage = ""; setSpeechButtonState("processing"); setSpeechStatus("마이크를 준비하고 있습니다...");
-    try { recognition.start(); } catch (error) { console.error("speech recognition start failed", error); setSpeechButtonState("idle"); setSpeechStatus("음성 입력을 시작하지 못했습니다. 다시 시도해주세요.", true); }
+    fieldAiAwaitingAnswer = false;
+    if (voiceConversationEnabled) { setVoiceConversationEnabled(false); return; }
+    cancelBoardSpeech(); setVoiceConversationEnabled(true);
   }
   async function waitForVisualFrame() {
     if (visualVideo.videoWidth && visualVideo.videoHeight) return;
@@ -793,7 +863,7 @@
     closeVisualCamera();
     return requestVisualQuery(text, true);
   }
-  function finishFieldAiAnswer() { if (!fieldAiAwaitingAnswer) return; fieldAiAwaitingAnswer = false; setSpeechButtonState("idle"); setSpeechStatus("● 답변 완료"); }
+  function finishFieldAiAnswer() { if (!fieldAiAwaitingAnswer && !voiceRequestProcessing) return; fieldAiAwaitingAnswer = false; voiceRequestProcessing = false; setSpeechButtonState("idle"); if (voiceConversationEnabled && !voiceTtsSpeaking) startVoiceRecognitionSafely(250); else if (!voiceConversationEnabled) setSpeechStatus("● 답변 완료"); }
   function captureVisualFrame() {
     const width = visualVideo.videoWidth; const height = visualVideo.videoHeight;
     if (!width || !height) throw new Error("카메라 화면이 준비되지 않았습니다.");
@@ -1146,7 +1216,7 @@
   document.querySelectorAll("[data-board-ai-quick]").forEach((button) => button.addEventListener("click", () => { aiInput.value = button.dataset.boardAiQuick; aiForm.requestSubmit(); }));
   mobileBriefingButton.addEventListener("click", () => showMobileDailyBriefing(true));
   if (!SpeechRecognitionApi) { speechButton.disabled = true; speechButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다."; setSpeechStatus("이 브라우저에서는 음성 입력을 지원하지 않습니다.", true); }
-  else speechButton.addEventListener("click", toggleSpeechRecognition);
+  else { setSpeechButtonState("idle"); speechButton.addEventListener("click", toggleSpeechRecognition); }
   visualCloseButton.addEventListener("click", closeVisualCamera);
   visualCaptureButton.addEventListener("click", async () => { visualCaptureButton.disabled = true; try { await captureAndAnalyzeVisual(); } catch (error) { console.error("visual capture failed", error); showMessage(error.message || "현재 화면을 분석하지 못했습니다."); } finally { visualCaptureButton.disabled = false; } });
   assetPhotoButton.addEventListener("click", () => { aiPlusMenu.hidden = true; aiPlusButton.setAttribute("aria-expanded", "false"); assetPhotoInput.click(); });
@@ -1160,6 +1230,7 @@
   });
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
+    if (voiceConversationEnabled && /^(?:음성\s*꺼|대화\s*종료|그만\s*들을래|마이크\s*꺼|잠깐\s*멈춰)[.!\s]*$/i.test(text)) { setVoiceConversationEnabled(false); aiInput.value = ""; showMessage("음성 대화를 종료했습니다."); return; }
     const analyticsAnswer = !selectedAssetImageFile ? answerEventOrderAnalytics(text) : "";
     if (analyticsAnswer) { showMessage(analyticsAnswer, true); aiInput.value = ""; return; }
     briefingActionInProgress = true; const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : ""; briefingActionInProgress = false;
@@ -1304,7 +1375,7 @@
   };
   window.addEventListener("banquet:field-note-saved", () => refresh());
   window.addEventListener("banquet:operation-board-rendered", updateMobileDailyBriefingBadge);
-  window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
+  window.addEventListener("beforeunload", () => { voiceConversationEnabled = false; clearVoiceRestartTimer(); closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && (speechListening || speechStartPending)) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
   if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
 })();

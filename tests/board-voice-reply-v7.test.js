@@ -40,8 +40,7 @@ assert(visualBlock.includes("speakBoardReply(finalAnswer)"));
 const transientBlock = page.slice(page.indexOf("function showTransientMessage"), page.indexOf("function proposalSummary"));
 assert(!transientBlock.includes("speakBoardReply"));
 
-const micBlock = page.slice(page.indexOf("function toggleSpeechRecognition"), page.indexOf("function captureVisualFrame"));
-assert(micBlock.indexOf("cancelBoardSpeech()") < micBlock.indexOf("recognition.start()"));
+assert(page.indexOf("cancelBoardSpeech()") < page.indexOf("setVoiceConversationEnabled(true)"));
 assert(page.includes("clean.length <= 220"));
 assert(css.includes(".board-ai-voice-settings"));
 
