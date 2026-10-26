@@ -32,6 +32,6 @@ assert(source.includes('showStandaloneMobileAgenda = window.location?.pathname?.
 assert(source.includes('showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""'));
 assert(source.includes("const today = seoulDateKey()") && source.includes("active.slice(0, 8)"), "서울 실제 오늘 기준으로 최대 8건을 표시해야 한다");
 assert(source.includes("completeBoardItem") && source.includes("syncItem(block)"), "위젯과 운영보드가 같은 완료 저장 경로를 사용해야 한다");
-assert(source.includes("formatVenueShort(block.venue)"));
+assert(source.includes("blockDisplayVenue(block)"), "G. 오늘 남은 일정은 운영보드와 같은 display venue helper를 사용해야 한다");
 
 console.log("PC today remaining widget V1 tests passed");

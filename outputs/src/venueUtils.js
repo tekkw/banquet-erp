@@ -143,6 +143,13 @@
   }
   function venueLabel(value) { const code = VENUE_MASTER.some((item) => item.code === value) ? value : normalizeVenue(value); return VENUE_MASTER.find((item) => item.code === code)?.label || ""; }
   function formatVenueShort(value) { const codes = normalizeVenueList(value); if (codes.length > 1) return codes.map((code) => SHORT_LABELS[code]).filter(Boolean).join("+"); const code = codes[0] || normalizeVenue(value); return SHORT_LABELS[code] || String(value || "").replace(/^\s*\d+\s*(?:F|층)\s*/i, "").trim() || "장소 미정"; }
+  function formatOperationalVenue({ eventVenue = "", scheduleVenue = "", scheduleType = "" } = {}) {
+    const mealSchedule = /중식|석식|뷔페|식사|lunch|dinner|buffet|meal/i.test(String(scheduleType || ""));
+    const firenzeSchedule = /피렌체|firenze|florence/i.test(String(scheduleVenue || ""));
+    const firenzeEvent = /피렌체|firenze|florence/i.test(String(eventVenue || ""));
+    if (mealSchedule && firenzeSchedule) return firenzeEvent || !String(eventVenue || "").trim() ? "피렌체" : `${formatVenueShort(eventVenue)}-피렌체`;
+    return formatVenueShort(scheduleVenue || eventVenue);
+  }
   function formatVenueShortList(values) {
     const labels = collapseCodes(values).map((code) => SHORT_LABELS[code]);
     if (!labels.length) return formatVenueShort((values || [])[0]);
@@ -151,6 +158,6 @@
     return `${labels[0]} 외 ${labels.length - 1}`;
   }
 
-  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
+  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, formatOperationalVenue, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
   global.BANQUET_ERP_CORE_RULES = { normalizeVenue, normalizeVenueSet, spacesOverlap, venueMatchRank, getActualTodaySeoul, getSelectedBoardDate, getSetupTimingStatus, resolveNextEventForVenue, getSetupTaskKey, dedupeSetupCandidates, getSetupTaskStatus };
 })(typeof window !== "undefined" ? window : globalThis);

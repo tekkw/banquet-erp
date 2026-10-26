@@ -6,6 +6,7 @@ const styles = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8"
 const pageStyles = fs.readFileSync("outputs/src/styles/operationBoardPage.css", "utf8");
 
 assert(board.includes('class="operation-block-mobile-header"'), "모바일 카드 첫 줄에 시간/장소/유형 영역이 필요하다");
+assert(board.includes("blockDisplayVenue(block)"), "F. PC/mobile은 같은 operational venue 표시 helper를 사용해야 한다");
 assert(board.includes("data-mobile-reminder-toggle"), "모바일 알림 버튼이 필요하다");
 assert(board.includes('["default","기본값"],["30","30분 전"],["60","1시간 전"],["none","없음"]'), "모바일 알림 메뉴는 지정된 네 옵션을 제공해야 한다");
 assert(board.includes("applyReminderValue(key, button.dataset.mobileReminderValue)"), "모바일 알림은 기존 reminder 저장 로직을 재사용해야 한다");
