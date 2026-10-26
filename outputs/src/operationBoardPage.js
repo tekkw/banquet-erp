@@ -1134,6 +1134,7 @@
     showMessage(!refreshResult?.ok ? `${success} 화면 동기화에 실패해 새로고침이 필요합니다.` : !auditSaved ? `${success} 변경 기록 저장은 실패했습니다.` : success, true); aiInput.value = "";
   }
   function start() { login.hidden = true; app.hidden = false; events = cachedEvents(); window.BANQUET_ERP_BEVERAGE_INVENTORY?.init({ getEvents: () => events }); render(); renderAiContext(); status.textContent = events.length ? "저장된 일정 표시 중" : "최신 일정 불러오는 중"; loadSpeechVenueAliases(); refresh(); }
+  function startJellyRenderTest() { login.hidden = true; app.hidden = false; app.dataset.jellyRenderTest = "true"; dateLabel.textContent = "Jelly Render Test"; status.textContent = "합성 occupancy shape · 실제 행사 데이터 미사용"; setBoardView("blocks"); eventBlockBoard?.render({ events: [] }); }
 
   voiceReplyEnabled = storedVoiceReplyEnabled(); updateVoiceReplyButton(); voiceReplyButton.addEventListener("click", toggleVoiceReply);
   ttsQualitySelect.value = ttsSettings.provider;
@@ -1303,5 +1304,6 @@
   window.addEventListener("banquet:operation-board-rendered", updateMobileDailyBriefingBadge);
   window.addEventListener("beforeunload", () => { closeVisualCamera(); cancelBoardSpeech(); if (speechRecognition && speechListening) speechRecognition.abort(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("../push-sw.js").catch(console.warn);
-  if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
+  if (new URLSearchParams(location.search).get("jellyTest") === "1") startJellyRenderTest();
+  else if (storedUser()) start(); else { login.hidden = false; app.hidden = true; }
 })();

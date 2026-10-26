@@ -15,10 +15,40 @@
   let initialized = false;
   let visible = true;
   let frame = 0;
+  let renderer3d = null;
+  let pending3dInput = null;
+  const jellyTestMode = new URLSearchParams(location.search).get("jellyTest") === "1";
 
   const mount = document.getElementById("eventBlockBoard");
   const empty = document.getElementById("eventBlockEmpty");
   const dialog = document.getElementById("eventBlockDetail");
+
+  function hasWebGL() {
+    try {
+      const canvas = document.createElement("canvas");
+      return Boolean(window.WebGLRenderingContext && (canvas.getContext("webgl2") || canvas.getContext("webgl")));
+    } catch { return false; }
+  }
+
+  async function initialize3dRenderer() {
+    if (!mount || !hasWebGL()) { mount?.classList.add("event-block-board--fallback"); return; }
+    try {
+      const module = await import("./eventBlockRenderer3d.js?v=event-block-3d-v1");
+      renderer3d = module.createEventBlockRenderer3d({
+        mount,
+        reducedMotion: Boolean(prefersReducedMotion?.matches),
+        onActivate: (id) => {
+          const piece = layout.find((item) => item.id === String(id));
+          if (piece) openDetail(piece);
+        },
+      });
+      if (jellyTestMode) renderer3d.renderTestShapes();
+      else if (pending3dInput) renderer3d.render(pending3dInput);
+    } catch (error) {
+      mount.classList.add("event-block-board--fallback");
+      console.warn("3D jelly renderer unavailable; keeping SVG fallback", error);
+    }
+  }
 
   function completedIds() {
     try { return JSON.parse(localStorage.getItem(COMPLETE_KEY) || "[]").map(String); }
@@ -226,6 +256,10 @@
   }
 
   function completePiece(piece) {
+    if (renderer3d) {
+      renderer3d.complete(piece.id, () => { saveCompleted(piece.id); render({ events }); });
+      return;
+    }
     const group = [...mount.querySelectorAll("[data-event-block-id]")].find((node) => node.dataset.eventBlockId === piece.id);
     if (!group) return;
     navigator.vibrate?.(20);
@@ -243,15 +277,21 @@
     const selectedDate = window.BANQUET_ERP_OPERATION_BOARD?.getSelectedDate?.() || new Date().toISOString().slice(0, 10);
     const next = physics.buildLayout(events, { anchorDate: selectedDate, completedIds: completedIds(), limit: 12 });
     const previousIds = new Set(layout.map((piece) => piece.id));
-    cancelAnimationFrame(frame);
-    mount.innerHTML = "";
-    const svg = svgNode("svg", { class: "event-block-svg", viewBox: `0 0 ${physics.BOARD_COLUMNS * (CELL + GAP) + 16} 340`, preserveAspectRatio: "xMidYMax meet", "aria-label": "테트리스형 행사 블록 보드" });
-    addDefinitions(svg);
-    const floor = svgNode("line", { class: "event-block-floor", x1: "8", x2: String(physics.BOARD_COLUMNS * (CELL + GAP) + 8), y1: String(FLOOR + 1), y2: String(FLOOR + 1) });
-    svg.append(floor);
-    next.forEach((piece, index) => renderPiece(svg, piece, index, initialized ? !previousIds.has(piece.id) : true));
-    mount.append(svg);
-    empty.hidden = Boolean(next.length);
+    pending3dInput = { pieces: next, previousRows: new Map(previousRows), initialized };
+    if (renderer3d) {
+      if (jellyTestMode) renderer3d.renderTestShapes();
+      else renderer3d.render(pending3dInput);
+    } else {
+      cancelAnimationFrame(frame);
+      mount.innerHTML = "";
+      const svg = svgNode("svg", { class: "event-block-svg", viewBox: `0 0 ${physics.BOARD_COLUMNS * (CELL + GAP) + 16} 340`, preserveAspectRatio: "xMidYMax meet", "aria-label": "테트리스형 행사 블록 보드" });
+      addDefinitions(svg);
+      const floor = svgNode("line", { class: "event-block-floor", x1: "8", x2: String(physics.BOARD_COLUMNS * (CELL + GAP) + 8), y1: String(FLOOR + 1), y2: String(FLOOR + 1) });
+      svg.append(floor);
+      next.forEach((piece, index) => renderPiece(svg, piece, index, initialized ? !previousIds.has(piece.id) : true));
+      mount.append(svg);
+    }
+    empty.hidden = jellyTestMode || Boolean(next.length);
     previousRows = new Map(next.map((piece) => [piece.id, piece.targetRow]));
     layout = next;
     initialized = true;
@@ -262,4 +302,5 @@
   if (mount && "IntersectionObserver" in window) new IntersectionObserver(([entry]) => { visible = entry.isIntersecting; }, { threshold: 0.05 }).observe(mount);
 
   window.BANQUET_ERP_EVENT_BLOCK_BOARD = { render };
+  initialize3dRenderer();
 })();
