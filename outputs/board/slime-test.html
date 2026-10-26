@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#061522">
   <title>Slime Renderer Prototype V1</title>
-  <link rel="stylesheet" href="../src/styles/slimePrototype.css?v=slime-prototype-v1">
+  <link rel="stylesheet" href="../src/styles/slimePrototype.css?v=slime-shape-v2">
   <script type="importmap">
     {
       "imports": {
@@ -20,8 +20,16 @@
     <header class="slime-prototype__header">
       <span>WEBGL MATERIAL LAB</span>
       <h1>Slime Renderer Prototype V1</h1>
-      <p>단일 2×2 solid jelly · 터치해서 눌러보세요</p>
+      <p>단일-mesh occupancy jelly · shape을 고르고 눌러보세요</p>
     </header>
+    <nav id="slimeShapePicker" class="slime-shapes" aria-label="슬라임 shape 선택">
+      <button type="button" data-slime-shape="horizontal2">가로2</button>
+      <button type="button" data-slime-shape="square2x2" aria-pressed="true">2×2</button>
+      <button type="button" data-slime-shape="horizontal4">가로4</button>
+      <button type="button" data-slime-shape="vertical4">세로4</button>
+      <button type="button" data-slime-shape="lShape">L</button>
+      <button type="button" data-slime-shape="stepShape">계단</button>
+    </nav>
     <section id="slimeStage" class="slime-stage" aria-label="3D 슬라임 렌더 테스트">
       <p id="slimeFallback" class="slime-fallback" hidden>WebGL을 사용할 수 없어 3D 슬라임을 표시할 수 없습니다.</p>
       <output id="slimeFps" class="slime-fps" aria-label="초당 프레임">-- FPS</output>
@@ -32,6 +40,6 @@
       <button id="slimeReset" type="button">다시 떨어뜨리기</button>
     </details>
   </main>
-  <script type="module" src="../src/slimePrototype.js?v=slime-prototype-v1"></script>
+  <script type="module" src="../src/slimePrototype.js?v=slime-shape-v2"></script>
 </body>
 </html>

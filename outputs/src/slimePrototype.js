@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { SLIME_SHAPES, buildRoundedShapeFromCells } from "./slimeShapeGenerator.js?v=slime-shape-v2";
 
 const THREE_VERSION = "0.186.1";
 const GEOMETRY = Object.freeze({ width: 4, height: 4, depth: 1.45, radius: 0.72, bevelThickness: 0.38, bevelSize: 0.34, bevelSegments: 12, curveSegments: 20, steps: 1 });
@@ -11,7 +12,9 @@ const fallback = document.getElementById("slimeFallback");
 const fpsOutput = document.getElementById("slimeFps");
 const controlFields = document.getElementById("slimeControlFields");
 const resetButton = document.getElementById("slimeReset");
+const shapePicker = document.getElementById("slimeShapePicker");
 const config = { ...DEFAULTS };
+let selectedShapeKey = "square2x2";
 
 function supportsWebGL() {
   try {
@@ -20,27 +23,9 @@ function supportsWebGL() {
   } catch { return false; }
 }
 
-function roundedSquareShape(width, height, radius) {
-  const shape = new THREE.Shape();
-  const left = -width / 2;
-  const right = width / 2;
-  const bottom = -height / 2;
-  const top = height / 2;
-  shape.moveTo(left + radius, bottom);
-  shape.lineTo(right - radius, bottom);
-  shape.quadraticCurveTo(right, bottom, right, bottom + radius);
-  shape.lineTo(right, top - radius);
-  shape.quadraticCurveTo(right, top, right - radius, top);
-  shape.lineTo(left + radius, top);
-  shape.quadraticCurveTo(left, top, left, top - radius);
-  shape.lineTo(left, bottom + radius);
-  shape.quadraticCurveTo(left, bottom, left + radius, bottom);
-  shape.closePath();
-  return shape;
-}
-
-function makeGeometry(bevelSize) {
-  const geometry = new THREE.ExtrudeGeometry(roundedSquareShape(GEOMETRY.width, GEOMETRY.height, GEOMETRY.radius), {
+function makeGeometry(matrix, bevelSize) {
+  const shape = buildRoundedShapeFromCells(matrix, { cellSize: 2, radius: GEOMETRY.radius, concaveRadius: .38 });
+  const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: GEOMETRY.depth,
     bevelEnabled: true,
     bevelThickness: GEOMETRY.bevelThickness,
@@ -167,7 +152,7 @@ function initialize() {
   };
   material.customProgramCacheKey = () => "slime-prototype-deform-v1";
 
-  let geometry = makeGeometry(config.bevelSize);
+  let geometry = makeGeometry(SLIME_SHAPES[selectedShapeKey], config.bevelSize);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -181,7 +166,7 @@ function initialize() {
   scene.add(floor);
 
   const shadowMaterial = new THREE.MeshBasicMaterial({ map: makeContactShadowTexture(), transparent: true, opacity: .34, depthWrite: false });
-  const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 3.4), shadowMaterial);
+  const contactShadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), shadowMaterial);
   contactShadow.rotation.x = -Math.PI / 2;
   contactShadow.position.set(0, PHYSICS.floorY + .015, .15);
   scene.add(contactShadow);
@@ -209,27 +194,48 @@ function initialize() {
   const motion = { phase: "drop", y: 0, velocityY: 0, deformation: 0, deformationVelocity: 0, pressing: false };
   let halfHeight = 2.25;
   let targetFloorY = 0;
+  let geometrySize = new THREE.Vector3(4.8, 4.8, 2.2);
+  let massFactor = 1;
+  let shadowWidth = 5.4;
+  let shadowDepth = 3.4;
   let elapsed = 0;
   let lastTime = performance.now();
   let fpsStarted = lastTime;
   let fpsFrames = 0;
 
+  function frameCamera() {
+    const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+    const paddedWidth = geometrySize.x + 3.4;
+    const paddedHeight = geometrySize.y + 4.2;
+    const heightDistance = paddedHeight / 2 / Math.tan(verticalFov / 2);
+    const widthDistance = paddedWidth / 2 / (Math.tan(verticalFov / 2) * Math.max(.45, camera.aspect));
+    const distance = Math.max(10.5, heightDistance, widthDistance);
+    const lookY = targetFloorY + geometrySize.y * .06;
+    camera.position.set(geometrySize.x * .018, lookY + Math.min(2.3, geometrySize.y * .4), distance);
+    camera.lookAt(0, lookY, 0);
+  }
+
   function updateGeometry() {
-    const next = makeGeometry(config.bevelSize);
+    const matrix = SLIME_SHAPES[selectedShapeKey];
+    const next = makeGeometry(matrix, config.bevelSize);
     geometry.dispose();
     geometry = next;
     mesh.geometry = geometry;
-    const size = new THREE.Vector3();
-    geometry.boundingBox.getSize(size);
-    halfHeight = size.y / 2;
+    geometry.boundingBox.getSize(geometrySize);
+    halfHeight = geometrySize.y / 2;
     shaderUniforms.uHalfHeight.value = halfHeight;
     targetFloorY = PHYSICS.floorY + halfHeight + .035;
+    const activeCells = matrix.flat().filter(Boolean).length;
+    massFactor = Math.max(.8, Math.min(1.45, Math.sqrt(activeCells / 4)));
+    shadowWidth = geometrySize.x * 1.12;
+    shadowDepth = Math.max(2.7, geometrySize.z * 2.15);
     if (motion.phase !== "drop") motion.y = targetFloorY;
+    frameCamera();
   }
 
   function resetDrop() {
     motion.phase = "drop";
-    motion.y = targetFloorY + 8;
+    motion.y = targetFloorY + Math.max(8, geometrySize.y * 1.15);
     motion.velocityY = 0;
     motion.deformation = 0;
     motion.deformationVelocity = 0;
@@ -254,7 +260,9 @@ function initialize() {
       }
     } else {
       const target = motion.pressing ? -.13 : 0;
-      const acceleration = (target - motion.deformation) * PHYSICS.spring - motion.deformationVelocity * PHYSICS.damping;
+      const spring = PHYSICS.spring / massFactor;
+      const damping = PHYSICS.damping * Math.sqrt(massFactor);
+      const acceleration = (target - motion.deformation) * spring - motion.deformationVelocity * damping;
       motion.deformationVelocity += acceleration * delta;
       motion.deformation += motion.deformationVelocity * delta;
       const wobble = config.wobble;
@@ -266,7 +274,7 @@ function initialize() {
       shaderUniforms.uImpact.value = Math.min(.17, (Math.abs(motion.deformation) * .7 + Math.abs(motion.deformationVelocity) * .018) * wobble);
     }
     const compression = Math.max(0, 1 - mesh.scale.y);
-    contactShadow.scale.set(1 + compression * 1.45, 1 + compression * .7, 1);
+    contactShadow.scale.set(shadowWidth * (1 + compression * 1.45), shadowDepth * (1 + compression * .7), 1);
     shadowMaterial.opacity = .3 + compression * .55;
   }
 
@@ -308,6 +316,7 @@ function initialize() {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    frameCamera();
   }
 
   function animate(now) {
@@ -328,6 +337,14 @@ function initialize() {
   }
 
   createControls(updateGeometry, resetDrop);
+  shapePicker.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-slime-shape]");
+    if (!button || !SLIME_SHAPES[button.dataset.slimeShape]) return;
+    selectedShapeKey = button.dataset.slimeShape;
+    shapePicker.querySelectorAll("[data-slime-shape]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+    updateGeometry();
+    resetDrop();
+  });
   updateGeometry();
   resetDrop();
   new ResizeObserver(resize).observe(stage);

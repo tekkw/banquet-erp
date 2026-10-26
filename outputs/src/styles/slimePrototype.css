@@ -17,6 +17,29 @@ body { color: #eaf7fb; overflow-x: hidden; }
 .slime-prototype__header h1 { margin: 8px 0 4px; font-size: clamp(19px, 3vw, 30px); line-height: 1.1; letter-spacing: -.035em; }
 .slime-prototype__header p { margin: 0; color: rgba(183, 209, 218, .68); font-size: 12px; }
 
+.slime-shapes {
+  position: absolute;
+  z-index: 4;
+  top: 116px;
+  left: clamp(20px, 5vw, 58px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: min(520px, calc(100vw - 240px));
+}
+.slime-shapes button {
+  min-height: 31px;
+  padding: 0 11px;
+  border: 1px solid rgba(146, 205, 220, .15);
+  border-radius: 10px;
+  color: #91abb5;
+  background: rgba(8, 27, 41, .62);
+  font-size: 10px;
+  font-weight: 800;
+  backdrop-filter: blur(9px);
+}
+.slime-shapes button[aria-pressed="true"] { border-color: rgba(111, 220, 226, .5); color: #e9fdff; background: rgba(48, 139, 151, .34); box-shadow: inset 0 1px rgba(255, 255, 255, .08); }
+
 .slime-stage {
   position: relative;
   width: min(100%, 1180px);
@@ -61,6 +84,8 @@ body { color: #eaf7fb; overflow-x: hidden; }
   .slime-stage { height: 100vh; min-height: 560px; border: 0; border-radius: 0; }
   .slime-prototype__header { top: max(15px, env(safe-area-inset-top)); left: 16px; }
   .slime-prototype__header h1 { max-width: 230px; }
+  .slime-shapes { top: 112px; left: 16px; right: 16px; max-width: none; gap: 5px; }
+  .slime-shapes button { min-height: 29px; padding: 0 9px; }
   .slime-controls { top: auto; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: 172px; max-height: 54vh; }
   .slime-controls:not([open]) { width: 142px; }
   .slime-fps { bottom: max(14px, env(safe-area-inset-bottom)); }

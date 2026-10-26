@@ -5,6 +5,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "outputs/board/slime-test.html"), "utf8");
 const script = fs.readFileSync(path.join(root, "outputs/src/slimePrototype.js"), "utf8");
+const generator = fs.readFileSync(path.join(root, "outputs/src/slimeShapeGenerator.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "outputs/src/styles/slimePrototype.css"), "utf8");
 
 assert(html.includes("Slime Renderer Prototype V1"), "prototype must have an independent development entry");
@@ -13,7 +14,7 @@ assert(!html.includes("operationBoardPage") && !html.includes("eventBlockBoard")
 assert(!script.includes("eventOrder") && !script.includes("occupancy") && !script.includes("localStorage"), "prototype must not connect event data or completion state");
 assert(!script.includes("MarchingCubes"), "prototype must not use metaballs or MarchingCubes");
 
-assert(script.includes("new THREE.Shape") && script.includes("new THREE.ExtrudeGeometry"), "one rounded contour must create one extruded mesh");
+assert(generator.includes("new THREE.Shape") && script.includes("new THREE.ExtrudeGeometry"), "one rounded contour must create one extruded mesh");
 assert.strictEqual((script.match(/new THREE\.Mesh\(geometry, material\)/g) || []).length, 1, "the 2x2 solid must be one mesh, not four cells");
 assert(script.includes("depth: 1.45") && script.includes("bevelThickness: 0.38") && script.includes("bevelSegments: 12") && script.includes("curveSegments: 20"), "thick rounded candy geometry parameters are required");
 
