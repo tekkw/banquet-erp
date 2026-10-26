@@ -162,7 +162,6 @@ async function synthesizeBoardSpeech(payload: Record<string, unknown>) {
   if (TTS_PROVIDER !== "qwen" || !DASHSCOPE_API_KEY || !DASHSCOPE_TTS_ENDPOINT) {
     return jsonResponse({ message: "Qwen TTS가 설정되지 않았습니다.", fallback: "browser" }, 503);
   }
-  const speed = Math.min(1.25, Math.max(0.75, Number(payload.speed) || 1));
   const requestedVoice = String(payload.voice ?? "Cherry");
   const voice = QWEN_TTS_VOICES.has(requestedVoice) ? requestedVoice : "Cherry";
   const startedAt = Date.now();
@@ -173,7 +172,7 @@ async function synthesizeBoardSpeech(payload: Record<string, unknown>) {
       method: "POST",
       signal: controller.signal,
       headers: { Authorization: `Bearer ${DASHSCOPE_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: QWEN_TTS_MODEL, input: { text: input, voice, format: "mp3", sample_rate: 24000, rate: speed } }),
+      body: JSON.stringify({ model: QWEN_TTS_MODEL, input: { text: input, voice, language_type: "Korean" } }),
     });
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.message || result?.code || `DashScope TTS failed (${response.status})`);

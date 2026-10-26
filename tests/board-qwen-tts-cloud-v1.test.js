@@ -28,6 +28,8 @@ assert(!page.includes("dashscope.aliyuncs.com"));
 assert(edge.includes('const TTS_PROVIDER = (Deno.env.get("TTS_PROVIDER") ?? "browser")'));
 assert(edge.includes('const QWEN_TTS_MODEL = "qwen3-tts-flash"'));
 assert(edge.includes("if (TTS_PROVIDER !== \"qwen\" || !DASHSCOPE_API_KEY || !DASHSCOPE_TTS_ENDPOINT)"));
+assert(edge.includes('input: { text: input, voice, language_type: "Korean" }'));
+assert(!edge.includes('input: { text: input, voice, format:'));
 assert(edge.includes('fallback: "browser"'));
 assert(edge.includes("BOARD_TTS_TIMEOUT_MS = 8000"));
 assert(edge.includes('characterCount: input.length'));
