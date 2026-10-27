@@ -82,6 +82,17 @@
     return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
   }
 
+  function transformBasePlanPoint(group, point) {
+    const rotation = Number(group?.metadata?.rotation ?? group?.rotation ?? 0);
+    const radians = (((rotation % 360) + 360) % 360) * Math.PI / 180;
+    const x = Number(point?.x || 0);
+    const y = Number(point?.y || 0);
+    return {
+      x: x * Math.cos(radians) - y * Math.sin(radians) + Number(group?.metadata?.offsetX || 0),
+      y: x * Math.sin(radians) + y * Math.cos(radians) + Number(group?.metadata?.offsetY || 0),
+    };
+  }
+
   const STRUCTURAL_OBJECT_TYPES = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
 
   function isFloorplanStructuralObject(object) {
@@ -704,12 +715,7 @@
       const margin = withMargin && hasCompositeWorkspace() ? 3000 : 0;
       return calculateWorkspaceWorldBounds(workspaceDrawingWidthMm, workspaceDrawingHeightMm, workspaceObjects, margin, workspaceMeterScale);
     }
-    function rotateCompositePoint(point, rotation) {
-      const radians = normalizeDegrees(rotation) * Math.PI / 180; const cos = Math.cos(radians); const sin = Math.sin(radians);
-      return { x: Number(point.x || 0) * cos - Number(point.y || 0) * sin, y: Number(point.x || 0) * sin + Number(point.y || 0) * cos };
-    }
-    function compositeObjectBounds(object) { const width = Number(object.widthM || 0) * 1000; const height = Number(object.heightM || 0) * 1000; return { left: object.x - width / 2, right: object.x + width / 2, top: object.y - height / 2, bottom: object.y + height / 2, width, height }; }
-    function transformCompositePoint(point, group) { const rotated = rotateCompositePoint(point, group.metadata?.rotation ?? group.rotation); return { x: rotated.x + Number(group.metadata?.offsetX || 0), y: rotated.y + Number(group.metadata?.offsetY || 0) }; }
+    function compositeObjectBounds(object) { const width = Number(object.widthM || 0) * 1000; const height = Number(object.heightM || 0) * 1000; const radians = normalizeDegrees(object.rotation || 0) * Math.PI / 180; const boxWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians)); const boxHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians)); return { left: object.x - boxWidth / 2, right: object.x + boxWidth / 2, top: object.y - boxHeight / 2, bottom: object.y + boxHeight / 2, width: boxWidth, height: boxHeight }; }
     function compositeReferencePayload(group) { return { sourceBasePlanId: group.metadata.sourceBasePlanId, offsetX: Math.round(Number(group.metadata.offsetX || 0)), offsetY: Math.round(Number(group.metadata.offsetY || 0)), rotation: normalizeDegrees(group.metadata.rotation ?? group.rotation), locked: true }; }
 
     function bindEvents() {
@@ -2017,12 +2023,12 @@
     }
 
     function transformCompositeLocalObject(source, group) {
-      const object = JSON.parse(JSON.stringify(source)); const center = transformCompositePoint({ x: source.x, y: source.y }, group);
+      const object = JSON.parse(JSON.stringify(source)); const center = transformBasePlanPoint(group, { x: source.x, y: source.y });
       object.x = center.x; object.y = center.y; object.rotation = normalizeDegrees(Number(source.rotation || 0) + Number((group.metadata?.rotation ?? group.rotation) || 0));
       if (["wall", "calibration"].includes(object.objectType)) {
-        const metadata = migrateLegacyWallMetadata(source); const start = transformCompositePoint({ x: metadata.start_x_mm, y: metadata.start_y_mm }, group); const end = transformCompositePoint({ x: metadata.end_x_mm, y: metadata.end_y_mm }, group);
+        const metadata = migrateLegacyWallMetadata(source); const start = transformBasePlanPoint(group, { x: metadata.start_x_mm, y: metadata.start_y_mm }); const end = transformBasePlanPoint(group, { x: metadata.end_x_mm, y: metadata.end_y_mm });
         object.metadata = { ...object.metadata, start_x_mm: Math.round(start.x), start_y_mm: Math.round(start.y), end_x_mm: Math.round(end.x), end_y_mm: Math.round(end.y) };
-        syncWorkspaceLineObjectFromMetadata(object);
+        syncWorkspaceLineObjectFromMetadata(object, true);
       }
       return object;
     }
@@ -4555,15 +4561,18 @@
       return metadata;
     }
 
-    function syncWorkspaceLineObjectFromMetadata(object) {
+    function syncWorkspaceLineObjectFromMetadata(object, preserveWorldCoordinates = false) {
       if (!["wall", "calibration"].includes(object?.objectType)) return object;
       const metadata = migrateLegacyWallMetadata(object);
-      const start = workspaceMillimetersToPoint({ x: metadata.start_x_mm, y: metadata.start_y_mm });
-      const end = workspaceMillimetersToPoint({ x: metadata.end_x_mm, y: metadata.end_y_mm });
+      const start = preserveWorldCoordinates ? { x: Number(metadata.start_x_mm || 0), y: Number(metadata.start_y_mm || 0) } : workspaceMillimetersToPoint({ x: metadata.start_x_mm, y: metadata.start_y_mm });
+      const end = preserveWorldCoordinates ? { x: Number(metadata.end_x_mm || 0), y: Number(metadata.end_y_mm || 0) } : workspaceMillimetersToPoint({ x: metadata.end_x_mm, y: metadata.end_y_mm });
       const drawingLength = distanceBetweenPoints(start, end);
       object.metadata = metadata;
-      object.x = clampNumber((start.x + end.x) / 2, 0, workspaceSize.width);
-      object.y = clampNumber((start.y + end.y) / 2, 0, workspaceSize.height);
+      const centerX = (start.x + end.x) / 2;
+      const centerY = (start.y + end.y) / 2;
+      const allowExpandedCoordinates = preserveWorldCoordinates || isCompositeChild(object) || hasCompositeWorkspace();
+      object.x = allowExpandedCoordinates ? centerX : clampNumber(centerX, 0, workspaceSize.width);
+      object.y = allowExpandedCoordinates ? centerY : clampNumber(centerY, 0, workspaceSize.height);
       object.widthM = Math.max(0.01, drawingLength / workspaceMeterScale);
       object.heightM = Math.max(0.01, Number(metadata.thickness_mm || 150) / 1000);
       object.rotation = getWallAngleDegrees(object);
@@ -5631,6 +5640,7 @@
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
     calculateWorkspaceWorldBounds,
+    transformBasePlanPoint,
     isFloorplanStructuralObject,
     cloneFloorplanObjectsForLayout,
     layoutLibraryGroupName,
