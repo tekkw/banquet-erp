@@ -92,6 +92,7 @@
     get_current_setup: (args) => erpTools.run("getCurrentHallState", args), confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args),
     add_schedule: (args) => erpTools.run("proposeScheduleChange", args), update_schedule_time: (args) => erpTools.run("proposeScheduleChange", args), add_manual_task: (args) => erpTools.run("proposeManualTask", args),
     get_beverage_inventory_status: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+    "event.query": ({ question, previous, options }) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.answerQuestion(question, events, previous, options),
     "event.items.query": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.queryEventOrderItems({ events, ...args }),
     "event.items.aggregate": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.aggregateEventOrderItems({ events, ...args }),
   });
@@ -165,6 +166,15 @@
     }
     return result;
   }
+  async function approvedEventAttachments(ids) {
+    if (!ids.length) return {};
+    try {
+      const links = await request(`file_links?select=entity_id,file_id,link_type&entity_type=eq.event_order&entity_id=in.(${ids.map(encodeURIComponent).join(",")})&order=sort_order.asc,created_at.asc`);
+      const fileIds = [...new Set((links || []).map((row) => row.file_id).filter(Boolean))]; if (!fileIds.length) return {};
+      const files = await request(`files?select=id,bucket,storage_path,original_filename,file_type,mime_type,description&id=in.(${fileIds.map(encodeURIComponent).join(",")})`); const byId = new Map((files || []).map((file) => [String(file.id), file]));
+      return (links || []).reduce((result, link) => { const file = byId.get(String(link.file_id)); if (file) (result[link.entity_id] ||= []).push({ ...file, linkType: link.link_type || "attachment", approved: true }); return result; }, {});
+    } catch (error) { console.debug("event attachment analytics unavailable", error); return {}; }
+  }
   function grouped(rows) { return rows.reduce((map, row) => { (map[row.event_order_id] ||= []).push(row); return map; }, {}); }
   function rememberConversation(user, answer) { recentConversation.push({ user, answer }); recentConversation = recentConversation.slice(-3); }
   function loadActiveEventContexts() { try { const value = JSON.parse(sessionStorage.getItem(activeEventContextKey) || "[]"); return Array.isArray(value) ? value.slice(0, 3) : []; } catch { return []; } }
@@ -174,9 +184,9 @@
   function rememberDomainContext(domain, value) { saveConversationContext({ ...conversationContext, [domain]: value, lastDomain: domain }); renderAiContext(); }
   function answerEventOrderAnalytics(question) {
     const result = window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.answerQuestion(question, events, conversationContext.analytics || null);
-    if (!result) return "";
+    if (!result) return null;
     saveConversationContext({ ...conversationContext, analytics: result.context, lastDomain: "eventAnalytics" });
-    return result.text;
+    return result;
   }
   function rememberSettingAdvisor(row) {
     settingAdvisorContext = { space: row.space, currentEventOrderId: row.currentEvent?.id || null, nextEventOrderId: row.nextEvent.id, anchorDate: row.anchorDate };
@@ -213,9 +223,9 @@
     try {
       const rows = await request("event_orders?select=*&order=created_at.desc"); const ids = rows.map((row) => row.id);
       if (!ids.length) { events = []; render(); return { ok: true }; }
-      const [dates, schedules, items, notes] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc"), childRows("event_items", ids, "created_at.asc,id.asc"), childRows("event_notes", ids, "created_at.asc,id.asc")]);
+      const [dates, schedules, items, notes, attachmentMap] = await Promise.all([childRows("event_calendar_dates", ids, "calendar_date.asc,id.asc"), childRows("event_schedules", ids, "created_at.asc,id.asc"), childRows("event_items", ids, "created_at.asc,id.asc"), childRows("event_notes", ids, "created_at.asc,id.asc"), approvedEventAttachments(ids)]);
       const byDate = grouped(dates); const bySchedule = grouped(schedules); const byItem = grouped(items); const byNote = grouped(notes);
-      events = rows.map((row) => ({ ...row, id: row.id, eventName: row.event_name || "", companyName: row.company_name || row.organizer || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", originalFilename: row.original_filename || "", layoutText: row.layout_text || row.layout_eqp || row.layout_type || row.layout || "", beveragesText: row.beverages_text || row.beverage || row.bev || "", othersText: row.others_text || row.others || row.special_requests || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ ...item, id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", endTime: item.end_time || item.schedule_end_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })), items: byItem[row.id] || [], notes: byNote[row.id] || [] }));
+      events = rows.map((row) => ({ ...row, id: row.id, eventName: row.event_name || "", companyName: row.company_name || row.organizer || "", startDate: row.start_date || "", endDate: row.end_date || "", eventDateTime: row.event_datetime || "", venue: row.venue || "", guestCount: row.guest_count ?? "", eventType: row.event_type || "", mealTypes: row.meal_types || [], internalMemo: row.internal_memo || "", storagePath: row.storage_path || "", originalFilename: row.original_filename || "", layoutText: row.layout_text || row.layout_eqp || row.layout_type || row.layout || "", beveragesText: row.beverages_text || row.beverage || row.bev || "", othersText: row.others_text || row.others || row.special_requests || "", calendarDates: (byDate[row.id] || []).map((item) => item.calendar_date), schedule: (bySchedule[row.id] || []).map((item) => ({ ...item, id: item.id, date: item.schedule_date || "", time: item.schedule_time || "", endTime: item.end_time || item.schedule_end_time || "", content: item.content || "", venue: item.venue || "", people: item.people ?? "" })), items: byItem[row.id] || [], notes: byNote[row.id] || [], attachments: attachmentMap[row.id] || [] }));
       localStorage.setItem(cacheKey, JSON.stringify({ version: 6, savedAt: Date.now(), events })); render(); status.textContent = "최신 일정 동기화 완료"; return { ok: true };
     } catch (error) { console.error(error); status.textContent = events.length ? "저장된 일정 표시 중 · 동기화 재시도 필요" : "일정을 불러오지 못했습니다"; return { ok: false, error }; }
   }
@@ -1173,7 +1183,7 @@
     resetAssetImage(true); aiInput.value = ""; window.dispatchEvent(new CustomEvent("banquet:assets-changed", { detail: { assetId: after.id } }));
     showMessage(auditSaved ? actionLabel : proposal.intent === "update_asset_location" ? "위치는 변경했지만 이동 기록 저장은 실패했습니다." : `${actionLabel} 변경 기록 저장은 실패했습니다.`, true);
   }
-  function showMessage(message, shouldSpeak = false) { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak || fieldAiAwaitingAnswer) speakBoardReply(message); finishFieldAiAnswer(); }
+  function showMessage(message, shouldSpeak = false, speechText = "") { pendingProposal = null; pendingAssetProposal = null; pendingAssetContext = null; pendingAssetQuery = null; aiResult.innerHTML = `<p class="board-ai-status">${escapeHtml(message)}</p>`; if (shouldSpeak || fieldAiAwaitingAnswer) speakBoardReply(speechText || message); finishFieldAiAnswer(); }
   function briefingActionsHtml(item) {
     if (!item) return "";
     const labels = { complete: "완료", later: "아직", original: "원본 보기", attachments: "첨부자료", notes: "특이사항", next: "다음", acknowledge: "확인", inventory: "재고 보기", demand: "수요 상세", candidates: "후보 확인", changes: "변경 내용 보기" };
@@ -1306,8 +1316,8 @@
   aiForm.addEventListener("submit", async (event) => {
     event.preventDefault(); const text = aiInput.value.trim(); if (!text && !selectedAssetImageFile) return;
     if (voiceConversationEnabled && /^(?:음성\s*꺼|대화\s*종료|그만\s*들을래|마이크\s*꺼|잠깐\s*멈춰)[.!\s]*$/i.test(text)) { setVoiceConversationEnabled(false); aiInput.value = ""; showMessage("음성 대화를 종료했습니다."); return; }
-    const analyticsAnswer = !selectedAssetImageFile ? answerEventOrderAnalytics(text) : "";
-    if (analyticsAnswer) { showMessage(analyticsAnswer, true); aiInput.value = ""; return; }
+    const analyticsAnswer = !selectedAssetImageFile ? answerEventOrderAnalytics(text) : null;
+    if (analyticsAnswer) { showMessage(analyticsAnswer.text, true, analyticsAnswer.ttsText || analyticsAnswer.text); aiInput.value = ""; return; }
     briefingActionInProgress = true; const briefingAnswer = !selectedAssetImageFile ? board.dailyBriefingAnswer(text, events) : ""; briefingActionInProgress = false;
     if (briefingAnswer) { markMobileDailyBriefingSeen(); showBriefingResult(briefingAnswer); aiInput.value = ""; return; }
     if (!selectedAssetImageFile && window.BANQUET_ERP_BEVERAGE_INVENTORY?.matchesQuestion(text)) {

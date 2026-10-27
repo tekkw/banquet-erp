@@ -97,6 +97,7 @@
     const conversationAgent = window.erpConversationAgent?.create({ storage: window.sessionStorage, storageKey: "banquetErp.globalAiContext.v1", maxSteps: 4 });
     const actionRegistry = window.erpActionRegistry?.create({
       get_beverage_inventory_status: ({ question, events }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+      "event.query": ({ question, events, previous, options }) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.answerQuestion(question, events, previous, options),
       "event.items.query": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.queryEventOrderItems(args),
       "event.items.aggregate": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.aggregateEventOrderItems(args),
     });

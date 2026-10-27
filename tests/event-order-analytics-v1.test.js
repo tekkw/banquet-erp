@@ -74,6 +74,6 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(parsed.items)), [
   { itemName: "조식/뷔페", unitPrice: "27,000", quantity: "40", amount: "1,080,000" },
   { itemName: "예상 매출(Expected Revenue)", unitPrice: "", quantity: "", amount: "6,880,000" },
 ]);
-for (const page of ["outputs/index.html", "outputs/board/index.html", "outputs/event-order-preview.html"]) assert(fs.readFileSync(page, "utf8").includes("eventOrderAnalytics.js?v=event-order-analytics-v1"));
+for (const page of ["outputs/index.html", "outputs/board/index.html", "outputs/event-order-preview.html"]) assert(fs.readFileSync(page, "utf8").includes("eventOrderAnalytics.js?v=event-natural-query-plan-v1"));
 
 console.log("event order analytics V1 tests passed");

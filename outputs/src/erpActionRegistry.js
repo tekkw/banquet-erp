@@ -2,7 +2,7 @@
   "use strict";
 
   const definitions = [
-    ["search_events", "event", "query"], ["get_event_detail", "event", "query"], ["get_event_guest_count", "event", "query"], ["get_event_schedule", "event", "query"], ["get_event_layout", "event", "query"], ["get_event_document_section", "event", "query"], ["get_event_requests", "event", "query"], ["get_event_attachments", "event", "query"], ["open_event_original", "event", "query"], ["event.items.query", "eventAnalytics", "query"], ["event.items.aggregate", "eventAnalytics", "query"],
+    ["search_events", "event", "query"], ["get_event_detail", "event", "query"], ["get_event_guest_count", "event", "query"], ["get_event_schedule", "event", "query"], ["get_event_layout", "event", "query"], ["get_event_document_section", "event", "query"], ["get_event_requests", "event", "query"], ["get_event_attachments", "event", "query"], ["open_event_original", "event", "query"], ["event.query", "eventAnalytics", "query"], ["event.items.query", "eventAnalytics", "query"], ["event.items.aggregate", "eventAnalytics", "query"],
     ["create_event", "event", "mutation", "not_implemented"], ["update_event", "event", "mutation", "not_implemented"],
     ["add_schedule", "schedule", "mutation"], ["update_schedule_time", "schedule", "mutation"], ["update_schedule_content", "schedule", "mutation", "not_implemented"], ["delete_schedule", "schedule", "mutation", "not_implemented"],
     ["search_assets", "asset", "query"], ["get_asset_quantity", "asset", "query"], ["get_asset_location", "asset", "query"], ["get_asset_movement", "asset", "query"], ["create_asset", "asset", "mutation"], ["increase_asset_quantity", "asset", "mutation"], ["decrease_asset_quantity", "asset", "mutation"], ["update_asset_location", "asset", "mutation"],
