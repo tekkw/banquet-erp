@@ -2,7 +2,7 @@
   const constants = global.BANQUET_ERP_CONSTANTS;
   const config = constants?.supabaseConfig || {};
   const bucket = config.bucket || "event-orders";
-  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+  const allowedTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation"]);
   const fieldNotePrefix = "[field_note] ";
   let pendingEventFiles = [];
 
@@ -13,17 +13,27 @@
     if (!response.ok) throw new Error(text || `Supabase ${response.status}`);
     return text ? JSON.parse(text) : null;
   }
-  function safeName(value) { return String(value || "attachment").normalize("NFKC").replace(/[^0-9A-Za-z가-힣._-]+/g, "_").slice(-120); }
-  function fileType(file) { return file.type === "application/pdf" ? "pdf" : file.type.startsWith("image/") ? "image" : "file"; }
-  function publicUrl(file) { return `${config.url}/storage/v1/object/public/${encodeURIComponent(file.bucket || bucket)}/${String(file.storage_path || "").split("/").map(encodeURIComponent).join("/")}`; }
+  function extensionOf(fileName) { return global.BANQUET_ERP_STORAGE?.fileExtension?.(fileName) || String(fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""; }
+  function resolvedMimeType(file) { return global.BANQUET_ERP_STORAGE?.resolveFileContentType?.(file) || file?.type || "application/octet-stream"; }
+  function safePathSegment(value, fallback) { return String(value || fallback || "item").replace(/[^0-9A-Za-z_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 96) || fallback || "item"; }
+  function buildAttachmentStoragePath({ entityType = "event_order", eventOrderId = "", fileName = "", extension = "", now = Date.now(), randomId = crypto.randomUUID() } = {}) {
+    const ext = safePathSegment(extension || extensionOf(fileName), "bin").toLowerCase(); const entity = safePathSegment(entityType, "event_order"); const id = safePathSegment(eventOrderId, "unlinked"); const unique = safePathSegment(randomId, "file");
+    return `attachments/${entity}/${id}/${Number(now)}_${unique}.${ext}`;
+  }
+  function fileType(file) { const mimeType = resolvedMimeType(file); return mimeType === "application/pdf" ? "pdf" : mimeType.startsWith("image/") ? "image" : "file"; }
+  function storedPath(file) {
+    const saved = String(file?.storage_path || file?.storagePath || "").replace(/^\/+/, ""); if (saved) return saved;
+    try { const marker = `/storage/v1/object/public/${file?.bucket || bucket}/`; const pathname = decodeURIComponent(new URL(file?.public_url || file?.publicUrl || "").pathname); return pathname.includes(marker) ? pathname.split(marker)[1] : ""; } catch { return ""; }
+  }
+  function publicUrl(file) { const path = storedPath(file); if (!path && (file?.public_url || file?.publicUrl)) return file.public_url || file.publicUrl; return `${config.url}/storage/v1/object/public/${encodeURIComponent(file.bucket || bucket)}/${path.split("/").map(encodeURIComponent).join("/")}`; }
   function validateFiles(files, imagesOnly = false) {
     const list = [...(files || [])];
-    const invalid = list.find((file) => !allowedTypes.has(file.type) || (imagesOnly && !file.type.startsWith("image/")));
-    if (invalid) throw new Error(`${invalid.name}: PDF, JPG, PNG, WEBP 파일만 첨부할 수 있습니다.`);
+    const invalid = list.find((file) => !allowedTypes.has(resolvedMimeType(file)) || (imagesOnly && !resolvedMimeType(file).startsWith("image/")));
+    if (invalid) throw new Error(`${invalid.name}: JPG, PNG, WEBP, PDF, XLSX, XLS, DOCX, DOC, PPTX, PPT 파일만 첨부할 수 있습니다.`);
     return list;
   }
   async function compressImage(file, maxSide = 1800, quality = .82) {
-    if (!file?.type?.startsWith("image/") || file.type === "image/webp" && file.size < 1200000) return file;
+    const mimeType = resolvedMimeType(file); if (!mimeType.startsWith("image/") || mimeType === "image/webp" && file.size < 1200000) return file;
     const bitmap = await createImageBitmap(file); const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
     if (scale === 1 && file.size < 1800000) { bitmap.close(); return file; }
     const canvas = document.createElement("canvas"); canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale);
@@ -31,12 +41,21 @@
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
     return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg", lastModified: Date.now() });
   }
+  async function verifyStorageObject(storagePath) {
+    const encoded = storagePath.split("/").map(encodeURIComponent).join("/"); const options = { method: "GET", headers: headers({ Range: "bytes=0-0" }), cache: "no-store" };
+    let response = await fetch(publicUrl({ bucket, storage_path: storagePath }), { method: "GET", headers: { Range: "bytes=0-0" }, cache: "no-store" });
+    if (!response.ok) response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(bucket)}/${encoded}`, options);
+    if (!response.ok) throw new Error("업로드된 첨부파일을 다시 확인하지 못했습니다.");
+  }
+  function debugUpload(detail) { if (/^(?:localhost|127\.0\.0\.1)$/.test(global.location?.hostname || "")) console.debug("[Event attachment]", detail); }
   async function uploadFile(entityType, entityId, linkType, sourceFile, sortOrder = 0) {
-    const file = sourceFile.type.startsWith("image/") ? await compressImage(sourceFile) : sourceFile;
-    const storagePath = `attachments/${entityType}/${entityId}/${Date.now()}_${crypto.randomUUID()}_${safeName(file.name)}`;
-    const upload = await fetch(`${config.url}/storage/v1/object/${bucket}/${storagePath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: headers({ "Content-Type": file.type || "application/octet-stream", "x-upsert": "false" }), body: file });
+    const sourceMimeType = resolvedMimeType(sourceFile); const normalizedSource = sourceFile.type === sourceMimeType ? sourceFile : new File([sourceFile], sourceFile.name, { type: sourceMimeType, lastModified: sourceFile.lastModified });
+    const file = sourceMimeType.startsWith("image/") ? await compressImage(normalizedSource) : normalizedSource; const mimeType = resolvedMimeType(file);
+    const storagePath = buildAttachmentStoragePath({ entityType, eventOrderId: entityId, fileName: file.name }); debugUpload({ originalName: sourceFile.name, storagePath, bucket, mimeType });
+    const upload = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(bucket)}/${storagePath.split("/").map(encodeURIComponent).join("/")}`, { method: "POST", headers: headers({ "Content-Type": mimeType, "x-upsert": "false" }), body: file });
     if (!upload.ok) throw new Error(await upload.text() || "첨부파일 업로드에 실패했습니다.");
-    const rows = await request("files?select=*", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ bucket, storage_path: storagePath, public_url: publicUrl({ bucket, storage_path: storagePath }), original_filename: sourceFile.name, file_type: fileType(file), mime_type: file.type, file_size: file.size, description: sourceFile.name }) });
+    await verifyStorageObject(storagePath);
+    const rows = await request("files?select=*", { method: "POST", headers: { Prefer: "return=representation" }, body: JSON.stringify({ bucket, storage_path: storagePath, public_url: publicUrl({ bucket, storage_path: storagePath }), original_filename: sourceFile.name, file_type: fileType(file), mime_type: mimeType, file_size: file.size, description: sourceFile.name }) });
     const saved = rows?.[0]; if (!saved?.id) throw new Error("첨부파일 메타데이터를 저장하지 못했습니다.");
     await request("file_links", { method: "POST", body: JSON.stringify({ file_id: saved.id, entity_type: entityType, entity_id: entityId, link_type: linkType, sort_order: sortOrder }) });
     return saved;
@@ -111,7 +130,8 @@
   }
   async function deleteFile(file) {
     const links = await request(`file_links?select=id&file_id=eq.${encodeURIComponent(file.id)}`); if ((links || []).length > 1) throw new Error("다른 기록에서도 사용하는 파일은 여기서 삭제할 수 없습니다.");
-    const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(file.bucket || bucket)}/${String(file.storage_path || "").split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE", headers: headers() });
+    const storagePath = storedPath(file); if (!storagePath) throw new Error("저장된 첨부파일 경로를 확인하지 못했습니다.");
+    const response = await fetch(`${config.url}/storage/v1/object/${encodeURIComponent(file.bucket || bucket)}/${storagePath.split("/").map(encodeURIComponent).join("/")}`, { method: "DELETE", headers: headers() });
     if (!response.ok && response.status !== 404) throw new Error("Storage 파일을 삭제하지 못했습니다.");
     await request(`files?id=eq.${encodeURIComponent(file.id)}`, { method: "DELETE" });
   }
@@ -128,7 +148,7 @@
     const files = await linkedFiles("event_order", eventOrderId, "event_attachment").catch(() => []); container.innerHTML = "";
     if (!files.length) container.insertAdjacentHTML("beforeend", '<p class="attachment-empty">등록된 첨부자료가 없습니다.</p>'); else files.forEach((file) => container.append(fileRow(file, allowAdd ? () => renderEventAttachments(container, eventOrderId, allowAdd, eventTitle) : null)));
     if (files.length) { const analyze = document.createElement("button"); analyze.type = "button"; analyze.className = "secondary-button"; analyze.textContent = "첨부 분석"; analyze.onclick = async () => { try { analyze.disabled = true; analyze.textContent = "분석 중..."; const alertItem = await analyzeScheduleAttachments(eventOrderId, eventTitle, files); analyze.textContent = alertItem ? "일정 후보 확인 필요" : "추가 일정 없음"; } catch (error) { analyze.textContent = "첨부 분석"; alert(error.message); } finally { analyze.disabled = false; } }; container.append(analyze); }
-    if (allowAdd) { const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"; input.hidden = true;
+    if (allowAdd) { const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.doc,.docx,.ppt,.pptx"; input.hidden = true;
       const add = document.createElement("button"); add.type = "button"; add.className = "secondary-button"; add.textContent = "+ 첨부자료"; add.onclick = () => input.click(); input.onchange = async () => { try { add.disabled = true; await uploadEventAttachments(eventOrderId, input.files); await renderEventAttachments(container, eventOrderId, allowAdd, eventTitle); } catch (error) { alert(error.message); } finally { add.disabled = false; } }; container.append(add, input); }
   }
   function openEventAttachments(eventOrderId, eventName = "") {
@@ -164,9 +184,9 @@
     dialog.querySelector("[data-cancel]").onclick = () => { dialog.close(); dialog.remove(); }; document.body.append(dialog); renderFieldNotes(dialog.querySelector("[data-event-field-notes]"), eventOrderId, true); dialog.showModal();
   }
   function mountPendingPicker(container) {
-    const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"; input.hidden = true;
+    const input = document.createElement("input"); input.type = "file"; input.multiple = true; input.accept = ".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.doc,.docx,.ppt,.pptx"; input.hidden = true;
     const button = document.createElement("button"); button.type = "button"; button.className = "secondary-button"; button.textContent = "+ 첨부자료"; const summary = document.createElement("span"); summary.className = "pending-attachment-summary"; const update = () => { summary.textContent = pendingEventFiles.length ? `${pendingEventFiles.length}개 선택됨` : "선택된 첨부자료 없음"; };
     button.onclick = () => input.click(); input.onchange = () => { try { pendingEventFiles.push(...validateFiles(input.files)); update(); } catch (error) { alert(error.message); } input.value = ""; }; container.append(button, input, summary); update();
   }
-  global.BANQUET_ERP_EVENT_ATTACHMENTS = { mountPendingPicker, getPendingFiles: () => [...pendingEventFiles], clearPendingFiles: () => { pendingEventFiles = []; }, uploadEventAttachments, renderEventAttachments, openEventAttachments, extractScheduleCandidates, recordAttachmentAnalysis, analyzeScheduleAttachments, openScheduleCandidates, approveScheduleCandidates, renderFieldNotes, openFieldNoteEditor, openFieldNotes, fieldNotes, isFieldNote, noteText, compressImage, openFile };
+  global.BANQUET_ERP_EVENT_ATTACHMENTS = { mountPendingPicker, getPendingFiles: () => [...pendingEventFiles], clearPendingFiles: () => { pendingEventFiles = []; }, uploadEventAttachments, renderEventAttachments, openEventAttachments, extractScheduleCandidates, recordAttachmentAnalysis, analyzeScheduleAttachments, openScheduleCandidates, approveScheduleCandidates, renderFieldNotes, openFieldNoteEditor, openFieldNotes, fieldNotes, isFieldNote, noteText, compressImage, openFile, deleteFile, buildAttachmentStoragePath, resolvedMimeType, storedPath, publicUrl };
 })(window);

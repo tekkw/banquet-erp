@@ -14,6 +14,14 @@
  * - DB 테이블별 저장 함수를 더 세분화하거나, 객실/식음/시설 ERP 모듈이 같은 저장 규칙을 재사용할 수 있다.
  */
 (function registerBanquetErpStorage() {
+  const MIME_BY_EXTENSION = Object.freeze({
+    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", pdf: "application/pdf",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", xls: "application/vnd.ms-excel",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", doc: "application/msword",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation", ppt: "application/vnd.ms-powerpoint",
+  });
+  function fileExtension(fileName) { return String(fileName || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || ""; }
+  function resolveFileContentType(file) { return MIME_BY_EXTENSION[fileExtension(file?.name)] || file?.type || "application/octet-stream"; }
   /*
    * 왜 이 함수를 만들었는지:
    * - storage.js가 전역 함수 이름을 직접 만들면 기존 앱 스크립트와 이름이 충돌할 수 있다.
@@ -27,10 +35,7 @@
    */
   function createStorageService({ supabaseConfig }) {
     function resolveSpreadsheetContentType(file) {
-      const name = String(file?.name || "").toLowerCase();
-      if (name.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-      if (name.endsWith(".xls")) return "application/vnd.ms-excel";
-      return file?.type || "application/octet-stream";
+      return resolveFileContentType(file);
     }
     /*
      * 왜 이 함수를 만들었는지:
@@ -281,5 +286,7 @@
 
   window.BANQUET_ERP_STORAGE = {
     createStorageService,
+    resolveFileContentType,
+    fileExtension,
   };
 })();
