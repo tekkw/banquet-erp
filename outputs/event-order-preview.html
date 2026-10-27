@@ -472,6 +472,7 @@
               <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
               <button id="layoutWorkspacePreviewButton" type="button">미리보기</button>
               <button id="layoutWorkspaceExportButton" type="button">PNG 내보내기</button>
+              <button id="layoutWorkspaceExportPdfButton" type="button">PDF 내보내기</button>
               <button id="layoutWorkspaceUndoButton" type="button">↶ 실행 취소</button>
               <button id="layoutWorkspaceRedoButton" type="button">↷ 다시 실행</button>
               <button id="layoutWorkspaceZoomInButton" type="button">＋ 확대</button>
@@ -958,6 +959,7 @@
         </div>
         <div class="layout-preview-actions">
           <button id="layoutWorkspacePreviewDownloadButton" class="secondary-button" type="button">PNG 내보내기</button>
+          <button id="layoutWorkspacePreviewPdfButton" class="secondary-button" type="button">PDF 내보내기</button>
           <button id="layoutWorkspacePreviewCloseButton" class="icon-button" type="button" aria-label="닫기">×</button>
         </div>
       </div>
@@ -1124,7 +1126,7 @@
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=layout-ai-v5-composite-group-transform-v1"></script>
+<script src="./src/floorplanEditor.js?v=layout-ai-v6-composite-export-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
   <script src="./src/operationBoard.js?v=operations-autopilot-v6-operational-firenze-v1"></script>
@@ -1691,12 +1693,14 @@
         workspaceSaveAsButton: layoutWorkspaceSaveAsButton,
         workspacePreviewButton: layoutWorkspacePreviewButton,
         workspaceExportButton: layoutWorkspaceExportButton,
+        workspaceExportPdfButton: document.getElementById("layoutWorkspaceExportPdfButton"),
         workspaceUndoButton: layoutWorkspaceUndoButton,
         workspaceRedoButton: layoutWorkspaceRedoButton,
         workspacePreviewModal: layoutWorkspacePreviewModal,
         workspacePreviewBody: layoutWorkspacePreviewBody,
         workspacePreviewCloseButton: layoutWorkspacePreviewCloseButton,
         workspacePreviewDownloadButton: layoutWorkspacePreviewDownloadButton,
+        workspacePreviewPdfButton: document.getElementById("layoutWorkspacePreviewPdfButton"),
         workspaceNewModal: layoutWorkspaceNewModal,
         workspaceNewNameInput: layoutWorkspaceNewNameInput,
         workspaceNewFloorplanSelect: layoutWorkspaceNewFloorplanSelect,

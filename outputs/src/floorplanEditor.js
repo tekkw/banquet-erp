@@ -93,6 +93,50 @@
     };
   }
 
+  const FLOORPLAN_STYLE_TOKENS = {
+    editor: { structure: "#1f2937", structureFill: "rgba(55,65,81,.16)", wallFill: "#374151", dimension: "#a16207", text: "#1f2937", selection: "#d4af37" },
+    export: { structure: "#111827", structureFill: "rgba(75,85,99,.12)", wallFill: "#374151", dimension: "#92400e", text: "#111827", selection: "#111827" },
+    selected: { structure: "#2563eb", structureFill: "rgba(37,99,235,.12)", wallFill: "#2563eb", dimension: "#a16207", text: "#1f2937", selection: "#2563eb" },
+  };
+
+  function getFloorplanStrokeStyle(objectType, mode = "editor") {
+    const token = FLOORPLAN_STYLE_TOKENS[mode] || FLOORPLAN_STYLE_TOKENS.editor;
+    const type = String(objectType || "object");
+    if (type === "dimension" || type === "dimensionText" || type === "calibration") return { stroke: token.dimension, fill: type === "dimensionText" ? token.dimension : "none", strokeWidth: type === "calibration" ? 2 : 1.5, opacity: 1 };
+    if (type === "basePlanGroupFrame") return { stroke: token.selection, fill: "none", strokeWidth: 1.5, opacity: 1 };
+    if (["outline", "wall", "fixed_wall"].includes(type)) return { stroke: token.structure, fill: type === "outline" ? "none" : token.wallFill, strokeWidth: 2.5, opacity: 1 };
+    if (["pillar", "door", "screen", "structure_area", "blocked_area", "allowed_area"].includes(type)) return { stroke: token.structure, fill: token.structureFill, strokeWidth: 2.5, opacity: 1 };
+    return { stroke: token.structure, fill: token.structureFill, strokeWidth: 2, opacity: 1 };
+  }
+
+  function buildSinglePageFloorplanPdf(jpeg, imageWidth, imageHeight) {
+    const page = { width: 841.89, height: 595.28, margin: 24 };
+    const scale = Math.min((page.width - page.margin * 2) / imageWidth, (page.height - page.margin * 2) / imageHeight);
+    const width = imageWidth * scale; const height = imageHeight * scale;
+    const x = (page.width - width) / 2; const y = (page.height - height) / 2;
+    const content = `q\n${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm\n/Im0 Do\nQ`;
+    const encoder = new TextEncoder();
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`,
+      { header: `<< /Type /XObject /Subtype /Image /Width ${imageWidth} /Height ${imageHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`, bytes: jpeg, footer: "\nendstream" },
+      `<< /Length ${encoder.encode(content).length} >>\nstream\n${content}\nendstream`,
+    ];
+    const parts = [encoder.encode("%PDF-1.4\n")]; const offsets = [0]; let length = parts[0].length;
+    objects.forEach((object, index) => {
+      offsets.push(length); const prefix = encoder.encode(`${index + 1} 0 obj\n`); const suffix = encoder.encode("\nendobj\n"); parts.push(prefix); length += prefix.length;
+      if (typeof object === "string") { const bytes = encoder.encode(object); parts.push(bytes); length += bytes.length; }
+      else { const header = encoder.encode(object.header); const footer = encoder.encode(object.footer); parts.push(header, object.bytes, footer); length += header.length + object.bytes.length + footer.length; }
+      parts.push(suffix); length += suffix.length;
+    });
+    const xrefOffset = length; let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach((offset) => { xref += `${String(offset).padStart(10, "0")} 00000 n \n`; });
+    xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    parts.push(encoder.encode(xref));
+    return new Blob(parts, { type: "application/pdf" });
+  }
+
   const STRUCTURAL_OBJECT_TYPES = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
 
   function isFloorplanStructuralObject(object) {
@@ -490,12 +534,14 @@
       workspaceSaveAsButton,
       workspacePreviewButton,
       workspaceExportButton,
+      workspaceExportPdfButton,
       workspaceUndoButton,
       workspaceRedoButton,
       workspacePreviewModal,
       workspacePreviewBody,
       workspacePreviewCloseButton,
       workspacePreviewDownloadButton,
+      workspacePreviewPdfButton,
       workspaceNewModal,
       workspaceNewNameInput,
       workspaceNewFloorplanSelect,
@@ -1148,9 +1194,11 @@
       });
       workspacePreviewButton?.addEventListener("click", showWorkspacePreview);
       workspaceExportButton?.addEventListener("click", exportWorkspacePng);
+      workspaceExportPdfButton?.addEventListener("click", exportWorkspacePdf);
       workspaceUndoButton?.addEventListener("click", undoWorkspaceChange);
       workspaceRedoButton?.addEventListener("click", redoWorkspaceChange);
       workspacePreviewDownloadButton?.addEventListener("click", exportWorkspacePng);
+      workspacePreviewPdfButton?.addEventListener("click", exportWorkspacePdf);
       workspacePreviewCloseButton?.addEventListener("click", closeWorkspacePreview);
       workspacePreviewModal?.addEventListener("click", (event) => {
         if (event.target === workspacePreviewModal) closeWorkspacePreview();
@@ -1955,9 +2003,11 @@
       const polygon = document.createElementNS(svgNs, "polygon");
       polygon.dataset.referenceFloorplan = "true";
       polygon.setAttribute("points", validPoints.map((point) => `${point.x + workspaceGeometryOffset.x},${point.y + workspaceGeometryOffset.y}`).join(" "));
-      polygon.setAttribute("fill", outline?.style?.fill || "rgba(212,175,55,0.06)");
-      polygon.setAttribute("stroke", outline?.style?.stroke || "#0f2a43");
-      polygon.setAttribute("stroke-width", String(outline?.style?.strokeWidthPx || 2.5));
+      const outlineStyle = getFloorplanStrokeStyle("outline", "editor");
+      polygon.dataset.floorplanStyleType = "outline";
+      polygon.setAttribute("fill", outlineStyle.fill);
+      polygon.setAttribute("stroke", outlineStyle.stroke);
+      polygon.setAttribute("stroke-width", String(outlineStyle.strokeWidth));
       polygon.setAttribute("vector-effect", "non-scaling-stroke");
       polygon.setAttribute("stroke-linejoin", "round");
       polygon.setAttribute("pointer-events", "none");
@@ -1970,6 +2020,8 @@
       const scale = Math.max(0.0001, Number(view.scale) || 1);
       const offset = 18 / scale; const extension = 6 / scale; const fontSize = 13 / scale;
       const outwardSign = metrics.signedAreaMm2 >= 0 ? 1 : -1;
+      const dimensionStyle = getFloorplanStrokeStyle("dimension", "editor");
+      const dimensionTextStyle = getFloorplanStrokeStyle("dimensionText", "editor");
       const group = document.createElementNS(svgNs, "g"); group.dataset.floorplanDimensions = "true"; group.setAttribute("pointer-events", "none");
       metrics.segments.forEach(({ start, end, lengthMm }) => {
         if (!lengthMm) return;
@@ -1979,18 +2031,19 @@
         const b = { x: end.x + workspaceGeometryOffset.x + nx * offset, y: end.y + workspaceGeometryOffset.y + ny * offset };
         const line = document.createElementNS(svgNs, "line");
         line.setAttribute("x1", String(a.x)); line.setAttribute("y1", String(a.y)); line.setAttribute("x2", String(b.x)); line.setAttribute("y2", String(b.y));
-        line.setAttribute("class", "layout-floorplan-dimension-line"); line.setAttribute("vector-effect", "non-scaling-stroke"); group.append(line);
+        line.dataset.floorplanStyleType = "dimension"; line.setAttribute("stroke", dimensionStyle.stroke); line.setAttribute("stroke-width", String(dimensionStyle.strokeWidth)); line.setAttribute("class", "layout-floorplan-dimension-line"); line.setAttribute("vector-effect", "non-scaling-stroke"); group.append(line);
         [start, end].forEach((point) => {
           const tick = document.createElementNS(svgNs, "line");
           tick.setAttribute("x1", String(point.x + workspaceGeometryOffset.x + nx * (offset - extension)));
           tick.setAttribute("y1", String(point.y + workspaceGeometryOffset.y + ny * (offset - extension)));
           tick.setAttribute("x2", String(point.x + workspaceGeometryOffset.x + nx * (offset + extension)));
           tick.setAttribute("y2", String(point.y + workspaceGeometryOffset.y + ny * (offset + extension)));
-          tick.setAttribute("class", "layout-floorplan-dimension-line"); tick.setAttribute("vector-effect", "non-scaling-stroke"); group.append(tick);
+          tick.dataset.floorplanStyleType = "dimension"; tick.setAttribute("stroke", dimensionStyle.stroke); tick.setAttribute("stroke-width", String(dimensionStyle.strokeWidth)); tick.setAttribute("class", "layout-floorplan-dimension-line"); tick.setAttribute("vector-effect", "non-scaling-stroke"); group.append(tick);
         });
         const label = document.createElementNS(svgNs, "text");
         label.setAttribute("x", String((a.x + b.x) / 2 + nx * (8 / scale))); label.setAttribute("y", String((a.y + b.y) / 2 + ny * (8 / scale)));
         label.setAttribute("class", "layout-floorplan-dimension-label"); label.setAttribute("font-size", String(fontSize));
+        label.dataset.floorplanStyleType = "dimensionText"; label.setAttribute("fill", dimensionTextStyle.fill);
         label.textContent = `${(lengthMm / 1000).toFixed(1)}m`; group.append(label);
       });
       workspaceGuideLayer.append(group);
@@ -2008,7 +2061,7 @@
           const points = Array.isArray(row.metadata?.points) ? row.metadata.points : [];
           points.slice(1).forEach((end, index) => {
             const start = points[index]; const length = Math.hypot(Number(end.x) - Number(start.x), Number(end.y) - Number(start.y));
-            result.push({ instanceId: `${row.id || id}_outline_${index}`, masterObjectId: "", objectType: "wall", label: row.label || "외곽선", x: (Number(start.x) + Number(end.x)) / 2, y: (Number(start.y) + Number(end.y)) / 2, widthM: length / 1000, heightM: .15, rotation: Math.atan2(Number(end.y) - Number(start.y), Number(end.x) - Number(start.x)) * 180 / Math.PI, seatCount: 0, zIndex: Number(row.sort_order || 0), locked: true, metadata: { start_x_mm: Number(start.x), start_y_mm: Number(start.y), end_x_mm: Number(end.x), end_y_mm: Number(end.y), thickness_mm: 150, baseFloorplanObject: true } });
+            result.push({ instanceId: `${row.id || id}_outline_${index}`, masterObjectId: "", objectType: "wall", label: row.label || "외곽선", x: (Number(start.x) + Number(end.x)) / 2, y: (Number(start.y) + Number(end.y)) / 2, widthM: length / 1000, heightM: .15, rotation: Math.atan2(Number(end.y) - Number(start.y), Number(end.x) - Number(start.x)) * 180 / Math.PI, seatCount: 0, zIndex: Number(row.sort_order || 0), locked: true, metadata: { start_x_mm: Number(start.x), start_y_mm: Number(start.y), end_x_mm: Number(end.x), end_y_mm: Number(end.y), thickness_mm: 150, baseFloorplanObject: true, compositeOutlineSource: true } });
           });
         } else if (row.object_type === "base_plan_group" && row.metadata?.sourceBasePlanId) {
           const nested = await loadCompositePlanGeometry(row.metadata.sourceBasePlanId, [...lineage, id]);
@@ -2555,6 +2608,7 @@
     function buildWorkspacePreviewSvgClone(includeDimensions = true) {
       if (!workspaceSvg) return null;
       const previousSelectedId = workspaceSelectedId;
+      const previousSelectedIds = new Set(workspaceSelectedIds);
       const previousScale = view.scale;
       const previousViewX = view.panX;
       const previousViewY = view.panY;
@@ -2567,6 +2621,7 @@
       renderWorkspace();
       const clone = workspaceSvg.cloneNode(true);
       workspaceSelectedId = previousSelectedId;
+      workspaceSelectedIds = previousSelectedIds;
       view.scale = previousScale;
       view.panX = previousViewX;
       view.panY = previousViewY;
@@ -2576,11 +2631,15 @@
       clone.removeAttribute("id");
       clone.classList.add("layout-workspace-preview-svg");
       clone.setAttribute("xmlns", svgNs);
-      const exportSize = getWorkspaceExportPixelSize();
-      clone.setAttribute("viewBox", `0 0 ${workspaceSize.width} ${workspaceSize.height}`);
+      const bounds = getWorkspaceExportBounds();
+      const exportSize = getWorkspaceExportPixelSize(bounds);
+      clone.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`);
       clone.setAttribute("width", String(exportSize.width));
       clone.setAttribute("height", String(exportSize.height));
       clone.querySelector("#layoutWorkspaceEmptyState")?.remove();
+      clone.querySelector("#layoutWorkspaceGridLayer")?.remove();
+      clone.querySelector("#layoutWorkspaceSelectionLayer")?.remove();
+      clone.querySelectorAll(".layout-workspace-handle, .layout-workspace-marquee").forEach((node) => node.remove());
       clone.querySelectorAll("[id]").forEach((node) => {
         if (node.id === "layoutEditorGridPattern") return;
         node.removeAttribute("id");
@@ -2590,7 +2649,49 @@
         node.removeAttribute("data-instance-id");
         node.style.cursor = "default";
       });
+      applyFloorplanExportStyles(clone);
       return clone;
+    }
+
+    function getWorkspaceExportBounds() {
+      const bounds = getWorkspaceWorldBounds(false);
+      const padding = Math.max(500, Math.min(2000, Math.max(bounds.width, bounds.height) * 0.035));
+      return { minX: bounds.minX - padding, minY: bounds.minY - padding, maxX: bounds.maxX + padding, maxY: bounds.maxY + padding, width: bounds.width + padding * 2, height: bounds.height + padding * 2 };
+    }
+
+    function applyFloorplanExportStyles(root) {
+      root.querySelectorAll("[data-floorplan-style-type]").forEach((node) => {
+        const style = getFloorplanStrokeStyle(node.dataset.floorplanStyleType, "export");
+        if (node.tagName.toLowerCase() === "text") node.setAttribute("fill", style.fill);
+        else {
+          node.setAttribute("stroke", style.stroke);
+          node.setAttribute("stroke-width", String(style.strokeWidth));
+          if (node.getAttribute("fill") !== "none") node.setAttribute("fill", style.fill);
+          node.setAttribute("opacity", String(style.opacity));
+        }
+      });
+    }
+
+    async function renderWorkspaceExportCanvas() {
+      const clone = buildWorkspacePreviewSvgClone(workspaceIncludeDimensionsInExport);
+      if (!clone) throw new Error("내보낼 도면이 없습니다.");
+      const svgText = new XMLSerializer().serializeToString(clone);
+      const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+      const url = URL.createObjectURL(svgBlob);
+      try {
+        const image = await loadImageFromObjectUrl(url);
+        const exportSize = getWorkspaceExportPixelSize(getWorkspaceExportBounds());
+        const canvas = document.createElement("canvas");
+        canvas.width = exportSize.width;
+        canvas.height = exportSize.height;
+        const context = canvas.getContext("2d");
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        return canvas;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
     }
 
     async function exportWorkspacePng() {
@@ -2601,26 +2702,13 @@
       }
       setStatus("PNG ?대?吏瑜??앹꽦?섎뒗 以묒엯?덈떎.");
       try {
-        const svgText = new XMLSerializer().serializeToString(clone);
-        const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
-        const url = URL.createObjectURL(svgBlob);
-        const image = await loadImageFromObjectUrl(url);
-        URL.revokeObjectURL(url);
-
-        const canvas = document.createElement("canvas");
-        const exportSize = getWorkspaceExportPixelSize();
-        canvas.width = exportSize.width;
-        canvas.height = exportSize.height;
-        const context = canvas.getContext("2d");
-        context.fillStyle = "#ffffff";
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const canvas = await renderWorkspaceExportCanvas();
         const pngBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", 0.92));
         if (!pngBlob) throw new Error("PNG ?뚯씪???앹꽦?섏? 紐삵뻽?듬땲??");
         const downloadUrl = URL.createObjectURL(pngBlob);
         const link = document.createElement("a");
         link.href = downloadUrl;
-        link.download = buildWorkspaceExportFileName();
+        link.download = buildWorkspaceExportFileName("png");
         document.body.append(link);
         link.click();
         link.remove();
@@ -2632,6 +2720,30 @@
       }
     }
 
+    async function exportWorkspacePdf() {
+      setStatus("PDF를 생성하는 중입니다.");
+      try {
+        const canvas = await renderWorkspaceExportCanvas();
+        const pdfBlob = canvasToSinglePagePdf(canvas);
+        downloadWorkspaceBlob(pdfBlob, buildWorkspaceExportFileName("pdf"));
+        setStatus("PDF를 내보냈습니다.");
+      } catch (error) {
+        console.error("workspace pdf export failed:", error);
+        setStatus(error.message || "PDF 내보내기에 실패했습니다.", "error");
+      }
+    }
+
+    function canvasToSinglePagePdf(canvas) {
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.94);
+      const binary = atob(dataUrl.split(",")[1]);
+      const jpeg = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+      return buildSinglePageFloorplanPdf(jpeg, canvas.width, canvas.height);
+    }
+
+    function downloadWorkspaceBlob(blob, filename) {
+      const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = filename; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    }
+
     function loadImageFromObjectUrl(url) {
       return new Promise((resolve, reject) => {
         const image = new Image();
@@ -2641,15 +2753,15 @@
       });
     }
 
-    function getWorkspaceExportPixelSize(maxSize = 2400) {
-      const ratio = Math.min(maxSize / workspaceSize.width, maxSize / workspaceSize.height, 1);
+    function getWorkspaceExportPixelSize(bounds = getWorkspaceExportBounds(), maxSize = 4800) {
+      const ratio = Math.min(maxSize / bounds.width, maxSize / bounds.height);
       return {
-        width: Math.max(1, Math.round(workspaceSize.width * ratio)),
-        height: Math.max(1, Math.round(workspaceSize.height * ratio)),
+        width: Math.max(1, Math.round(bounds.width * ratio)),
+        height: Math.max(1, Math.round(bounds.height * ratio)),
       };
     }
 
-    function buildWorkspaceExportFileName() {
+    function buildWorkspaceExportFileName(extension = "png") {
       const base = workspaceActiveLayout?.layout_name
         || workspaceSourceFile?.original_filename?.replace(/\.[^.]+$/, "")
         || "venue_layout";
@@ -2658,7 +2770,7 @@
         .replace(/\s+/g, "_")
         .replace(/_+/g, "_")
         .replace(/^_|_$/g, "");
-      return `${safeName || "venue_layout"}_${new Date().toISOString().slice(0, 10)}.png`;
+      return `${safeName || "venue_layout"}_${new Date().toISOString().slice(0, 10)}.${extension}`;
     }
 
     async function createWorkspacePreviewFile(layoutName) {
@@ -3130,12 +3242,14 @@
         editWorkspaceDimensionFromPrompt(object.instanceId);
       });
       const dimLine = document.createElementNS(svgNs, "line");
+      const dimensionStyle = getFloorplanStrokeStyle("dimension", "editor");
+      dimLine.dataset.floorplanStyleType = "dimension";
       dimLine.setAttribute("x1", String(start.x + placement.x * offset));
       dimLine.setAttribute("y1", String(start.y + placement.y * offset));
       dimLine.setAttribute("x2", String(end.x + placement.x * offset));
       dimLine.setAttribute("y2", String(end.y + placement.y * offset));
-      dimLine.setAttribute("stroke", "#102B55");
-      dimLine.setAttribute("stroke-width", String(Math.max(1 / scale, 0.5)));
+      dimLine.setAttribute("stroke", dimensionStyle.stroke);
+      dimLine.setAttribute("stroke-width", String(Math.max(dimensionStyle.strokeWidth / scale, 0.5)));
       dimLine.setAttribute("stroke-linecap", "round");
       dimLine.setAttribute("opacity", "0.75");
       dimLine.setAttribute("pointer-events", "none");
@@ -3155,6 +3269,8 @@
       background.setAttribute("stroke", "rgba(16,43,85,0.18)");
       background.setAttribute("stroke-width", String(1 / scale));
       const text = document.createElementNS(svgNs, "text");
+      const dimensionTextStyle = getFloorplanStrokeStyle("dimensionText", "editor");
+      text.dataset.floorplanStyleType = "dimensionText";
       text.textContent = label;
       text.setAttribute("x", "0");
       text.setAttribute("y", "0");
@@ -3162,7 +3278,7 @@
       text.setAttribute("dominant-baseline", "middle");
       text.setAttribute("font-size", String(fontSize));
       text.setAttribute("font-weight", "900");
-      text.setAttribute("fill", "#102B55");
+      text.setAttribute("fill", dimensionTextStyle.fill);
       text.setAttribute("paint-order", "stroke");
       text.setAttribute("stroke", "#fff");
       text.setAttribute("stroke-width", String(3 / scale));
@@ -3377,15 +3493,27 @@
 
     function createWorkspaceObjectShape(object, x, y, width, height, options = {}) {
       const group = document.createElementNS(svgNs, "g");
-      const style = objectStyles[object.objectType] || { fill: "rgba(15,42,67,.14)", stroke: "#0f2a43" };
+      const styleType = object.metadata?.compositeOutlineSource ? "outline" : object.objectType;
+      const style = getFloorplanStrokeStyle(styleType, options.mode || "editor");
       const shape = getObjectDisplayShape(object);
       const common = (node) => {
+        node.dataset.floorplanStyleType = styleType;
         node.setAttribute("fill", style.fill);
         node.setAttribute("stroke", style.stroke);
-        node.setAttribute("stroke-width", object.objectType === "stage" ? "4" : "2");
+        node.setAttribute("stroke-width", String(style.strokeWidth));
+        node.setAttribute("opacity", String(style.opacity));
         return node;
       };
-      if ((shape === "circle" || shape === "ellipse") && !["door", "wall", "calibration"].includes(object.objectType)) {
+      if (styleType === "outline") {
+        const line = common(document.createElementNS(svgNs, "line"));
+        line.setAttribute("x1", String(x));
+        line.setAttribute("y1", "0");
+        line.setAttribute("x2", String(x + width));
+        line.setAttribute("y2", "0");
+        line.setAttribute("vector-effect", "non-scaling-stroke");
+        line.setAttribute("stroke-linecap", "square");
+        group.append(line);
+      } else if ((shape === "circle" || shape === "ellipse") && !["door", "wall", "calibration"].includes(object.objectType)) {
         const circle = common(document.createElementNS(svgNs, "ellipse"));
         circle.setAttribute("cx", "0");
         circle.setAttribute("cy", "0");
@@ -3402,8 +3530,9 @@
         const arc = document.createElementNS(svgNs, "path");
         arc.setAttribute("d", `M ${x + 8} ${y + height - 8} A ${Math.max(width * 0.7, 20)} ${Math.max(width * 0.7, 20)} 0 0 1 ${x + width - 6} ${y + 10}`);
         arc.setAttribute("fill", "none");
+        arc.dataset.floorplanStyleType = styleType;
         arc.setAttribute("stroke", style.stroke);
-        arc.setAttribute("stroke-width", "2");
+        arc.setAttribute("stroke-width", String(style.strokeWidth));
         group.append(rect, arc);
       } else if (shape === "line" || object.objectType === "wall") {
         const rect = common(document.createElementNS(svgNs, "rect"));
@@ -3455,7 +3584,7 @@
       const label = ["buffet_table", "av_table", "podium"].includes(object.objectType)
         ? ({ buffet_table: "BUFFET", av_table: "AV", podium: "P" }[object.objectType])
         : (object.label || object.metadata?.label || objectLabels[object.objectType] || "고정 구조물");
-      const showNames = isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames);
+      const showNames = !object.metadata?.compositeOutlineSource && (isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames));
       if (showNames) {
         const text = document.createElementNS(svgNs, "text");
         text.textContent = label || "";
@@ -5641,6 +5770,8 @@
     duplicateFloorplanObjects,
     calculateWorkspaceWorldBounds,
     transformBasePlanPoint,
+    getFloorplanStrokeStyle,
+    buildSinglePageFloorplanPdf,
     isFloorplanStructuralObject,
     cloneFloorplanObjectsForLayout,
     layoutLibraryGroupName,
