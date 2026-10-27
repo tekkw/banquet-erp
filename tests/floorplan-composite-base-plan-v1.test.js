@@ -2,9 +2,11 @@ const assert = require("assert");
 const fs = require("fs");
 
 const html = fs.readFileSync("outputs/event-order-preview.html", "utf8");
+const productionHtml = fs.readFileSync("outputs/index.html", "utf8");
 const editor = fs.readFileSync("outputs/src/floorplanEditor.js", "utf8");
 
 assert(html.includes('id="layoutWorkspaceImportBaseButton"'));
+assert(productionHtml.includes('id="layoutWorkspaceImportBaseButton"'));
 assert(html.includes('id="layoutWorkspaceImportBaseModal"'));
 assert(html.includes('data-composite-align="left"') && html.includes('data-composite-align="center-y"'));
 

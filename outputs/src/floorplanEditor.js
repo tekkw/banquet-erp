@@ -2059,7 +2059,7 @@
 
     async function hydrateCompositeGroup(group) {
       group._compositeGeometry = await loadCompositePlanGeometry(group.metadata.sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")].filter(Boolean));
-      group.metadata = { ...(group.metadata || {}), baseFloorplanObject: true, compositeBasePlanGroup: true, locked: true };
+      group.metadata = { ...(group.metadata || {}), baseFloorplanObject: Boolean(group.metadata?.baseFloorplanObject), compositeBasePlanGroup: true, locked: true };
       refreshCompositeGroupChildren(group);
     }
 
@@ -2068,7 +2068,7 @@
     }
 
     async function openCompositeBasePlanModal() {
-      if (!workspaceFloorplanRecord?.id || workspaceEditMode !== "base") { setStatus("기본도면 편집 모드에서 불러올 수 있습니다.", "warn"); return; }
+      if (!workspaceFloorplanRecord?.id) { setStatus("불러올 기본 도면을 먼저 선택해주세요.", "warn"); return; }
       compositeFloorplans = await loggedSupabaseRequest("composite floorplan list", "venue_floorplans?select=*&is_active=eq.true&order=floorplan_name.asc").catch(() => []);
       const available = compositeFloorplans.filter((row) => String(row.id) !== String(workspaceFloorplanRecord.id));
       workspaceImportBaseSelect.innerHTML = '<option value="">기본도면 선택</option>' + available.map((row) => `<option value="${escapeAttribute(row.id)}">${escapeHtml(row.floorplan_name || "기본도면")}</option>`).join("");
@@ -2081,8 +2081,9 @@
       try {
         const geometry = await loadCompositePlanGeometry(sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")]);
         const localBounds = compositeGeometryBounds(geometry); const existingGroups = workspaceObjects.filter(isCompositeGroup); const right = existingGroups.length ? Math.max(...existingGroups.map((group) => compositeObjectBounds(group).right)) + 500 : 0;
-        const group = { instanceId: crypto.randomUUID ? crypto.randomUUID() : `base_group_${Date.now()}`, masterObjectId: "", objectType: "base_plan_group", label: floorplan.floorplan_name || "기본도면", x: 0, y: 0, widthM: localBounds.width / 1000, heightM: localBounds.height / 1000, rotation: 0, seatCount: 0, zIndex: getWorkspaceMinZIndex() - 1, locked: true, opacity: .06, metadata: { baseFloorplanObject: true, compositeBasePlanGroup: true, sourceBasePlanId, offsetX: Math.round(right - localBounds.left), offsetY: Math.round(-localBounds.top), rotation: 0, locked: true }, _compositeGeometry: geometry };
-        pushWorkspaceHistory(); workspaceObjects.push(group); refreshCompositeGroupChildren(group); workspaceBaseObjects = workspaceObjects.filter(isWorkspaceBaseObject); workspaceSelectedIds = new Set([group.instanceId]); workspaceSelectedId = group.instanceId; markWorkspaceDirty(); closeCompositeBasePlanModal(); renderWorkspace();
+        const isBaseReference = workspaceEditMode === "base";
+        const group = { instanceId: crypto.randomUUID ? crypto.randomUUID() : `base_group_${Date.now()}`, masterObjectId: "", objectType: "base_plan_group", label: floorplan.floorplan_name || "기본도면", x: 0, y: 0, widthM: localBounds.width / 1000, heightM: localBounds.height / 1000, rotation: 0, seatCount: 0, zIndex: getWorkspaceMinZIndex() - 1, locked: true, opacity: .06, metadata: { baseFloorplanObject: isBaseReference, compositeBasePlanGroup: true, sourceBasePlanId, offsetX: Math.round(right - localBounds.left), offsetY: Math.round(-localBounds.top), rotation: 0, locked: true }, _compositeGeometry: geometry };
+        pushWorkspaceHistory(); workspaceObjects.push(group); refreshCompositeGroupChildren(group); if (isBaseReference) workspaceBaseObjects = workspaceObjects.filter(isWorkspaceBaseObject); workspaceSelectedIds = new Set([group.instanceId]); workspaceSelectedId = group.instanceId; markWorkspaceDirty(); closeCompositeBasePlanModal(); renderWorkspace();
       } catch (error) { setStatus(error.message || "기본도면을 불러오지 못했습니다.", "error"); }
     }
 
@@ -2158,6 +2159,7 @@
         ...baseObjects.filter(isFloorplanStructuralObject),
         ...(layoutRows || []).map((row) => dbObjectToWorkspaceObject(row)),
       ];
+      await hydrateCompositeGroups(workspaceObjects.filter((object) => !isWorkspaceBaseObject(object)));
       workspaceSelectedId = "";
       workspaceDirty = false;
       updateWorkspaceStatus("??λ맖");
@@ -3846,6 +3848,7 @@
     function canWorkspaceEditObject(object) {
       if (!object) return false;
       if (workspaceEditMode === "base") return isWorkspaceBaseObject(object) && !workspaceFloorplanRecord?.is_locked;
+      if (isCompositeGroup(object) && !isWorkspaceBaseObject(object)) return true;
       return !object.locked && !isFloorplanStructuralObject(object);
     }
 

@@ -477,6 +477,7 @@
             <div class="layout-editor-toolbar-row tool-row">
               <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
               <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
+              <button id="layoutWorkspaceImportBaseButton" type="button">＋ 기본도면 불러오기</button>
               <button id="layoutWorkspaceBackLibraryButton" type="button">← 라이브러리</button>
               <button id="layoutWorkspaceSaveButton" type="button">레이아웃 저장</button>
               <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
@@ -707,6 +708,15 @@
             <span data-layout-status="cursor">X: - / Y: -</span>
           </footer>
         </section>
+
+        <div id="layoutWorkspaceImportBaseModal" class="layout-library-modal" hidden>
+          <div class="layout-library-modal-card">
+            <h3>기본도면 불러오기</h3>
+            <label>기본도면<select id="layoutWorkspaceImportBaseSelect"><option value="">기본도면 선택</option></select></label>
+            <p>원본 mm 좌표는 유지되고 현재 도면에는 위치와 회전만 저장됩니다.</p>
+            <div class="floorplan-v2-actions"><button id="layoutWorkspaceImportBaseConfirmButton" class="primary-button" type="button">불러오기</button><button id="layoutWorkspaceImportBaseCancelButton" type="button">취소</button></div>
+          </div>
+        </div>
 
         <div id="layoutLibrarySaveModal" class="layout-library-modal" hidden>
           <form id="layoutLibrarySaveForm" class="layout-library-modal-card">
@@ -1123,7 +1133,7 @@
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=layout-ai-v2"></script>
+<script src="./src/floorplanEditor.js?v=layout-ai-v3-composite-base-plan-ui-fix"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=operations-autopilot-v6"></script>
   <script src="./src/operationBoard.js?v=operations-autopilot-v6-operational-firenze-v1"></script>
@@ -1683,6 +1693,12 @@
         workspaceNameInput: layoutWorkspaceNameInput,
         workspaceDeleteButton: layoutWorkspaceDeleteButton,
         workspaceNewButton: layoutWorkspaceNewButton,
+        workspaceImportBaseButton: document.getElementById("layoutWorkspaceImportBaseButton"),
+        workspaceImportBaseModal: document.getElementById("layoutWorkspaceImportBaseModal"),
+        workspaceImportBaseSelect: document.getElementById("layoutWorkspaceImportBaseSelect"),
+        workspaceImportBaseConfirmButton: document.getElementById("layoutWorkspaceImportBaseConfirmButton"),
+        workspaceImportBaseCancelButton: document.getElementById("layoutWorkspaceImportBaseCancelButton"),
+        workspaceCompositeAlignButtons: [...document.querySelectorAll("[data-composite-align]")],
         workspaceSaveButton: layoutWorkspaceSaveButton,
         workspaceSaveAsButton: layoutWorkspaceSaveAsButton,
         workspacePreviewButton: layoutWorkspacePreviewButton,
