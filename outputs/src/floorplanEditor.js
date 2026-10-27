@@ -65,6 +65,23 @@
     }));
   }
 
+  function calculateWorkspaceWorldBounds(frameWidth, frameHeight, objects = [], margin = 0, scale = 1000) {
+    const boxes = [{ left: 0, top: 0, right: Number(frameWidth || 0), bottom: Number(frameHeight || 0) }];
+    objects.filter((object) => !object?.metadata?.compositeBaseChild).forEach((object) => {
+      const width = Math.max(1, Number(object?.widthM || 0) * scale);
+      const height = Math.max(1, Number(object?.heightM || 0) * scale);
+      const radians = (((Number(object?.rotation || 0) % 360) + 360) % 360) * Math.PI / 180;
+      const rotatedWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+      const rotatedHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians));
+      boxes.push({ left: Number(object?.x || 0) - rotatedWidth / 2, right: Number(object?.x || 0) + rotatedWidth / 2, top: Number(object?.y || 0) - rotatedHeight / 2, bottom: Number(object?.y || 0) + rotatedHeight / 2 });
+    });
+    const minX = Math.min(...boxes.map((box) => box.left)) - margin;
+    const minY = Math.min(...boxes.map((box) => box.top)) - margin;
+    const maxX = Math.max(...boxes.map((box) => box.right)) + margin;
+    const maxY = Math.max(...boxes.map((box) => box.bottom)) + margin;
+    return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+  }
+
   const STRUCTURAL_OBJECT_TYPES = new Set(["door", "wall", "fixed_wall", "structure_area", "calibration", "pillar", "screen", "allowed_area", "blocked_area"]);
 
   function isFloorplanStructuralObject(object) {
@@ -682,6 +699,11 @@
 
     function isCompositeGroup(object) { return object?.objectType === "base_plan_group" && Boolean(object?.metadata?.sourceBasePlanId); }
     function isCompositeChild(object) { return Boolean(object?.metadata?.compositeBaseChild); }
+    function hasCompositeWorkspace() { return workspaceObjects.some(isCompositeGroup); }
+    function getWorkspaceWorldBounds(withMargin = false) {
+      const margin = withMargin && hasCompositeWorkspace() ? 3000 : 0;
+      return calculateWorkspaceWorldBounds(workspaceDrawingWidthMm, workspaceDrawingHeightMm, workspaceObjects, margin, workspaceMeterScale);
+    }
     function rotateCompositePoint(point, rotation) {
       const radians = normalizeDegrees(rotation) * Math.PI / 180; const cos = Math.cos(radians); const sin = Math.sin(radians);
       return { x: Number(point.x || 0) * cos - Number(point.y || 0) * sin, y: Number(point.x || 0) * sin + Number(point.y || 0) * cos };
@@ -2029,7 +2051,7 @@
       const originGroup = { rotation: 0, metadata: { offsetX: 0, offsetY: 0, rotation: Number(group.metadata.rotation || 0) } };
       const originBounds = compositeGeometryBounds(group._compositeGeometry.map((object) => transformCompositeLocalObject(object, originGroup)));
       let nextX = group.x; let nextY = group.y;
-      if (snap) {
+      if (snap && workspaceSnap) {
         const moving = compositeObjectBounds(group); const tolerance = 250;
         workspaceObjects.filter((object) => isCompositeGroup(object) && object.instanceId !== group.instanceId).some((other) => {
           const fixed = compositeObjectBounds(other); const candidates = [{ delta: fixed.right - moving.left, axis: "x" }, { delta: fixed.left - moving.right, axis: "x" }, { delta: fixed.bottom - moving.top, axis: "y" }, { delta: fixed.top - moving.bottom, axis: "y" }].sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
@@ -2477,8 +2499,8 @@
         masterObjectId: row.object_type_id || row.metadata?.object_type_id || "",
         objectType: row.object_type,
         label: row.label || objectLabels[row.object_type] || row.object_type,
-        x: clampNumber(center.x, 0, workspaceSize.width),
-        y: clampNumber(center.y, 0, workspaceSize.height),
+        x: Number(center.x),
+        y: Number(center.y),
         widthM,
         heightM,
         rotation: Number(row.rotation || 0),
@@ -2782,14 +2804,15 @@
       if (workspaceEditMode === "base" && !isWorkspaceFixedMaster(master)) return;
       pushWorkspaceHistory();
       const center = point || { x: workspaceSize.width / 2, y: workspaceSize.height / 2 };
+      const allowExpandedPosition = hasCompositeWorkspace();
       const object = {
         instanceId: crypto.randomUUID ? crypto.randomUUID() : `object_${Date.now()}_${Math.random().toString(16).slice(2)}`,
         masterObjectId: master.id || "",
         objectType: master.object_type || "object",
         label: master.object_name || objectLabels[master.object_type] || master.object_type || "?ㅻ툕?앺듃",
         displayShape: master.display_shape || getObjectDisplayShape(master),
-        x: clampNumber(center.x, 0, workspaceSize.width),
-        y: clampNumber(center.y, 0, workspaceSize.height),
+        x: allowExpandedPosition ? Number(center.x) : clampNumber(center.x, 0, workspaceSize.width),
+        y: allowExpandedPosition ? Number(center.y) : clampNumber(center.y, 0, workspaceSize.height),
         widthM: Math.max(0.1, Number(master.default_width_m || 1)),
         heightM: Math.max(0.1, Number(master.default_height_m || 1)),
         rotation: 0,
@@ -2931,10 +2954,8 @@
 
     function svgPointToWorld(point) {
       const scale = Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
-      return {
-        x: clampNumber((Number(point?.x || 0) - view.panX) / scale, 0, workspaceSize.width),
-        y: clampNumber((Number(point?.y || 0) - view.panY) / scale, 0, workspaceSize.height),
-      };
+      const world = { x: (Number(point?.x || 0) - view.panX) / scale, y: (Number(point?.y || 0) - view.panY) / scale };
+      return hasCompositeWorkspace() ? world : { x: clampNumber(world.x, 0, workspaceSize.width), y: clampNumber(world.y, 0, workspaceSize.height) };
     }
 
     function worldToScreen(point) {
@@ -2957,6 +2978,8 @@
       updateWorkspaceGridPattern();
       const gridBg = document.querySelector("#layoutWorkspaceGridBg");
       const majorGridBg = document.querySelector("#layoutWorkspaceMajorGridBg");
+      const worldBounds = getWorkspaceWorldBounds(true);
+      [gridBg, majorGridBg].filter(Boolean).forEach((rect) => { rect.setAttribute("x", String(worldBounds.minX)); rect.setAttribute("y", String(worldBounds.minY)); rect.setAttribute("width", String(worldBounds.width)); rect.setAttribute("height", String(worldBounds.height)); });
       if (gridBg) gridBg.style.display = workspaceGrid && view.scale > 0.75 ? "" : "none";
       if (majorGridBg) majorGridBg.style.display = workspaceGrid ? "" : "none";
       if (workspaceGridLayer) workspaceGridLayer.style.display = workspaceGrid ? "" : "none";
@@ -3638,14 +3661,15 @@
         const dyPx = event.clientY - Number(workspaceDragState.startClientY || event.clientY);
         const deltaX = dxPx / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
         const deltaY = dyPx / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
+        const freeMove = hasCompositeWorkspace();
         const nextCenter = applyWorkspaceSnapPoint({
-          x: clampNumber(workspaceDragState.startObjectX + deltaX, 0, workspaceSize.width),
-          y: clampNumber(workspaceDragState.startObjectY + deltaY, 0, workspaceSize.height),
+          x: freeMove ? workspaceDragState.startObjectX + deltaX : clampNumber(workspaceDragState.startObjectX + deltaX, 0, workspaceSize.width),
+          y: freeMove ? workspaceDragState.startObjectY + deltaY : clampNumber(workspaceDragState.startObjectY + deltaY, 0, workspaceSize.height),
         });
         logWorkspacePointerMove(event, { dxWorld: deltaX, dyWorld: deltaY, nextCenter });
         const snappedDelta = { x: nextCenter.x - workspaceDragState.startObjectX, y: nextCenter.y - workspaceDragState.startObjectY };
         const starts = workspaceDragState.selectedStarts || [{ id: object.instanceId, x: workspaceDragState.startObjectX, y: workspaceDragState.startObjectY, metadata: workspaceDragState.startMetadata }];
-        const boundedDelta = {
+        const boundedDelta = freeMove ? snappedDelta : {
           x: clampNumber(snappedDelta.x, -Math.min(...starts.map((item) => item.x)), workspaceSize.width - Math.max(...starts.map((item) => item.x))),
           y: clampNumber(snappedDelta.y, -Math.min(...starts.map((item) => item.y)), workspaceSize.height - Math.max(...starts.map((item) => item.y))),
         };
@@ -3757,8 +3781,8 @@
         masterObjectId: "",
         objectType: type === "calibrate" ? "calibration" : "wall",
         label: type === "calibrate" ? "축척 보정" : "벽",
-        x: clampNumber(center.x, 0, workspaceSize.width),
-        y: clampNumber(center.y, 0, workspaceSize.height),
+        x: Number(center.x),
+        y: Number(center.y),
         widthM: Math.max(0.05, lengthM),
         heightM: type === "calibrate" ? 0.05 : 0.15,
         rotation: normalizeDegrees(angle),
@@ -3968,8 +3992,10 @@
         object.metadata.rotation = normalizeDegrees(toWorkspaceNumber(workspaceRotationInput.value, object.metadata.rotation || 0));
         refreshCompositeGroupChildren(object); markWorkspaceDirty(); renderWorkspace(); return;
       }
-      object.x = clampNumber(toWorkspaceNumber(workspaceXInput.value, object.x), 0, workspaceSize.width);
-      object.y = clampNumber(toWorkspaceNumber(workspaceYInput.value, object.y), 0, workspaceSize.height);
+      const nextX = toWorkspaceNumber(workspaceXInput.value, object.x);
+      const nextY = toWorkspaceNumber(workspaceYInput.value, object.y);
+      object.x = hasCompositeWorkspace() ? nextX : clampNumber(nextX, 0, workspaceSize.width);
+      object.y = hasCompositeWorkspace() ? nextY : clampNumber(nextY, 0, workspaceSize.height);
       object.widthM = Math.max(0.1, toWorkspaceNumber(workspaceWidthInput.value, object.widthM));
       object.heightM = Math.max(0.1, toWorkspaceNumber(workspaceHeightInput.value, object.heightM));
       object.rotation = normalizeDegrees(toWorkspaceNumber(workspaceRotationInput.value, object.rotation || 0));
@@ -4085,7 +4111,7 @@
       if (!selected.length) return;
       pushWorkspaceHistory();
       const maxZ = getWorkspaceMaxZIndex();
-      const offset = {
+      const offset = hasCompositeWorkspace() ? { x: 200, y: 200 } : {
         x: clampNumber(200, -Math.min(...selected.map((object) => object.x)), workspaceSize.width - Math.max(...selected.map((object) => object.x))),
         y: clampNumber(200, -Math.min(...selected.map((object) => object.y)), workspaceSize.height - Math.max(...selected.map((object) => object.y))),
       };
@@ -4237,11 +4263,12 @@
         setWorkspaceActualSize();
         return;
       }
-      const scaleX = canvasWidth / workspaceSize.width;
-      const scaleY = canvasHeight / workspaceSize.height;
+      const bounds = getWorkspaceWorldBounds(true);
+      const scaleX = canvasWidth / bounds.width;
+      const scaleY = canvasHeight / bounds.height;
       view.scale = clampNumber(Math.min(scaleX, scaleY) * 0.92, WORKSPACE_MIN_SCALE, WORKSPACE_MAX_SCALE);
-      view.panX = (canvasWidth - workspaceSize.width * view.scale) / 2;
-      view.panY = (canvasHeight - workspaceSize.height * view.scale) / 2;
+      view.panX = (canvasWidth - bounds.width * view.scale) / 2 - bounds.minX * view.scale;
+      view.panY = (canvasHeight - bounds.height * view.scale) / 2 - bounds.minY * view.scale;
       renderWorkspace();
     }
 
@@ -4252,8 +4279,9 @@
 
     function centerWorkspaceView() {
       updateWorkspaceSvgViewBox();
-      view.panX = (workspaceViewportSize.width - workspaceSize.width * view.scale) / 2;
-      view.panY = (workspaceViewportSize.height - workspaceSize.height * view.scale) / 2;
+      const bounds = getWorkspaceWorldBounds(false);
+      view.panX = workspaceViewportSize.width / 2 - ((bounds.minX + bounds.maxX) / 2) * view.scale;
+      view.panY = workspaceViewportSize.height / 2 - ((bounds.minY + bounds.maxY) / 2) * view.scale;
       renderWorkspace();
     }
 
@@ -4304,8 +4332,11 @@
       if (!workspaceFloorplanInfo) return;
       const venueName = workspaceSourceRow?.venues?.venue_name || workspaceVenues.find((venue) => venue.id === workspaceVenueSelect?.value)?.venue_name || "\uB3C4\uBA74 \uC120\uD0DD \uC5C6\uC74C";
       const spaceName = workspaceSourceRow?.venue_spaces?.space_name || workspaceSpaces.find((space) => space.id === workspaceSpaceSelect?.value)?.space_name || "";
-      const sizeLabel = `${formatMmAsMeters(workspaceDrawingWidthMm)} x ${formatMmAsMeters(workspaceDrawingHeightMm)}`;
-      const mmLabel = `${workspaceDrawingWidthMm}mm x ${workspaceDrawingHeightMm}mm`;
+      const displayBounds = hasCompositeWorkspace() ? getWorkspaceWorldBounds(false) : { width: workspaceDrawingWidthMm, height: workspaceDrawingHeightMm };
+      const displayWidthMm = Math.round(displayBounds.width);
+      const displayHeightMm = Math.round(displayBounds.height);
+      const sizeLabel = `${formatMmAsMeters(displayWidthMm)} x ${formatMmAsMeters(displayHeightMm)}`;
+      const mmLabel = `${displayWidthMm}mm x ${displayHeightMm}mm`;
       const metrics = floorplanOutlineMetrics(workspaceOutlinePoints);
       const floorplanName = workspaceFloorplanRecord?.floorplan_name || workspaceSourceRow?.layout_type || "선택 없음";
       const areaLabel = metrics.areaMm2 ? `${formatDecimal(metrics.areaMm2 / 1000000, 1)}m²` : "-";
@@ -4456,10 +4487,8 @@
     }
 
     function workspaceMillimetersToPoint(pointMm) {
-      return {
-        x: clampNumber(Number(pointMm.x || 0), 0, workspaceSize.width),
-        y: clampNumber(Number(pointMm.y || 0), 0, workspaceSize.height),
-      };
+      const point = { x: Number(pointMm.x || 0), y: Number(pointMm.y || 0) };
+      return hasCompositeWorkspace() ? point : { x: clampNumber(point.x, 0, workspaceSize.width), y: clampNumber(point.y, 0, workspaceSize.height) };
     }
 
     function snapToGrid(valueMm, gridSizeMm) {
@@ -5601,6 +5630,7 @@
     floorplanObjectWorkspaceCenter,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
+    calculateWorkspaceWorldBounds,
     isFloorplanStructuralObject,
     cloneFloorplanObjectsForLayout,
     layoutLibraryGroupName,
