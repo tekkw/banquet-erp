@@ -90,6 +90,19 @@
     return { dateKey, events: dayEvents, bars, hiddenCount: Math.max(0, dayEvents.length - maxBars) };
   }
 
+  function miniCalendarEventColorKey(event = {}) {
+    const explicit = String(event.color || "").trim().toLowerCase();
+    if (explicit && explicit !== "gray" && explicit !== "other") return explicit;
+    const type = String(event.eventType || event.event_type || "").replace(/\s+/g, "");
+    if (/세미나|워크숍|워크샵/.test(type)) return "blue";
+    if (/학회/.test(type)) return "black";
+    if (/대행/.test(type)) return "yellow";
+    if (/제약/.test(type)) return "green";
+    if (/피로연/.test(type)) return "pink";
+    if (/결혼|웨딩/.test(type)) return "orange";
+    return explicit || "gray";
+  }
+
   function load() {
     try {
       return normalize(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"));
@@ -784,5 +797,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 
-  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout, miniCalendarEventDates, miniCalendarEventsForDate, miniCalendarDayBars };
+  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout, miniCalendarEventDates, miniCalendarEventsForDate, miniCalendarDayBars, miniCalendarEventColorKey };
 })();

@@ -27,22 +27,31 @@ const gap = event("gap", ["2026-10-28", "2026-10-29", "2026-10-31"], "green");
 assert.strictEqual(widgets.miniCalendarDayBars([gap], "2026-10-31").bars[0].position, "single", "E. 비연속 저장 날짜는 별도 segment다");
 assert.strictEqual(widgets.miniCalendarEventsForDate([gap], "2026-10-30").length, 0, "E. start~end 범위를 임의로 채우지 않는다");
 
-summary = widgets.miniCalendarDayBars([1, 2, 3, 4, 5].map((id) => event(String(id), ["2026-10-28"])), "2026-10-28", 4);
-assert.strictEqual(summary.bars.length, 4);
-assert.strictEqual(summary.hiddenCount, 1, "F. 한 날짜는 4줄까지만 표시하고 +N으로 축약한다");
+summary = widgets.miniCalendarDayBars([1, 2, 3, 4, 5].map((id) => event(String(id), ["2026-10-28"])), "2026-10-28", 3);
+assert.strictEqual(summary.bars.length, 3);
+assert.strictEqual(summary.hiddenCount, 2, "F. 한 날짜는 3줄까지만 표시하고 +N으로 축약한다");
+
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "세미나", color: "gray" }), "blue");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "학회", color: "gray" }), "black");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "대행업체", color: "gray" }), "yellow");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "제약회사", color: "gray" }), "green");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "피로연", color: "gray" }), "pink");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "결혼식", color: "gray" }), "orange", "기존 행사유형 색상 범례를 재사용한다");
+assert.strictEqual(widgets.miniCalendarEventColorKey({ eventType: "학회", color: "purple" }), "purple", "사용자가 선택한 저장 색상은 유지한다");
 
 const duplicate = [event("dup", ["2026-10-28"]), { ...event("dup", ["2026-10-28"]), eventName: "중복 schedule row" }];
 assert.strictEqual(widgets.miniCalendarDayBars(duplicate, "2026-10-28").events.length, 1, "I. eventOrderId/date 기준으로 중복 제거한다");
 
 const css = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
 assert(css.includes(".mini-event-bar.start") && css.includes(".mini-event-bar.middle") && css.includes(".mini-event-bar.end"), "연결 시작/중간/끝 스타일이 있다");
+assert(css.includes("height: 4px") && css.includes("margin-top: auto"), "막대는 4px이며 날짜 셀 하단에 배치한다");
 assert(css.includes(".mini-day-number { position: relative; z-index: 2"), "K. 날짜 숫자를 막대보다 위에 유지한다");
 assert(!css.includes(".mini-venue-badge,"), "날짜 셀의 venue 텍스트 badge를 제거한다");
 
 for (const page of ["outputs/index.html", "outputs/event-order-preview.html"]) {
   const html = fs.readFileSync(page, "utf8");
-  assert(html.includes("miniCalendarDayBars(savedEvents || [], dateKey, 4)"), "기존 savedEvents로 bar를 만든다");
-  assert(html.includes("eventColors[normalizeEventColorKey(item.event.color)]"), "J. 기존 행사 color token을 재사용한다");
+  assert(html.includes("miniCalendarDayBars(savedEvents || [], dateKey, 3)"), "기존 savedEvents로 최대 3개 bar를 만든다");
+  assert(html.includes("miniCalendarEventColorKey(item.event)"), "J. 기존 행사유형 color token을 재사용한다");
   assert(html.includes("renderDashboardMonthEventDetail(item.event, dateKey)"), "G. 막대 클릭은 대시보드 상세를 연다");
   assert(html.includes('event.stopPropagation(); dashboardMiniSelectedDate = dateKey'), "H. 막대 클릭이 상위 캘린더 이동 동작으로 전파되지 않는다");
   assert(html.includes('open.textContent = "상세 보기"'), "상세 drawer는 별도 버튼에서만 연다");

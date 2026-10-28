@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-calendar-bars-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-calendar-bars-v2">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -1132,7 +1132,7 @@
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
   <script src="./src/operationBoard.js?v=operations-autopilot-v6-operational-firenze-v1"></script>
   <script src="./src/pushNotifications.js?v=web-push-v1"></script>
-  <script src="./src/dashboardWidgets.js?v=dashboard-calendar-bars-v1"></script>
+  <script src="./src/dashboardWidgets.js?v=dashboard-calendar-bars-v2"></script>
   <script>
     /*
      * 역할:
@@ -4168,7 +4168,7 @@
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + index);
         const dateKey = formatDateKey(date);
-        const summary = window.BANQUET_ERP_DASHBOARD_WIDGETS?.miniCalendarDayBars(savedEvents || [], dateKey, 4) || { events: [], bars: [], hiddenCount: 0 };
+        const summary = window.BANQUET_ERP_DASHBOARD_WIDGETS?.miniCalendarDayBars(savedEvents || [], dateKey, 3) || { events: [], bars: [], hiddenCount: 0 };
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mini-day";
@@ -4178,7 +4178,7 @@
         if (summary.events.length) button.classList.add("has-event");
         button.dataset.operationDate = dateKey;
         const number = document.createElement("span"); number.className = "mini-day-number"; number.textContent = String(date.getDate()); button.append(number);
-        if (summary.bars.length) { const bars = document.createElement("span"); bars.className = "mini-event-bars"; summary.bars.forEach((item) => { const bar = document.createElement("span"); const color = eventColors[normalizeEventColorKey(item.event.color)] || eventColors.gray; bar.className = `mini-event-bar ${item.position}`; bar.style.setProperty("--mini-event-color", color.dot || color.border); bar.title = [getMiniCalendarVenueLabels(item.event).join("+"), cleanValue(item.event.companyName || item.event.company_name || item.event.organizer || item.event.eventName || item.event.event_name)].filter(Boolean).join(" · "); bar.setAttribute("role", "button"); bar.tabIndex = 0; const showDetail = (event) => { event.stopPropagation(); dashboardMiniSelectedDate = dateKey; grid.querySelectorAll(".mini-day.selected").forEach((cell) => cell.classList.remove("selected")); button.classList.add("selected"); renderDashboardMonthEventDetail(item.event, dateKey); }; bar.addEventListener("click", showDetail); bar.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showDetail(event); }); bars.append(bar); }); if (summary.hiddenCount) { const more = document.createElement("small"); more.className = "mini-event-more"; more.textContent = `+${summary.hiddenCount}`; bars.append(more); } button.append(bars); }
+        if (summary.bars.length) { const bars = document.createElement("span"); bars.className = "mini-event-bars"; summary.bars.forEach((item) => { const bar = document.createElement("span"); const colorKey = window.BANQUET_ERP_DASHBOARD_WIDGETS?.miniCalendarEventColorKey(item.event) || item.event.color; const color = eventColors[normalizeEventColorKey(colorKey)] || eventColors.gray; bar.className = `mini-event-bar ${item.position}`; bar.style.setProperty("--mini-event-color", color.dot || color.border); bar.title = [getMiniCalendarVenueLabels(item.event).join("+"), cleanValue(item.event.companyName || item.event.company_name || item.event.organizer || item.event.eventName || item.event.event_name)].filter(Boolean).join(" · "); bar.setAttribute("role", "button"); bar.tabIndex = 0; const showDetail = (event) => { event.stopPropagation(); dashboardMiniSelectedDate = dateKey; grid.querySelectorAll(".mini-day.selected").forEach((cell) => cell.classList.remove("selected")); button.classList.add("selected"); renderDashboardMonthEventDetail(item.event, dateKey); }; bar.addEventListener("click", showDetail); bar.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showDetail(event); }); bars.append(bar); }); if (summary.hiddenCount) { const more = document.createElement("small"); more.className = "mini-event-more"; more.textContent = `+${summary.hiddenCount}`; bars.append(more); } button.append(bars); }
         button.addEventListener("click", (event) => { event.stopPropagation(); dashboardMiniSelectedDate = dateKey; grid.querySelectorAll(".mini-day.selected").forEach((cell) => cell.classList.remove("selected")); button.classList.add("selected"); renderDashboardMonthDetail(dateKey, summary.events); });
         grid.append(button);
       }
