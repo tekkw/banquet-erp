@@ -44,7 +44,9 @@ assert.strictEqual(widgets.miniCalendarDayBars(duplicate, "2026-10-28").events.l
 
 const css = fs.readFileSync("outputs/src/styles/dashboardWidgets.css", "utf8");
 assert(css.includes(".mini-event-bar.start") && css.includes(".mini-event-bar.middle") && css.includes(".mini-event-bar.end"), "연결 시작/중간/끝 스타일이 있다");
-assert(css.includes("height: 4px") && css.includes("margin-top: auto"), "막대는 4px이며 날짜 셀 하단에 배치한다");
+assert(css.includes("height: 4px; min-height: 4px; max-height: 4px") && css.includes("padding: 0") && css.includes("line-height: 0") && css.includes("margin-top: auto"), "막대는 4px이며 날짜 셀 하단에 배치한다");
+const widgetSource = fs.readFileSync("outputs/src/dashboardWidgets.js", "utf8");
+assert(!widgetSource.includes("board-group-tasks-v5"), "오래된 dashboard stylesheet를 뒤에서 다시 로드하지 않는다");
 assert(css.includes(".mini-day-number { position: relative; z-index: 2"), "K. 날짜 숫자를 막대보다 위에 유지한다");
 assert(!css.includes(".mini-venue-badge,"), "날짜 셀의 venue 텍스트 badge를 제거한다");
 
