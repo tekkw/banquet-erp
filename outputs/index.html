@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-board-height-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-mini-calendar-v1">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -154,6 +154,7 @@
                 <button class="mini-day" type="button" data-operation-date="2026-07-31">31</button>
                 <span class="mini-day outside">1</span>
               </div>
+              <div class="mini-calendar-detail" data-mini-calendar-detail aria-live="polite"></div>
           </article>
         </section>
 
@@ -1141,7 +1142,7 @@
   <script src="./src/operationBoard.js?v=operations-autopilot-v6-operational-firenze-v1"></script>
   <script src="./src/operationsAutopilot.js?v=operations-autopilot-v6"></script>
   <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
-  <script src="./src/dashboardWidgets.js?v=dashboard-board-height-v1"></script>
+  <script src="./src/dashboardWidgets.js?v=dashboard-mini-calendar-v1"></script>
   <script>
     /*
      * 역할:
@@ -1447,6 +1448,7 @@
     let banquetAssets = [];
     let venueDirectoryCache = null;
     let calendarDate = new Date();
+    let dashboardMiniSelectedDate = "";
     let selectedSaveDates = [];
     let selectedEventColor = "navy";
     let selectedEventType = "";
@@ -4138,6 +4140,26 @@
       target?.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
     }
 
+    function getMiniCalendarEventTime(eventItem, dateKey) {
+      const matching = (eventItem.schedule || []).filter((row) => !(row.date || row.schedule_date) || (row.date || row.schedule_date) === dateKey).map((row) => cleanValue(row.time || row.schedule_time)).find(Boolean);
+      return matching || getDashboardEventTime(eventItem);
+    }
+
+    function getMiniCalendarVenueLabels(eventItem) {
+      const venue = eventItem.venue || getFirstScheduleVenue(eventItem) || ""; const utils = window.BANQUET_ERP_VENUE_UTILS;
+      const codes = utils?.normalizeVenueList?.(venue) || [];
+      return (codes.length ? codes : [venue].filter(Boolean)).map((code) => utils?.formatVenueShort?.(code) || code);
+    }
+
+    function renderDashboardMonthDetail(dateKey, dayEvents = []) {
+      const detail = document.querySelector("[data-mini-calendar-detail]"); if (!detail) return; detail.innerHTML = "";
+      const [, month, day] = String(dateKey).split("-").map(Number); const heading = document.createElement("strong"); heading.textContent = `${month}월 ${day}일 · ${dayEvents.length}건`; detail.append(heading);
+      if (!dayEvents.length) { const empty = document.createElement("span"); empty.textContent = "등록된 행사가 없습니다."; detail.append(empty); return; }
+      const list = document.createElement("div"); list.className = "mini-calendar-detail-list";
+      dayEvents.forEach((eventItem) => { const row = document.createElement("button"); row.type = "button"; row.className = "mini-calendar-detail-row"; const organizer = cleanValue(eventItem.companyName || eventItem.company_name || eventItem.organizer) || cleanValue(eventItem.eventName || eventItem.event_name) || "주최 미등록"; const venue = getMiniCalendarVenueLabels(eventItem).join("+") || "장소 미등록"; const time = getMiniCalendarEventTime(eventItem, dateKey); const guests = eventItem.guestCount ?? eventItem.guest_count; row.innerHTML = `<b>${escapeHtml(venue)} · ${escapeHtml(organizer)}</b><span>${escapeHtml(time)} · ${guests !== "" && guests != null ? `${escapeHtml(guests)}명` : "인원 미등록"}</span>`; row.addEventListener("click", (event) => { event.stopPropagation(); openEventModal(eventItem, dateKey); }); list.append(row); });
+      detail.append(list);
+    }
+
     function renderDashboardMonthWidget() {
       const card = document.querySelector(".dashboard-month-card");
       const title = card?.querySelector(".mini-calendar-header h3");
@@ -4145,8 +4167,9 @@
       if (!card || !title || !grid) return;
 
       const today = new Date();
-      const year = today.getFullYear();
-      const monthIndex = today.getMonth();
+      const todayKey = window.BANQUET_ERP_CORE_RULES?.getActualTodaySeoul?.(today) || formatDateKey(today); const [todayYear, todayMonth] = todayKey.split("-").map(Number);
+      const year = todayYear;
+      const monthIndex = todayMonth - 1;
       title.textContent = `${year}년 ${monthIndex + 1}월`;
       grid.innerHTML = "";
       ["일", "월", "화", "수", "목", "금", "토"].forEach((weekday) => {
@@ -4159,29 +4182,28 @@
       const firstDate = new Date(year, monthIndex, 1);
       const startDate = new Date(firstDate);
       startDate.setDate(firstDate.getDate() - firstDate.getDay());
-      const todayKey = formatDateKey(today);
+      dashboardMiniSelectedDate ||= todayKey;
 
       for (let index = 0; index < 42; index += 1) {
         const date = new Date(startDate);
         date.setDate(startDate.getDate() + index);
         const dateKey = formatDateKey(date);
-        const events = getEventsForDate(dateKey);
+        const summary = window.BANQUET_ERP_DASHBOARD_WIDGETS?.miniCalendarDaySummary(savedEvents || [], dateKey, 3) || { events: [], venues: [], hiddenVenueCount: 0 };
         const button = document.createElement("button");
         button.type = "button";
         button.className = "mini-day";
         if (date.getMonth() !== monthIndex) button.classList.add("outside");
-        if (dateKey === todayKey) button.classList.add("selected");
-        if (events.length) button.classList.add("has-event");
+        if (dateKey === todayKey) button.classList.add("today");
+        if (dateKey === dashboardMiniSelectedDate) button.classList.add("selected");
+        if (summary.events.length) button.classList.add("has-event");
         button.dataset.operationDate = dateKey;
-        button.textContent = String(date.getDate());
-        if (events.length) {
-          const badge = document.createElement("span");
-          badge.textContent = String(events.length);
-          button.append(badge);
-        }
-        button.addEventListener("click", () => goToCalendarDate(dateKey));
+        const number = document.createElement("span"); number.className = "mini-day-number"; number.textContent = String(date.getDate()); button.append(number);
+        if (summary.venues.length) { const badges = document.createElement("span"); badges.className = "mini-venue-badges"; summary.venues.forEach((venue) => { const badge = document.createElement("span"); badge.className = "mini-venue-badge"; badge.textContent = venue.label; badge.title = venue.events.map((eventItem) => `${venue.label} · ${cleanValue(eventItem.companyName || eventItem.company_name || eventItem.organizer || eventItem.eventName || eventItem.event_name) || "주최 미등록"}${eventItem.guestCount ?? eventItem.guest_count ? ` · ${eventItem.guestCount ?? eventItem.guest_count}명` : ""}`).join("\n"); badges.append(badge); }); if (summary.hiddenVenueCount) { const more = document.createElement("span"); more.className = "mini-venue-more"; more.textContent = `+${summary.hiddenVenueCount}`; badges.append(more); } button.append(badges); }
+        button.addEventListener("click", (event) => { event.stopPropagation(); dashboardMiniSelectedDate = dateKey; grid.querySelectorAll(".mini-day.selected").forEach((cell) => cell.classList.remove("selected")); button.classList.add("selected"); renderDashboardMonthDetail(dateKey, summary.events); });
         grid.append(button);
       }
+      const selectedEvents = window.BANQUET_ERP_DASHBOARD_WIDGETS?.miniCalendarEventsForDate(savedEvents || [], dashboardMiniSelectedDate) || [];
+      renderDashboardMonthDetail(dashboardMiniSelectedDate, selectedEvents.sort((a, b) => getMiniCalendarEventTime(a, dashboardMiniSelectedDate).localeCompare(getMiniCalendarEventTime(b, dashboardMiniSelectedDate), "ko-KR")));
     }
 
     function getEventsForDate(dateKey) {

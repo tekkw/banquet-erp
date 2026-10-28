@@ -61,6 +61,28 @@
     };
   }
 
+  function miniCalendarEventDates(event = {}) {
+    const stored = (event.calendarDates || event.event_calendar_dates || []).map((value) => typeof value === "string" ? value : value.calendar_date || value.date).filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")));
+    if (stored.length) return [...new Set(stored)].sort();
+    return [...new Set([event.startDate || event.start_date, String(event.eventDateTime || event.event_datetime || "").slice(0, 10)].filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))))].sort();
+  }
+
+  function miniCalendarEventsForDate(events = [], dateKey = "") {
+    const byEvent = new Map();
+    events.forEach((event, index) => { if (!miniCalendarEventDates(event).includes(dateKey)) return; const id = String(event.id || event.eventOrderId || event.event_order_id || `event-${index}`); if (!byEvent.has(id)) byEvent.set(id, event); });
+    return [...byEvent.values()];
+  }
+
+  function miniCalendarDaySummary(events = [], dateKey = "", maxBadges = 3) {
+    const dayEvents = miniCalendarEventsForDate(events, dateKey); const utils = window.BANQUET_ERP_VENUE_UTILS; const core = window.BANQUET_ERP_CORE_RULES; const venues = new Map();
+    dayEvents.forEach((event) => {
+      const venue = event.venue || event.canonicalVenue || event.canonical_venue || (event.schedule || event.event_schedules || []).map((row) => row.venue || row.location).find(Boolean) || "";
+      const codes = utils?.normalizeVenueList?.(venue) || []; core?.normalizeVenueSet?.(venue);
+      (codes.length ? codes : [venue].filter(Boolean)).forEach((code) => { const label = utils?.formatVenueShort?.(code) || String(code); if (!venues.has(code)) venues.set(code, { code, label, events: [] }); venues.get(code).events.push(event); });
+    });
+    const allVenues = [...venues.values()]; return { dateKey, events: dayEvents, venues: allVenues.slice(0, maxBadges), hiddenVenueCount: Math.max(0, allVenues.length - maxBadges), totalVenueCount: allVenues.length };
+  }
+
   function load() {
     try {
       return normalize(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"));
@@ -755,5 +777,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 
-  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout };
+  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout, miniCalendarEventDates, miniCalendarEventsForDate, miniCalendarDaySummary };
 })();
