@@ -230,6 +230,11 @@ body {
 .dashboard-ai-widget .chat-form textarea { min-height: 52px; border-color: var(--dash-border-strong); background: #071a31; color: #f4f7fa; caret-color: #f4f7fa; }
 .dashboard-ai-widget .chat-form textarea::placeholder { color: #96a9ba; }
 
+@media (min-width: 769px) {
+  .dashboard-widget-layout { height: auto; max-height: none; overflow: visible; align-content: start; }
+  .dashboard-widget-shell[data-widget-id="today-board"] > .operation-board { height: 100%; max-height: none; overflow: auto; }
+}
+
 .global-ai-launcher {
   position: fixed;
   right: 22px;

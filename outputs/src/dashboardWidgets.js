@@ -9,7 +9,7 @@
   };
   const definitions = [
     { id: "today-remaining", name: "오늘 남은 일정", selector: "#todayRemainingScheduleWidget", colSpan: 4, rowSpan: 6, minColSpan: 4, minRowSpan: 4 },
-    { id: "today-board", name: "운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6 },
+    { id: "today-board", name: "운영보드", selector: "#todayOperationBoard", colSpan: 8, rowSpan: 10, minColSpan: 6, minRowSpan: 6, maxRowSpan: 24 },
     { id: "weekly-setup", name: "다음 세팅 할 일", selector: "#weeklySetupWidget", colSpan: 4, rowSpan: 10, minColSpan: 4, minRowSpan: 5 },
     { id: "hall-current-states", name: "현재 세팅 상태", selector: "#hallCurrentStatesWidget", colSpan: 4, rowSpan: 8, minColSpan: 4, minRowSpan: 5 },
     { id: "beverage-inventory", name: "음주류 재고", selector: "#beverageInventoryWidget", colSpan: 4, rowSpan: 7, minColSpan: 4, minRowSpan: 5 },
@@ -31,6 +31,7 @@
 
   const clone = (value) => JSON.parse(JSON.stringify(value));
   const definitionFor = (id) => definitions.find((item) => item.id === id);
+  const maxRowSpanFor = (definition) => definition?.maxRowSpan || MAX_ROW_SPAN;
   const clamp = (value, minimum, maximum, fallback) => {
     const parsed = Number.parseInt(value, 10);
     return Math.min(maximum, Math.max(minimum, Number.isFinite(parsed) ? parsed : fallback));
@@ -56,7 +57,7 @@
       id: definition.id,
       visible: saved?.visible !== false,
       colSpan: clamp(saved?.colSpan ?? legacy.colSpan, definition.minColSpan, GRID_COLUMNS, definition.colSpan),
-      rowSpan: clamp(saved?.rowSpan ?? legacy.rowSpan, definition.minRowSpan, MAX_ROW_SPAN, definition.rowSpan),
+      rowSpan: clamp(saved?.rowSpan ?? legacy.rowSpan, definition.minRowSpan, maxRowSpanFor(definition), definition.rowSpan),
     };
   }
 
@@ -505,7 +506,7 @@
     shell.querySelector('[data-widget-col-delta="-1"]').disabled = item.colSpan <= definition.minColSpan;
     shell.querySelector('[data-widget-col-delta="1"]').disabled = item.colSpan >= GRID_COLUMNS;
     shell.querySelector('[data-widget-row-delta="-1"]').disabled = item.rowSpan <= definition.minRowSpan;
-    shell.querySelector('[data-widget-row-delta="1"]').disabled = item.rowSpan >= MAX_ROW_SPAN;
+    shell.querySelector('[data-widget-row-delta="1"]').disabled = item.rowSpan >= maxRowSpanFor(definition);
   }
 
   function apply(layout) {
@@ -523,7 +524,7 @@
     const definition = definitionFor(id);
     if (!item || !definition) return next;
     if (changes.colSpan != null) item.colSpan = clamp(changes.colSpan, definition.minColSpan, GRID_COLUMNS, item.colSpan);
-    if (changes.rowSpan != null) item.rowSpan = clamp(changes.rowSpan, definition.minRowSpan, MAX_ROW_SPAN, item.rowSpan);
+    if (changes.rowSpan != null) item.rowSpan = clamp(changes.rowSpan, definition.minRowSpan, maxRowSpanFor(definition), item.rowSpan);
     return next;
   }
 

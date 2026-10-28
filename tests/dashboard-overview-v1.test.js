@@ -68,7 +68,13 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[0])), { id: "weekly-
 assert.deepStrictEqual(JSON.parse(JSON.stringify(normalized[1])), { id: "quick", visible: true, colSpan: 3, rowSpan: 3 });
 const resized = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.resizeLayout(normalized, "today-board", { colSpan: 2, rowSpan: 30 });
 assert.strictEqual(resized.find((item) => item.id === "today-board").colSpan, 6, "위젯별 최소 가로 span을 지켜야 한다");
-assert.strictEqual(resized.find((item) => item.id === "today-board").rowSpan, 12, "최대 세로 span을 지켜야 한다");
+assert.strictEqual(resized.find((item) => item.id === "today-board").rowSpan, 24, "운영보드는 H 24까지 확장할 수 있어야 한다");
+const expandedBoard = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.normalize([{ id: "today-board", visible: true, colSpan: 8, rowSpan: 16 }]);
+assert.strictEqual(expandedBoard.find((item) => item.id === "today-board").rowSpan, 16, "저장된 운영보드 H 16을 재로드해도 유지해야 한다");
+const otherWidget = widgetContext.window.BANQUET_ERP_DASHBOARD_WIDGETS.resizeLayout(normalized, "weekly-setup", { rowSpan: 30 });
+assert.strictEqual(otherWidget.find((item) => item.id === "weekly-setup").rowSpan, 12, "다른 위젯의 기존 H 12 제한은 유지해야 한다");
+assert(widgetStyles.includes('@media (min-width: 769px)') && widgetStyles.includes('.dashboard-widget-layout { height: auto; max-height: none; overflow: visible; align-content: start; }'), "PC grid는 implicit row 증가에 따라 페이지 높이가 늘어나야 한다");
+assert(widgetStyles.includes('[data-widget-id="today-board"] > .operation-board { height: 100%; max-height: none; overflow: auto; }'), "확장된 운영보드 내부가 실제 위젯 높이를 사용해야 한다");
 assert(dashboardWidgets.includes('function handleDragStart(event)'));
 assert(dashboardWidgets.includes('clearPointerDrag();'));
 assert(dashboardWidgets.includes('clearDragFeedback();'));
