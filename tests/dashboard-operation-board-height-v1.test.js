@@ -24,7 +24,7 @@ assert(css.includes('[data-widget-id="today-board"] > .operation-board { height:
 
 for (const page of ["outputs/index.html", "outputs/event-order-preview.html"]) {
   const html = fs.readFileSync(page, "utf8");
-  assert(html.includes("dashboardWidgets.js?v=dashboard-calendar-bars-v3") && html.includes("app.css?v=dashboard-calendar-bars-v3"), "production entrypoint가 최신 JS/CSS를 로드해야 한다");
+  assert(html.includes("dashboardWidgets.js?v=dashboard-calendar-bars-v4") && html.includes("app.css?v=dashboard-calendar-bars-v4"), "production entrypoint가 최신 JS/CSS를 로드해야 한다");
 }
 
 console.log("dashboard operation board height V1 tests passed");
