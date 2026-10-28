@@ -73,14 +73,21 @@
     return [...byEvent.values()];
   }
 
-  function miniCalendarDaySummary(events = [], dateKey = "", maxBadges = 3) {
-    const dayEvents = miniCalendarEventsForDate(events, dateKey); const utils = window.BANQUET_ERP_VENUE_UTILS; const core = window.BANQUET_ERP_CORE_RULES; const venues = new Map();
-    dayEvents.forEach((event) => {
-      const venue = event.venue || event.canonicalVenue || event.canonical_venue || (event.schedule || event.event_schedules || []).map((row) => row.venue || row.location).find(Boolean) || "";
-      const codes = utils?.normalizeVenueList?.(venue) || []; core?.normalizeVenueSet?.(venue);
-      (codes.length ? codes : [venue].filter(Boolean)).forEach((code) => { const label = utils?.formatVenueShort?.(code) || String(code); if (!venues.has(code)) venues.set(code, { code, label, events: [] }); venues.get(code).events.push(event); });
+  function adjacentDateKey(dateKey, offset) {
+    const date = new Date(`${dateKey}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + offset); return date.toISOString().slice(0, 10);
+  }
+
+  function miniCalendarDayBars(events = [], dateKey = "", maxBars = 4) {
+    const dayEvents = miniCalendarEventsForDate(events, dateKey);
+    const dayOfWeek = new Date(`${dateKey}T00:00:00Z`).getUTCDay();
+    const bars = dayEvents.slice(0, maxBars).map((event) => {
+      const dates = new Set(miniCalendarEventDates(event));
+      const continuesLeft = dayOfWeek !== 0 && dates.has(adjacentDateKey(dateKey, -1));
+      const continuesRight = dayOfWeek !== 6 && dates.has(adjacentDateKey(dateKey, 1));
+      const position = continuesLeft ? (continuesRight ? "middle" : "end") : (continuesRight ? "start" : "single");
+      return { event, position, continuesLeft, continuesRight };
     });
-    const allVenues = [...venues.values()]; return { dateKey, events: dayEvents, venues: allVenues.slice(0, maxBadges), hiddenVenueCount: Math.max(0, allVenues.length - maxBadges), totalVenueCount: allVenues.length };
+    return { dateKey, events: dayEvents, bars, hiddenCount: Math.max(0, dayEvents.length - maxBars) };
   }
 
   function load() {
@@ -777,5 +784,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 
-  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout, miniCalendarEventDates, miniCalendarEventsForDate, miniCalendarDaySummary };
+  window.BANQUET_ERP_DASHBOARD_WIDGETS = { init, defaults, normalize, reorderLayout, resizeLayout, miniCalendarEventDates, miniCalendarEventsForDate, miniCalendarDayBars };
 })();
