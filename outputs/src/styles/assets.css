@@ -987,6 +987,24 @@ table {
   filter: drop-shadow(0 8px 14px rgba(15, 42, 67, 0.18));
 }
 
+.layout-workspace-object.auto-grid-preview { opacity: .72; }
+.layout-auto-grid-panel {
+  margin: 0 12px 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(180, 83, 9, .28);
+  border-radius: 10px;
+  background: #fffbeb;
+}
+.layout-auto-grid-panel[hidden] { display: none; }
+.layout-auto-grid-header, .layout-auto-grid-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.layout-auto-grid-header > button { border: 0; background: transparent; font-size: 20px; cursor: pointer; }
+.layout-auto-grid-fields { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)); gap: 8px; margin: 8px 0; }
+.layout-auto-grid-fields label { display: grid; gap: 3px; font-size: 11px; color: #475569; }
+.layout-auto-grid-fields input, .layout-auto-grid-fields select { min-width: 0; height: 30px; padding: 4px 7px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
+.layout-auto-grid-status { margin: 6px 0; font-size: 12px; color: #92400e; }
+.layout-auto-grid-actions { justify-content: flex-end; }
+@media (max-width: 900px) { .layout-auto-grid-fields { grid-template-columns: repeat(2, minmax(110px, 1fr)); } }
+
 .layout-workspace-base-label {
   paint-order: stroke;
   stroke: rgba(255, 255, 255, .94);

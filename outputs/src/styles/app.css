@@ -10,7 +10,7 @@
 @import "./forms.css";
 @import "./dashboard.css";
 @import "./calendar.css";
-@import "./assets.css";
+@import "./assets.css?v=floorplan-auto-grid-v1";
 @import "./ai.css";
 @import "./modal.css?v=event-overwrite-contrast-v1";
 @import "./dashboardWidgets.css?v=dashboard-calendar-bars-v4";

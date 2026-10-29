@@ -439,6 +439,78 @@
     return { valid: errors.length === 0, warnings: [...new Set(warnings)], errors: [...new Set(errors)], counts: { tables: tables.length, chairs: chairs.length } };
   }
 
+  function worldMmToScreenDistance(lengthMm, viewportScale = 1) {
+    return Number(lengthMm || 0) * Number(viewportScale || 1);
+  }
+
+  function layoutConstraintBox(object = {}) {
+    const width = Number(object.widthMm ?? object.metadata?.widthMm ?? Number(object.widthM || 0) * 1000) || 0;
+    const height = Number(object.heightMm ?? object.metadata?.heightMm ?? Number(object.heightM || 0) * 1000) || 0;
+    const rotation = ((Number(object.rotation || 0) % 180) + 180) % 180;
+    const rotated = Math.abs(rotation - 90) < .001;
+    const boxWidth = rotated ? height : width; const boxHeight = rotated ? width : height;
+    const x = Number(object.xMm ?? object.metadata?.xMm ?? object.x ?? 0); const y = Number(object.yMm ?? object.metadata?.yMm ?? object.y ?? 0);
+    return { left: x - boxWidth / 2, right: x + boxWidth / 2, top: y - boxHeight / 2, bottom: y + boxHeight / 2, width: boxWidth, height: boxHeight };
+  }
+
+  function pointInLayoutPolygon(point, polygon = []) {
+    if (!polygon.length) return false;
+    let inside = false;
+    for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+      const a = polygon[index]; const b = polygon[previous];
+      const crosses = ((a.y > point.y) !== (b.y > point.y)) && point.x < ((b.x - a.x) * (point.y - a.y)) / ((b.y - a.y) || 1) + a.x;
+      if (crosses) inside = !inside;
+    }
+    return inside;
+  }
+
+  function layoutBoxesOverlap(left, right) {
+    return left.left < right.right && left.right > right.left && left.top < right.bottom && left.bottom > right.top;
+  }
+
+  function deriveLayoutConstraints({ boundaryPoints = [], widthMm = 0, heightMm = 0, objects = [] } = {}) {
+    const boundary = boundaryPoints.length >= 3 ? boundaryPoints.map((point) => ({ x: Number(point.x), y: Number(point.y) })) : [{ x: 0, y: 0 }, { x: Number(widthMm), y: 0 }, { x: Number(widthMm), y: Number(heightMm) }, { x: 0, y: Number(heightMm) }];
+    const xs = boundary.map((point) => point.x); const ys = boundary.map((point) => point.y);
+    const obstacleTypes = new Set(["blocked_area", "pillar", "wall", "fixed_wall", "structure_area", "screen", "door"]);
+    const obstacles = (objects || []).filter((object) => obstacleTypes.has(object.objectType || object.object_type)).map((object) => ({ type: object.objectType || object.object_type, label: object.label || "고정 구조물", box: layoutConstraintBox(object) }));
+    return { boundary, bounds: { left: Math.min(...xs), right: Math.max(...xs), top: Math.min(...ys), bottom: Math.max(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) }, obstacles };
+  }
+
+  function generateSeminarGrid({ tableSpec = {}, columns, rows, horizontalGapMm = 0, verticalGapMm = 0, origin = {}, frontDirection = "north", constraints = null, instancePrefix = "auto_grid" } = {}) {
+    const tableWidthMm = Number(tableSpec.widthMm || tableSpec.width || 0); const tableDepthMm = Number(tableSpec.depthMm || tableSpec.heightMm || tableSpec.depth || 0);
+    const columnCount = Math.max(1, Math.floor(Number(columns) || 1)); const rowCount = Math.max(1, Math.floor(Number(rows) || 1));
+    const horizontalPitchMm = tableWidthMm + Number(horizontalGapMm || 0); const verticalPitchMm = tableDepthMm + Number(verticalGapMm || 0);
+    const direction = ({ top: "north", bottom: "south", left: "west", right: "east" })[frontDirection] || frontDirection;
+    const horizontalRows = direction === "east" || direction === "west"; const rowSign = direction === "north" || direction === "west" ? 1 : -1;
+    const objects = [];
+    for (let row = 0; row < rowCount; row += 1) for (let column = 0; column < columnCount; column += 1) {
+      const transverse = column * horizontalPitchMm; const depth = rowSign * row * verticalPitchMm;
+      const xMm = Number(origin.xMm || 0) + (horizontalRows ? depth : transverse); const yMm = Number(origin.yMm || 0) + (horizontalRows ? transverse : depth);
+      objects.push({ instanceId: `${instancePrefix}_${row}_${column}`, objectType: "seminar_table", label: `세미나 테이블 ${row + 1}-${column + 1}`, x: xMm, y: yMm, widthM: tableWidthMm / 1000, heightM: tableDepthMm / 1000, rotation: horizontalRows ? 90 : 0, seatCount: 0, locked: false, metadata: { generatedBy: "deterministic_grid_v1", row: row + 1, column: column + 1, xMm, yMm, widthMm: tableWidthMm, heightMm: tableDepthMm, frontDirection: direction } });
+    }
+    const requiredWidthMm = horizontalRows ? tableDepthMm + Math.max(0, rowCount - 1) * verticalPitchMm : tableWidthMm + Math.max(0, columnCount - 1) * horizontalPitchMm;
+    const requiredDepthMm = horizontalRows ? tableWidthMm + Math.max(0, columnCount - 1) * horizontalPitchMm : tableDepthMm + Math.max(0, rowCount - 1) * verticalPitchMm;
+    const measurements = [{ axis: "horizontal", valueMm: Number(horizontalGapMm), label: `${Number(horizontalGapMm) / 1000}m` }, { axis: "vertical", valueMm: Number(verticalGapMm), label: `${Number(verticalGapMm) / 1000}m` }, { axis: "width", valueMm: requiredWidthMm, label: `${requiredWidthMm / 1000}m` }, { axis: "depth", valueMm: requiredDepthMm, label: `${requiredDepthMm / 1000}m` }];
+    if (!tableWidthMm || !tableDepthMm) return { valid: false, reason: "invalid_table_spec", objects: [], measurements };
+    if (constraints) {
+      for (const object of objects) {
+        const box = layoutConstraintBox(object); const corners = [{ x: box.left, y: box.top }, { x: box.right, y: box.top }, { x: box.right, y: box.bottom }, { x: box.left, y: box.bottom }, { x: object.x, y: object.y }];
+        if (!corners.every((point) => pointInLayoutPolygon(point, constraints.boundary))) return { valid: false, reason: box.left < constraints.bounds.left || box.right > constraints.bounds.right ? "insufficient_width" : "boundary_overflow", requiredWidthMm, requiredDepthMm, availableWidthMm: constraints.bounds.width, availableDepthMm: constraints.bounds.height, objects: [], measurements };
+        const collision = constraints.obstacles.find((obstacle) => layoutBoxesOverlap(box, obstacle.box));
+        if (collision) return { valid: false, reason: `${collision.type}_collision`, obstacle: collision, requiredWidthMm, requiredDepthMm, objects: [], measurements };
+      }
+    }
+    return { valid: true, objects, measurements, horizontalPitchMm, verticalPitchMm, requiredWidthMm, requiredDepthMm };
+  }
+
+  function createAutoLayoutPreview(result, existingObjects = []) {
+    if (!result?.valid) return { ...result, previewObjects: [] };
+    return { ...result, previewObjects: result.objects.map((object) => ({ ...object, metadata: { ...object.metadata, autoLayoutPreview: true } })), baseObjects: existingObjects };
+  }
+
+  function cancelAutoLayoutPreview(preview) { return preview?.baseObjects || []; }
+  function applyAutoLayoutPreview(preview) { return [...(preview?.baseObjects || []), ...(preview?.previewObjects || []).map((object) => ({ ...object, metadata: { ...object.metadata, autoLayoutPreview: false, generatedBy: "deterministic_grid_v1" } }))]; }
+
   function createFloorplanEditor({ elements, deps }) {
     const {
       modal,
@@ -751,6 +823,8 @@
     let workspaceDimensionMode = "selected";
     let workspaceDimensionUnit = "m";
     let workspaceIncludeDimensionsInExport = true;
+    let autoGridPreview = null;
+    let autoGridUi = null;
     let compositeFloorplans = [];
     const compositeGeometryCache = new Map();
 
@@ -762,7 +836,7 @@
       return calculateWorkspaceWorldBounds(workspaceDrawingWidthMm, workspaceDrawingHeightMm, workspaceObjects, margin, workspaceMeterScale);
     }
     function compositeObjectBounds(object) { const width = Number(object.widthM || 0) * 1000; const height = Number(object.heightM || 0) * 1000; const radians = normalizeDegrees(object.rotation || 0) * Math.PI / 180; const boxWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians)); const boxHeight = Math.abs(width * Math.sin(radians)) + Math.abs(height * Math.cos(radians)); return { left: object.x - boxWidth / 2, right: object.x + boxWidth / 2, top: object.y - boxHeight / 2, bottom: object.y + boxHeight / 2, width: boxWidth, height: boxHeight }; }
-    function compositeReferencePayload(group) { return { sourceBasePlanId: group.metadata.sourceBasePlanId, offsetX: Math.round(Number(group.metadata.offsetX || 0)), offsetY: Math.round(Number(group.metadata.offsetY || 0)), rotation: normalizeDegrees(group.metadata.rotation ?? group.rotation), locked: true }; }
+    function compositeReferencePayload(group) { return { sourceBasePlanId: group.metadata.sourceBasePlanId, offsetX: Math.round(Number(group.metadata.offsetX || 0)), offsetY: Math.round(Number(group.metadata.offsetY || 0)), rotation: normalizeDegrees(group.metadata.rotation ?? group.rotation), scale: 1, locked: true }; }
 
     function bindEvents() {
       window.addEventListener("banquet:open-floorplan-editor", (event) => {
@@ -1132,6 +1206,7 @@
 
     function bindWorkspaceEvents() {
       initializeLayoutAiPanel();
+      initializeAutoGridPanel();
       workspaceVenueSelect?.addEventListener("change", handleWorkspaceVenueChange);
       workspaceSpaceSelect?.addEventListener("change", handleWorkspaceSpaceChange);
       workspaceFloorplanSelect?.addEventListener("change", handleWorkspaceFloorplanChange);
@@ -1375,6 +1450,103 @@
       syncWorkspaceGridInputs();
       setWorkspaceEditMode("layout");
       setWorkspaceTool("select");
+      renderWorkspace();
+    }
+
+    function initializeAutoGridPanel() {
+      if (autoGridUi || !floorplanV2EventPanel) return;
+      const toolbar = floorplanV2EventPanel.querySelector(".layout-editor-toolbar-row.tool-row");
+      if (!toolbar) return;
+      const openButton = document.createElement("button");
+      openButton.id = "layoutWorkspaceAutoGridButton";
+      openButton.type = "button";
+      openButton.textContent = "자동 Grid";
+      if (workspaceImportBaseButton) workspaceImportBaseButton.insertAdjacentElement("afterend", openButton);
+      else toolbar.append(openButton);
+      const panel = document.createElement("section");
+      panel.id = "layoutWorkspaceAutoGridPanel";
+      panel.className = "layout-auto-grid-panel";
+      panel.hidden = true;
+      panel.innerHTML = `
+        <div class="layout-auto-grid-header"><strong>mm 자동 Grid 배치</strong><button type="button" data-auto-grid-close aria-label="닫기">×</button></div>
+        <div class="layout-auto-grid-fields">
+          <label>테이블 폭(mm)<input data-auto-grid-width type="number" min="1" value="1800"></label>
+          <label>테이블 깊이(mm)<input data-auto-grid-depth type="number" min="1" value="450"></label>
+          <label>열<input data-auto-grid-columns type="number" min="1" value="3"></label>
+          <label>행<input data-auto-grid-rows type="number" min="1" value="7"></label>
+          <label>좌우 간격(mm)<input data-auto-grid-hgap type="number" min="0" value="900"></label>
+          <label>앞뒤 간격(mm)<input data-auto-grid-vgap type="number" min="0" value="1300"></label>
+          <label>시작 X(mm)<input data-auto-grid-origin-x type="number" step="10"></label>
+          <label>시작 Y(mm)<input data-auto-grid-origin-y type="number" step="10"></label>
+          <label>정면 방향<select data-auto-grid-front><option value="north">북</option><option value="south">남</option><option value="east">동</option><option value="west">서</option></select></label>
+        </div>
+        <p class="layout-auto-grid-status" data-auto-grid-status>미리보기 전입니다.</p>
+        <div class="layout-auto-grid-actions"><button type="button" data-auto-grid-preview>미리보기</button><button type="button" data-auto-grid-apply disabled>적용</button><button type="button" data-auto-grid-cancel>취소</button></div>`;
+      toolbar.insertAdjacentElement("afterend", panel);
+      const pick = (name) => panel.querySelector(`[data-auto-grid-${name}]`);
+      autoGridUi = { panel, openButton, width: pick("width"), depth: pick("depth"), columns: pick("columns"), rows: pick("rows"), hgap: pick("hgap"), vgap: pick("vgap"), originX: pick("origin-x"), originY: pick("origin-y"), front: pick("front"), status: pick("status"), preview: pick("preview"), apply: pick("apply"), cancel: pick("cancel"), close: pick("close") };
+      openButton.addEventListener("click", openAutoGridPanel);
+      autoGridUi.preview.addEventListener("click", previewAutoGridLayout);
+      autoGridUi.apply.addEventListener("click", applyAutoGridLayout);
+      autoGridUi.cancel.addEventListener("click", () => cancelAutoGridLayout(true));
+      autoGridUi.close.addEventListener("click", () => cancelAutoGridLayout(true));
+    }
+
+    function openAutoGridPanel() {
+      if (!autoGridUi) return;
+      const constraints = getCurrentLayoutConstraints();
+      const width = Number(autoGridUi.width.value || 1800); const depth = Number(autoGridUi.depth.value || 450);
+      if (!autoGridUi.originX.value) autoGridUi.originX.value = String(Math.round(constraints.bounds.left + width / 2 + 500));
+      if (!autoGridUi.originY.value) autoGridUi.originY.value = String(Math.round(constraints.bounds.top + depth / 2 + 500));
+      autoGridUi.panel.hidden = false;
+    }
+
+    function getCurrentLayoutConstraints() {
+      const boundaryPoints = workspaceOutlinePoints.length >= 3
+        ? workspaceOutlinePoints.map((point) => ({ x: Number(point.x) + Number(workspaceGeometryOffset.x || 0), y: Number(point.y) + Number(workspaceGeometryOffset.y || 0) }))
+        : [];
+      return deriveLayoutConstraints({ boundaryPoints, widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, objects: workspaceObjects.filter(isWorkspaceBaseObject) });
+    }
+
+    function previewAutoGridLayout() {
+      if (!autoGridUi) return;
+      if (autoGridPreview) workspaceObjects = cancelAutoLayoutPreview(autoGridPreview);
+      const result = generateSeminarGrid({
+        tableSpec: { widthMm: Number(autoGridUi.width.value), depthMm: Number(autoGridUi.depth.value) },
+        columns: Number(autoGridUi.columns.value), rows: Number(autoGridUi.rows.value),
+        horizontalGapMm: Number(autoGridUi.hgap.value), verticalGapMm: Number(autoGridUi.vgap.value),
+        origin: { xMm: Number(autoGridUi.originX.value), yMm: Number(autoGridUi.originY.value) },
+        frontDirection: autoGridUi.front.value,
+        instancePrefix: `auto_grid_${Date.now()}_${Math.random().toString(16).slice(2, 7)}`,
+        constraints: getCurrentLayoutConstraints(),
+      });
+      if (!result.valid) {
+        autoGridPreview = null; autoGridUi.apply.disabled = true;
+        autoGridUi.status.textContent = `배치 불가: ${result.reason}${result.obstacle?.label ? ` (${result.obstacle.label})` : ""}`;
+        renderWorkspace(); return;
+      }
+      const baseObjects = workspaceObjects.slice();
+      autoGridPreview = createAutoLayoutPreview(result, baseObjects);
+      workspaceObjects = [...baseObjects, ...autoGridPreview.previewObjects];
+      autoGridUi.apply.disabled = false;
+      autoGridUi.status.textContent = `${result.objects.length}개 · pitch ${result.horizontalPitchMm}mm × ${result.verticalPitchMm}mm`;
+      renderWorkspace();
+    }
+
+    function applyAutoGridLayout() {
+      if (!autoGridPreview?.valid) return;
+      pushWorkspaceHistory();
+      workspaceObjects = applyAutoLayoutPreview(autoGridPreview);
+      autoGridPreview = null;
+      autoGridUi.apply.disabled = true;
+      autoGridUi.status.textContent = "적용됨 · 레이아웃 저장 시 영구 저장됩니다.";
+      markWorkspaceDirty(); renderWorkspace();
+    }
+
+    function cancelAutoGridLayout(closePanel = false) {
+      if (autoGridPreview) workspaceObjects = cancelAutoLayoutPreview(autoGridPreview);
+      autoGridPreview = null;
+      if (autoGridUi) { autoGridUi.apply.disabled = true; autoGridUi.status.textContent = "미리보기를 취소했습니다."; if (closePanel) autoGridUi.panel.hidden = true; }
       renderWorkspace();
     }
 
@@ -2140,7 +2312,7 @@
 
     async function hydrateCompositeGroup(group) {
       group._compositeGeometry = await loadCompositePlanGeometry(group.metadata.sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")].filter(Boolean));
-      group.metadata = { ...(group.metadata || {}), baseFloorplanObject: Boolean(group.metadata?.baseFloorplanObject), compositeBasePlanGroup: true, locked: true };
+      group.metadata = { ...(group.metadata || {}), baseFloorplanObject: Boolean(group.metadata?.baseFloorplanObject), compositeBasePlanGroup: true, scale: 1, locked: true };
       refreshCompositeGroupChildren(group);
     }
 
@@ -2163,12 +2335,14 @@
         const geometry = await loadCompositePlanGeometry(sourceBasePlanId, [String(workspaceFloorplanRecord?.id || "")]);
         const localBounds = compositeGeometryBounds(geometry); const existingGroups = workspaceObjects.filter(isCompositeGroup); const right = existingGroups.length ? Math.max(...existingGroups.map((group) => compositeObjectBounds(group).right)) + 500 : 0;
         const isBaseReference = workspaceEditMode === "base";
-        const group = { instanceId: crypto.randomUUID ? crypto.randomUUID() : `base_group_${Date.now()}`, masterObjectId: "", objectType: "base_plan_group", label: floorplan.floorplan_name || "기본도면", x: 0, y: 0, widthM: localBounds.width / 1000, heightM: localBounds.height / 1000, rotation: 0, seatCount: 0, zIndex: getWorkspaceMinZIndex() - 1, locked: true, opacity: .06, metadata: { baseFloorplanObject: isBaseReference, compositeBasePlanGroup: true, sourceBasePlanId, offsetX: Math.round(right - localBounds.left), offsetY: Math.round(-localBounds.top), rotation: 0, locked: true }, _compositeGeometry: geometry };
+        const group = { instanceId: crypto.randomUUID ? crypto.randomUUID() : `base_group_${Date.now()}`, masterObjectId: "", objectType: "base_plan_group", label: floorplan.floorplan_name || "기본도면", x: 0, y: 0, widthM: localBounds.width / 1000, heightM: localBounds.height / 1000, rotation: 0, seatCount: 0, zIndex: getWorkspaceMinZIndex() - 1, locked: true, opacity: .06, metadata: { baseFloorplanObject: isBaseReference, compositeBasePlanGroup: true, sourceBasePlanId, offsetX: Math.round(right - localBounds.left), offsetY: Math.round(-localBounds.top), rotation: 0, scale: 1, locked: true }, _compositeGeometry: geometry };
         pushWorkspaceHistory(); workspaceObjects.push(group); refreshCompositeGroupChildren(group); if (isBaseReference) workspaceBaseObjects = workspaceObjects.filter(isWorkspaceBaseObject); workspaceSelectedIds = new Set([group.instanceId]); workspaceSelectedId = group.instanceId; markWorkspaceDirty(); closeCompositeBasePlanModal(); renderWorkspace();
       } catch (error) { setStatus(error.message || "기본도면을 불러오지 못했습니다.", "error"); }
     }
 
     async function loadWorkspaceFloorplanState() {
+      autoGridPreview = null;
+      if (autoGridUi) autoGridUi.apply.disabled = true;
       const isGeometryFloorplan = workspaceSourceRow?._workspaceSourceKind === "geometry";
       if (!isGeometryFloorplan && !workspaceSourceFile?.id) return;
       if (!isGeometryFloorplan) {
@@ -2221,6 +2395,8 @@
     }
 
     async function loadWorkspaceLayoutById(layoutId) {
+      autoGridPreview = null;
+      if (autoGridUi) autoGridUi.apply.disabled = true;
       workspaceActiveLayout = workspaceLayouts.find((layout) => String(layout.id) === String(layoutId || "")) || null;
       if (workspaceNameInput) workspaceNameInput.value = workspaceActiveLayout?.layout_name || "";
       const baseObjects = JSON.parse(JSON.stringify(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject)));
@@ -2248,6 +2424,10 @@
     }
 
     async function saveWorkspaceLayout(forceNew) {
+      if (autoGridPreview) {
+        setStatus("자동 Grid 미리보기를 적용하거나 취소한 뒤 저장해주세요.", "warn");
+        return;
+      }
       if (layoutAiPlan && !layoutAiValidation?.valid) {
         setStatus("AI 생성안 검증 오류를 해결한 뒤 저장해주세요.", "warn");
         return;
@@ -2343,7 +2523,7 @@
         const rows = await loggedSupabaseRequest("workspace base floorplan update", `venue_floorplans?id=eq.${encodeURIComponent(workspaceFloorplanRecord.id)}&select=*`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json", Prefer: "return=representation" },
-          body: JSON.stringify({ floorplan_name: name, actual_width: workspaceDrawingWidthMm / 1000, actual_height: workspaceDrawingHeightMm / 1000 }),
+          body: JSON.stringify({ floorplan_name: name, actual_width: workspaceDrawingWidthMm / 1000, actual_height: workspaceDrawingHeightMm / 1000, notes: JSON.stringify(buildWorkspaceFloorplanSettings()) }),
         });
         workspaceFloorplanRecord = rows?.[0] || workspaceFloorplanRecord;
         const structures = workspaceObjects.filter((object) => isWorkspaceBaseObject(object) && !isCompositeChild(object)).map(workspaceObjectToDbShape);
@@ -2429,6 +2609,8 @@
         minor_grid_size_mm: workspaceMinorGridSizeMm,
         major_grid_size_mm: workspaceMajorGridSizeMm,
         grid_size_mm: workspaceGridSizeMm,
+        layout_origin: autoGridUi ? { xMm: Number(autoGridUi.originX.value || 0), yMm: Number(autoGridUi.originY.value || 0) } : null,
+        front_direction: autoGridUi?.front?.value || "north",
         source_notes: workspaceSourceRow?.layout_notes || null,
       };
     }
@@ -2442,6 +2624,11 @@
       workspaceGridSizeMm = Math.max(10, Number(settings.grid_size_mm || settings.minor_grid_size_mm || workspaceGridSizeMm || 500));
       workspaceMinorGridSizeMm = Math.max(10, Number(settings.minor_grid_size_mm || Math.min(workspaceGridSizeMm, 100)));
       workspaceMajorGridSizeMm = Math.max(workspaceGridSizeMm, Number(settings.major_grid_size_mm || (workspaceGridSizeMm <= 1000 ? 1000 : workspaceGridSizeMm)));
+      if (autoGridUi && settings.layout_origin) {
+        autoGridUi.originX.value = String(Number(settings.layout_origin.xMm || 0));
+        autoGridUi.originY.value = String(Number(settings.layout_origin.yMm || 0));
+        autoGridUi.front.value = ["north", "south", "east", "west"].includes(settings.front_direction) ? settings.front_direction : "north";
+      }
       syncWorkspaceSizeFromDrawing();
       syncWorkspaceDrawingInputs();
       syncWorkspaceGridInputs();
@@ -3151,6 +3338,7 @@
     }
 
     function renderWorkspaceGuide() {
+      renderAutoGridPreviewMeasurements();
       if (workspaceGuideLayer && workspaceDragState?.mode === "marquee" && workspaceDragState.start && workspaceDragState.end) {
         const box = getDraftBox(workspaceDragState.start, workspaceDragState.end);
         const marquee = document.createElementNS(svgNs, "rect");
@@ -3195,6 +3383,40 @@
       line.setAttribute("stroke-linecap", "round");
       line.setAttribute("pointer-events", "none");
       workspaceGuideLayer.append(line);
+    }
+
+    function renderAutoGridPreviewMeasurements() {
+      if (!workspaceGuideLayer || !autoGridPreview?.valid) return;
+      const tables = autoGridPreview.previewObjects || [];
+      const first = tables.find((object) => object.metadata?.row === 1 && object.metadata?.column === 1);
+      const nextColumn = tables.find((object) => object.metadata?.row === 1 && object.metadata?.column === 2);
+      const nextRow = tables.find((object) => object.metadata?.row === 2 && object.metadata?.column === 1);
+      if (!first) return;
+      const group = document.createElementNS(svgNs, "g");
+      group.classList.add("layout-auto-grid-measurements");
+      group.setAttribute("pointer-events", "none");
+      const addMeasure = (start, end, label) => {
+        const scale = Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
+        const line = document.createElementNS(svgNs, "line");
+        line.setAttribute("x1", String(start.x)); line.setAttribute("y1", String(start.y)); line.setAttribute("x2", String(end.x)); line.setAttribute("y2", String(end.y));
+        line.setAttribute("stroke", "#b45309"); line.setAttribute("stroke-width", String(2 / scale)); line.setAttribute("stroke-dasharray", `${5 / scale} ${4 / scale}`);
+        const textNode = document.createElementNS(svgNs, "text");
+        textNode.setAttribute("x", String((start.x + end.x) / 2)); textNode.setAttribute("y", String((start.y + end.y) / 2 - 8 / scale));
+        textNode.setAttribute("text-anchor", "middle"); textNode.setAttribute("font-size", String(13 / scale)); textNode.setAttribute("font-weight", "700"); textNode.setAttribute("fill", "#92400e"); textNode.textContent = label;
+        group.append(line, textNode);
+      };
+      const firstBox = layoutConstraintBox(first);
+      if (nextColumn) {
+        const nextBox = layoutConstraintBox(nextColumn);
+        const horizontal = Math.abs(nextColumn.x - first.x) >= Math.abs(nextColumn.y - first.y);
+        addMeasure(horizontal ? { x: firstBox.right, y: first.y } : { x: first.x, y: firstBox.bottom }, horizontal ? { x: nextBox.left, y: nextColumn.y } : { x: nextColumn.x, y: nextBox.top }, autoGridPreview.measurements[0].label);
+      }
+      if (nextRow) {
+        const nextBox = layoutConstraintBox(nextRow);
+        const vertical = Math.abs(nextRow.y - first.y) >= Math.abs(nextRow.x - first.x);
+        addMeasure(vertical ? { x: first.x, y: firstBox.bottom } : { x: firstBox.right, y: first.y }, vertical ? { x: nextRow.x, y: nextBox.top } : { x: nextBox.left, y: nextRow.y }, autoGridPreview.measurements[1].label);
+      }
+      workspaceGuideLayer.append(group);
     }
 
     function renderWorkspaceDimensions() {
@@ -3347,11 +3569,12 @@
       const x = -width / 2;
       const y = -height / 2;
       group.classList.add("layout-workspace-object");
+      if (object.metadata?.autoLayoutPreview) group.classList.add("auto-grid-preview");
       if (selected) group.classList.add("selected");
       group.setAttribute("transform", `translate(${object.x} ${object.y}) rotate(${object.rotation || 0})`);
       group.setAttribute("opacity", String(getWorkspaceObjectOpacity(object)));
       group.dataset.instanceId = object.instanceId;
-      if (!canWorkspaceEditObject(object)) {
+      if (!canWorkspaceEditObject(object) || object.metadata?.autoLayoutPreview) {
         group.dataset.baseFloorplanObject = "true";
         group.setAttribute("pointer-events", "none");
       } else {
@@ -4281,6 +4504,8 @@
     }
 
     function resetWorkspaceLayout() {
+      autoGridPreview = null;
+      if (autoGridUi) autoGridUi.apply.disabled = true;
       workspaceObjects = [];
       workspaceBaseObjects = [];
       workspaceSelectedId = "";
@@ -5794,6 +6019,15 @@
     selectSchoolAnchorPair,
     resolveSchoolTargetPlan,
     validateGeneratedLayout,
+    worldMmToScreenDistance,
+    layoutConstraintBox,
+    pointInLayoutPolygon,
+    layoutBoxesOverlap,
+    deriveLayoutConstraints,
+    generateSeminarGrid,
+    createAutoLayoutPreview,
+    cancelAutoLayoutPreview,
+    applyAutoLayoutPreview,
   };
 })();
 

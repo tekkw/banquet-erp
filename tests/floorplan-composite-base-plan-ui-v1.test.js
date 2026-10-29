@@ -10,7 +10,7 @@ for (const html of [production, preview]) {
   assert(html.includes('id="layoutWorkspaceImportBaseButton"'), "production과 preview toolbar에 불러오기 버튼이 있어야 한다");
   assert(html.includes('id="layoutWorkspaceImportBaseModal"'), "기본도면 picker modal이 로드되어야 한다");
   assert(html.includes('workspaceImportBaseButton: document.getElementById("layoutWorkspaceImportBaseButton")'), "FloorplanEditor 초기화에 버튼이 전달되어야 한다");
-  assert(html.includes("floorplanEditor.js?v=layout-ai-v6-composite-export-v1"), "production이 갱신된 editor bundle을 요청해야 한다");
+  assert(html.includes("floorplanEditor.js?v=layout-ai-v7-floorplan-auto-grid-v1"), "production이 갱신된 editor bundle을 요청해야 한다");
 }
 
 assert(editor.includes('workspaceImportBaseButton?.addEventListener("click", openCompositeBasePlanModal)'), "버튼 클릭이 picker에 연결되어야 한다");
