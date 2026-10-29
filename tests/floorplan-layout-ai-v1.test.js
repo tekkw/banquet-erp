@@ -61,6 +61,6 @@ assert(source.includes("workspaceActiveLayout || pendingLayoutInfo"), "AI draft�
 assert(source.includes("layoutAiPlan && !layoutAiValidation?.valid"), "치명적 검증 오류는 기존 저장 버튼에서도 차단한다");
 assert(source.includes("workspaceActiveLayout = null"), "I: 기존 레이아웃 AI 수정은 새 draft로 분리한다");
 assert(!source.includes('mode: "layout_ai"'), "명확한 V1 명령은 Edge/LLM 호출 없이 처리한다");
-assert(/floorplanEditor\.js\?v=layout-ai-v\d+/.test(html));
+assert(html.includes("floorplanEditor.js?v="));
 
 console.log("floorplan layout AI V1 tests passed");

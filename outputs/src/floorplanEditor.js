@@ -240,6 +240,73 @@
     return Math.round(amount * ({ mm: 1, cm: 10, m: 1000 }[String(unit).toLowerCase()] || 1));
   }
 
+  function resolveLayoutVenueCode(text) {
+    const venueUtils = window.BANQUET_ERP_VENUE_UTILS;
+    const direct = venueUtils?.normalizeVenueList?.(text)?.[0];
+    if (direct) return direct;
+    const words = String(text || "").split(/[\s,，/]+/).filter(Boolean);
+    const candidates = [...words, ...words.slice(0, -1).map((word, index) => `${word} ${words[index + 1]}`)];
+    for (const candidate of candidates) {
+      const exact = venueUtils?.normalizeVenue?.(candidate);
+      if (exact) return exact;
+      const match = venueUtils?.buildVenueOptions?.(candidate)?.find((item) => item.code);
+      if (match && [match.label, match.shortLabel, ...(match.aliases || [])].some((label) => venueUtils.venueSearchKey(label) === venueUtils.venueSearchKey(candidate))) return match.code;
+    }
+    return "";
+  }
+
+  function parseAutoGridGapMm(value, unit) {
+    if (!Number.isFinite(Number(value))) return null;
+    return layoutAiUnitToMm(value, unit ? String(unit).toLowerCase() : "cm");
+  }
+
+  function parseAutoGridLayoutIntent(text, current = {}, context = {}) {
+    const value = String(text || "").trim();
+    const next = { ...current };
+    const changed = new Set();
+    const venue = resolveLayoutVenueCode(value) || current.venue || context.venue || "";
+    if (venue) { next.venue = venue; if (venue !== current.venue) changed.add("venue"); }
+    const grid = value.match(/(\d+)\s*열\s*(\d+)\s*(?:줄|행)/i) || [...value.matchAll(/(\d+)\s*(?:x|×|\*)\s*(\d+)/gi)].find((match) => Number(match[1]) <= 100 && Number(match[2]) <= 100);
+    if (grid) { next.columns = Number(grid[1]); next.rows = Number(grid[2]); changed.add("columns"); changed.add("rows"); }
+    const columnsOnly = value.match(/(\d+)\s*열(?:로|으로)?\s*(?:바꿔|변경|해줘|해주세요)?/i);
+    if (!grid && columnsOnly) { next.columns = Number(columnsOnly[1]); changed.add("columns"); }
+    if (/한\s*줄\s*(?:줄여|빼|제거)/.test(value) && Number(current.rows) > 1) { next.rows = Number(current.rows) - 1; changed.add("rows"); }
+    const rowsOnly = value.match(/(\d+)\s*(?:줄|행)(?:로|으로)?\s*(?:바꿔|변경|해줘|해주세요)?/i);
+    if (!grid && rowsOnly && !/한\s*줄\s*(?:줄여|빼|제거)/.test(value)) { next.rows = Number(rowsOnly[1]); changed.add("rows"); }
+
+    const table = value.match(/(\d{3,4})\s*[x×*]\s*(\d{2,4})(?:\s*mm)?/i) || value.match(/(?:세미나(?:\s*테이블)?|테이블)?\s*(\d{4})(?:\s*mm)?/i);
+    if (table) {
+      const width = Number(table[1]); const requestedDepth = Number(table[2] || 0);
+      const master = (context.tableSpecs || []).find((spec) => Math.abs(Number(spec.widthMm) - width) <= 10 && (!requestedDepth || Math.abs(Number(spec.depthMm) - requestedDepth) <= 10));
+      next.tableWidthMm = Number(master?.widthMm || width); next.tableDepthMm = Number(master?.depthMm || requestedDepth || current.tableDepthMm || 0);
+      changed.add("tableWidthMm"); changed.add("tableDepthMm");
+    }
+
+    const horizontal = value.match(/(?:좌우|가로)(?:\s*테이블)?\s*간격(?:은|을|이)?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?/i);
+    const vertical = value.match(/(?:앞뒤|세로)(?:\s*테이블)?\s*간격(?:은|을|이)?\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?/i);
+    const compactHorizontal = !horizontal && value.match(/(?:좌우|가로)\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?/i);
+    const compactVertical = !vertical && value.match(/(?:앞뒤|세로)\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?/i);
+    const paired = !horizontal && !vertical && value.match(/간격\s*(\d+(?:\.\d+)?)\s*(mm|cm|m)?\s+(\d+(?:\.\d+)?)\s*(mm|cm|m)?/i);
+    const h = horizontal || compactHorizontal;
+    const v = vertical || compactVertical;
+    if (h) { next.horizontalGapMm = parseAutoGridGapMm(h[1], h[2]); changed.add("horizontalGapMm"); }
+    if (v) { next.verticalGapMm = parseAutoGridGapMm(v[1], v[2]); changed.add("verticalGapMm"); }
+    if (paired) { next.horizontalGapMm = parseAutoGridGapMm(paired[1], paired[2]); next.verticalGapMm = parseAutoGridGapMm(paired[3], paired[4]); changed.add("horizontalGapMm"); changed.add("verticalGapMm"); }
+
+    next.frontDirection ||= context.frontDirection || "north";
+    next.origin ||= current.origin || context.origin || null;
+    const required = ["venue", "tableWidthMm", "tableDepthMm", "columns", "rows", "horizontalGapMm", "verticalGapMm"];
+    const missing = required.filter((key) => next[key] == null || next[key] === "" || (key !== "horizontalGapMm" && key !== "verticalGapMm" && Number.isFinite(Number(next[key])) && Number(next[key]) <= 0));
+    return { ...next, understood: changed.size > 0, changed: [...changed], needsConfirmation: missing.length > 0, missing };
+  }
+
+  function formatAutoGridFailureMessage(result = {}) {
+    if (result.reason === "insufficient_width") return `현재 조건으로는 가로 공간이 부족합니다. 필요 폭 ${(result.requiredWidthMm / 1000).toFixed(1)}m, 사용 가능 폭 ${(result.availableWidthMm / 1000).toFixed(1)}m입니다. 열 수를 줄이거나 좌우 간격을 줄여주세요.`;
+    if (result.reason === "boundary_overflow") return `현재 조건이 도면 경계를 벗어납니다. 필요 깊이 ${(result.requiredDepthMm / 1000).toFixed(1)}m, 사용 가능 깊이 ${(result.availableDepthMm / 1000).toFixed(1)}m입니다.`;
+    if (/_collision$/.test(result.reason || "")) return `${result.obstacle?.label || "사용불가 영역"}과 겹쳐 미리보기를 만들 수 없습니다. 시작점이나 간격을 수정해주세요.`;
+    return `현재 조건으로 배치할 수 없습니다: ${result.reason || "검증 실패"}`;
+  }
+
   function parseLayoutAiEditCommand(text, currentPlan = null) {
     const value = String(text || "").trim();
     if (!value) return null;
@@ -825,6 +892,7 @@
     let workspaceIncludeDimensionsInExport = true;
     let autoGridPreview = null;
     let autoGridUi = null;
+    let autoGridIntentDraft = null;
     let compositeFloorplans = [];
     const compositeGeometryCache = new Map();
 
@@ -1053,7 +1121,7 @@
       layoutAiPanel.querySelector("[data-layout-ai-undo]")?.addEventListener("click", () => undoLayoutAiChange());
       layoutAiPanel.querySelector("[data-layout-ai-reset]")?.addEventListener("click", resetLayoutAiDraft);
     }
-    function layoutAiRequestedSpace(text) { return String(text).replace(/\s+/g, "").match(/(?:부라노|카프리)[123]|컨벤션(?:AB|A|B)/i)?.[0] || ""; }
+    function layoutAiRequestedSpace(text) { const code = resolveLayoutVenueCode(text); return window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(code) || ""; }
     async function ensureLayoutAiSpace(text) {
       const requested = layoutAiRequestedSpace(text); if (!requested) return;
       const current = workspaceSpaces.find((space) => String(space.id) === String(workspaceSpaceSelect?.value));
@@ -1173,6 +1241,7 @@
     }
     async function applyLayoutAiCommand(text) {
       try {
+        if (isAutoGridIntentCommand(text)) { await applyAutoGridIntentCommand(text); return; }
         const edit = parseLayoutAiEditCommand(text, layoutAiPlan);
         if (edit?.type === "save") { openLayoutAiSaveModal(); return; }
         if (edit?.type === "verify") { await verifyCurrentLayout(text); return; }
@@ -1480,11 +1549,13 @@
           <label>시작 Y(mm)<input data-auto-grid-origin-y type="number" step="10"></label>
           <label>정면 방향<select data-auto-grid-front><option value="north">북</option><option value="south">남</option><option value="east">동</option><option value="west">서</option></select></label>
         </div>
+        <p class="layout-auto-grid-helper">자연어 명령 또는 아래 값을 사용해 mm 좌표 미리보기를 만듭니다.</p>
+        <p class="layout-auto-grid-parsed" data-auto-grid-parsed hidden></p>
         <p class="layout-auto-grid-status" data-auto-grid-status>미리보기 전입니다.</p>
         <div class="layout-auto-grid-actions"><button type="button" data-auto-grid-preview>미리보기</button><button type="button" data-auto-grid-apply disabled>적용</button><button type="button" data-auto-grid-cancel>취소</button></div>`;
       toolbar.insertAdjacentElement("afterend", panel);
       const pick = (name) => panel.querySelector(`[data-auto-grid-${name}]`);
-      autoGridUi = { panel, openButton, width: pick("width"), depth: pick("depth"), columns: pick("columns"), rows: pick("rows"), hgap: pick("hgap"), vgap: pick("vgap"), originX: pick("origin-x"), originY: pick("origin-y"), front: pick("front"), status: pick("status"), preview: pick("preview"), apply: pick("apply"), cancel: pick("cancel"), close: pick("close") };
+      autoGridUi = { panel, openButton, width: pick("width"), depth: pick("depth"), columns: pick("columns"), rows: pick("rows"), hgap: pick("hgap"), vgap: pick("vgap"), originX: pick("origin-x"), originY: pick("origin-y"), front: pick("front"), parsed: pick("parsed"), status: pick("status"), preview: pick("preview"), apply: pick("apply"), cancel: pick("cancel"), close: pick("close") };
       openButton.addEventListener("click", openAutoGridPanel);
       autoGridUi.preview.addEventListener("click", previewAutoGridLayout);
       autoGridUi.apply.addEventListener("click", applyAutoGridLayout);
@@ -1508,8 +1579,54 @@
       return deriveLayoutConstraints({ boundaryPoints, widthMm: workspaceDrawingWidthMm, heightMm: workspaceDrawingHeightMm, objects: workspaceObjects.filter(isWorkspaceBaseObject) });
     }
 
+    function currentAutoGridVenue() {
+      const space = workspaceSpaces.find((item) => String(item.id) === String(workspaceSpaceSelect?.value));
+      const floorplan = workspaceFloorplans.find((item) => String(item.id) === String(workspaceFloorplanSelect?.value));
+      return resolveLayoutVenueCode(space?.space_name || floorplan?.floorplan_name || "");
+    }
+
+    function currentAutoGridParameters() {
+      if (!autoGridUi) return {};
+      return {
+        venue: currentAutoGridVenue(), tableWidthMm: Number(autoGridUi.width.value), tableDepthMm: Number(autoGridUi.depth.value),
+        columns: Number(autoGridUi.columns.value), rows: Number(autoGridUi.rows.value), horizontalGapMm: Number(autoGridUi.hgap.value), verticalGapMm: Number(autoGridUi.vgap.value),
+        frontDirection: autoGridUi.front.value, origin: autoGridUi.originX.value && autoGridUi.originY.value ? { xMm: Number(autoGridUi.originX.value), yMm: Number(autoGridUi.originY.value) } : null,
+      };
+    }
+
+    function isAutoGridIntentCommand(text) {
+      const value = String(text || "");
+      if (autoGridIntentDraft && /(?:좌우|가로|앞뒤|세로|간격|\d+\s*열|\d+\s*(?:줄|행)|한\s*줄)/i.test(value)) return true;
+      const grid = /\d+\s*(?:x|×|\*)\s*\d+|\d+\s*열\s*\d+\s*(?:줄|행)/i.test(value);
+      return grid && /(?:세미나|테이블|깔아|배치|간격|\d{4})/i.test(value);
+    }
+
+    async function applyAutoGridIntentCommand(text) {
+      await ensureLayoutAiSpace(text);
+      initializeAutoGridPanel();
+      if (!autoGridUi) throw new Error("Auto Grid 패널을 열 수 없습니다.");
+      const current = autoGridIntentDraft || currentAutoGridParameters();
+      const tableSpecs = layoutObjectTypes.filter((item) => item.is_active !== false && item.object_type === "seminar_table").map((item) => ({ widthMm: Number(item.default_width_m) * 1000, depthMm: Number(item.default_height_m) * 1000 }));
+      const parsed = parseAutoGridLayoutIntent(text, current, { venue: currentAutoGridVenue(), tableSpecs, frontDirection: current.frontDirection });
+      if (!parsed.understood) throw new Error("열×행과 테이블 규격을 알려주세요. 예: 1800 세미나 3열 7줄");
+      if (parsed.needsConfirmation) throw new Error(`확인이 필요합니다: ${parsed.missing.join(", ")}`);
+      autoGridUi.width.value = String(parsed.tableWidthMm); autoGridUi.depth.value = String(parsed.tableDepthMm);
+      autoGridUi.columns.value = String(parsed.columns); autoGridUi.rows.value = String(parsed.rows);
+      autoGridUi.hgap.value = String(parsed.horizontalGapMm); autoGridUi.vgap.value = String(parsed.verticalGapMm); autoGridUi.front.value = parsed.frontDirection;
+      if (parsed.origin) { autoGridUi.originX.value = String(parsed.origin.xMm); autoGridUi.originY.value = String(parsed.origin.yMm); }
+      openAutoGridPanel();
+      parsed.origin = { xMm: Number(autoGridUi.originX.value), yMm: Number(autoGridUi.originY.value) };
+      autoGridIntentDraft = parsed;
+      const venueLabel = window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue;
+      const summary = `${venueLabel} · ${parsed.tableWidthMm}×${parsed.tableDepthMm} · ${parsed.columns}열 × ${parsed.rows}줄 · 좌우 ${parsed.horizontalGapMm / 1000}m · 앞뒤 ${parsed.verticalGapMm / 1000}m`;
+      autoGridUi.parsed.hidden = false; autoGridUi.parsed.textContent = summary;
+      const result = previewAutoGridLayout();
+      const answer = result?.valid ? `${venueLabel}에 ${parsed.tableWidthMm}×${parsed.tableDepthMm} 세미나 테이블 ${parsed.columns}열 ${parsed.rows}줄, 좌우 ${parsed.horizontalGapMm / 1000}m, 앞뒤 ${parsed.verticalGapMm / 1000}m로 미리보기를 만들었습니다.` : formatAutoGridFailureMessage(result || {});
+      appendLayoutAiTurn(text, answer); renderLayoutAiPanel();
+    }
+
     function previewAutoGridLayout() {
-      if (!autoGridUi) return;
+      if (!autoGridUi) return null;
       if (autoGridPreview) workspaceObjects = cancelAutoLayoutPreview(autoGridPreview);
       const result = generateSeminarGrid({
         tableSpec: { widthMm: Number(autoGridUi.width.value), depthMm: Number(autoGridUi.depth.value) },
@@ -1523,7 +1640,7 @@
       if (!result.valid) {
         autoGridPreview = null; autoGridUi.apply.disabled = true;
         autoGridUi.status.textContent = `배치 불가: ${result.reason}${result.obstacle?.label ? ` (${result.obstacle.label})` : ""}`;
-        renderWorkspace(); return;
+        renderWorkspace(); return result;
       }
       const baseObjects = workspaceObjects.slice();
       autoGridPreview = createAutoLayoutPreview(result, baseObjects);
@@ -1531,6 +1648,7 @@
       autoGridUi.apply.disabled = false;
       autoGridUi.status.textContent = `${result.objects.length}개 · pitch ${result.horizontalPitchMm}mm × ${result.verticalPitchMm}mm`;
       renderWorkspace();
+      return result;
     }
 
     function applyAutoGridLayout() {
@@ -6008,6 +6126,10 @@
     parseLayoutAiCommand,
     layoutAiUnitToMm,
     parseLayoutAiEditCommand,
+    resolveLayoutVenueCode,
+    parseAutoGridGapMm,
+    parseAutoGridLayoutIntent,
+    formatAutoGridFailureMessage,
     frontDirection,
     chairFacingDirection,
     getRoundSeatAngles,

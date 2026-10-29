@@ -994,15 +994,21 @@ table {
   border: 1px solid rgba(180, 83, 9, .28);
   border-radius: 10px;
   background: #fffbeb;
+  color: #243447;
 }
 .layout-auto-grid-panel[hidden] { display: none; }
 .layout-auto-grid-header, .layout-auto-grid-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.layout-auto-grid-header > button { border: 0; background: transparent; font-size: 20px; cursor: pointer; }
+.layout-auto-grid-header > strong { color: #102a40; font-size: 14px; }
+.layout-auto-grid-header > button { border: 0; background: transparent; color: #102a40; font-size: 20px; cursor: pointer; }
 .layout-auto-grid-fields { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)); gap: 8px; margin: 8px 0; }
-.layout-auto-grid-fields label { display: grid; gap: 3px; font-size: 11px; color: #475569; }
-.layout-auto-grid-fields input, .layout-auto-grid-fields select { min-width: 0; height: 30px; padding: 4px 7px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; }
-.layout-auto-grid-status { margin: 6px 0; font-size: 12px; color: #92400e; }
+.layout-auto-grid-fields label { display: grid; gap: 3px; color: #26384a !important; font-size: 11px; font-weight: 700; }
+.layout-auto-grid-fields input, .layout-auto-grid-fields select { min-width: 0; height: 30px; padding: 4px 7px; border: 1px solid #94a3b8; border-radius: 6px; background: white; color: #172033 !important; }
+.layout-auto-grid-helper { margin: 4px 0; color: #526170 !important; font-size: 12px; }
+.layout-auto-grid-parsed { margin: 6px 0; padding: 7px 9px; border-radius: 7px; background: #e8eef5; color: #102a40 !important; font-size: 12px; font-weight: 700; }
+.layout-auto-grid-status { margin: 6px 0; color: #713f12 !important; font-size: 12px; font-weight: 600; }
 .layout-auto-grid-actions { justify-content: flex-end; }
+.layout-auto-grid-actions button { border: 1px solid #64748b; background: #f8fafc; color: #172033; font-weight: 700; }
+.layout-auto-grid-actions [data-auto-grid-preview], .layout-auto-grid-actions [data-auto-grid-apply]:not(:disabled) { border-color: #102a40; background: #102a40; color: white; }
 @media (max-width: 900px) { .layout-auto-grid-fields { grid-template-columns: repeat(2, minmax(110px, 1fr)); } }
 
 .layout-workspace-base-label {
