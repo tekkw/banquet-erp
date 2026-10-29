@@ -24,6 +24,8 @@ const registry = window.erpActionRegistry.create({
   assert.equal((await registry.executeAction("save_layout_draft")).errorCode, "read_only");
   const capabilities = registry.getCapabilities(); for (const domain of ["event", "schedule", "asset", "hallState", "layout", "board", "knowledge", "dashboard"]) assert(Array.isArray(capabilities[domain]));
   for (const id of ["get_event_document_section", "get_event_requests", "get_event_attachments"]) { const action = registry.getAction(id); assert.equal(action.type, "query"); assert.equal(action.requiresApproval, false); }
+  for (const id of ["query_events", "get_event_items", "get_event_notes", "get_next_setup_tasks", "get_current_setup_state", "resolve_next_event", "get_beverage_inventory", "get_asset_status", "get_layout_info"]) { const action = registry.getAction(id); assert.equal(action.type, "query"); assert.equal(action.status, "active"); }
+  assert(registry.listPlannerActions().every((action) => registry.getAction(action.id)?.requiresApproval === false));
   const board = fs.readFileSync("outputs/board/index.html", "utf8"); const pc = fs.readFileSync("outputs/index.html", "utf8");
   assert(board.includes("erpActionRegistry.js?v=") && pc.includes("erpActionRegistry.js?v="));
   console.log("ERP action registry V1 tests passed");

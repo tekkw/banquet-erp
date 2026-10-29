@@ -62,6 +62,39 @@
     const registry = { ...tools };
     return Object.freeze({ has: (name) => typeof registry[name] === "function", run: (name, input) => { if (typeof registry[name] !== "function") throw new Error(`ERP tool not registered: ${name}`); return registry[name](input); }, names: () => Object.keys(registry) });
   }
+  const RESPONSE_MODES = new Set(["list", "detail", "aggregate"]);
+  function plannerActionAllowed(action, registry) { const definition = registry?.getAction?.(action); return Boolean(definition && definition.type === "query" && definition.status === "active" && !definition.requiresApproval); }
+  function validatePlannerPlan(rawPlan, registry, maxSteps = 4) {
+    const source = rawPlan?.plan && typeof rawPlan.plan === "object" ? rawPlan.plan : rawPlan;
+    const steps = Array.isArray(source?.steps) ? source.steps.slice(0, Math.min(4, Math.max(1, Number(maxSteps) || 4))) : [];
+    const normalized = steps.map((step) => ({ action: String(step?.action || ""), arguments: step?.arguments && typeof step.arguments === "object" && !Array.isArray(step.arguments) ? step.arguments : {}, reason: String(step?.reason || "") })).filter((step) => plannerActionAllowed(step.action, registry));
+    if (!normalized.length) throw new Error("안전하게 실행할 수 있는 조회 계획이 없습니다.");
+    if (normalized.length !== steps.length) throw new Error("등록되지 않은 ERP 조회 action이 포함됐습니다.");
+    return { goal: String(source?.goal || "ERP 조회"), steps: normalized, responseMode: RESPONSE_MODES.has(source?.responseMode) ? source.responseMode : "list" };
+  }
+  async function requestPlanner({ question, context = {}, registry, request, maxSteps = 4 } = {}) {
+    if (typeof request !== "function") throw new Error("ERP planner 요청 경로가 없습니다.");
+    const actions = registry?.listPlannerActions?.() || [];
+    const raw = await request({ mode: "erp_action_plan", question: String(question || ""), context, actions, maxSteps: Math.min(4, Math.max(1, Number(maxSteps) || 4)) });
+    return validatePlannerPlan(raw, registry, maxSteps);
+  }
+  async function executePlannerPlan(plan, registry, context = {}) {
+    const safePlan = validatePlannerPlan(plan, registry, 4); const results = []; const failures = [];
+    for (let index = 0; index < safePlan.steps.length; index += 1) {
+      const step = safePlan.steps[index];
+      const result = await registry.executeAction(step.action, { ...step.arguments, question: context.question || "", plannerContext: context, previousResults: results.map((entry) => entry.data), lastResult: results.at(-1)?.data ?? null });
+      if (!result?.ok) { failures.push({ step: index + 1, action: step.action, message: result?.message || "조회 실패" }); continue; }
+      results.push({ step: index + 1, action: step.action, reason: step.reason, data: result.data, replyHint: result.replyHint || "" });
+    }
+    return { plan: safePlan, results, failures, partial: failures.length > 0 && results.length > 0, ok: results.length > 0 };
+  }
+  function shouldUsePlanner(text, fastRoute = "", context = {}) {
+    const value = String(text || "");
+    if (/(추가|변경|수정|등록|완료\s*처리|삭제|옮겨|사용했)/.test(value)) return false;
+    const explicitTarget = Boolean(venueIn(value) || resolveDateReference(value).date || /이번\s*주|다음\s*주|이번\s*달|\d{4}-\d{2}-\d{2}/.test(value));
+    if (hasRecentReference(value) && context?.event?.eventOrderId && !explicitTarget) return false;
+    return !fastRoute || fastRoute === "conversation_agent" || ["event_query", "setting_advisor", "hall_state_query"].includes(fastRoute);
+  }
   function create(options = {}) {
     const storage = options.storage || global.sessionStorage; const key = options.storageKey || "banquetBoard.conversationContext.v1"; const maxSteps = Math.min(4, Math.max(1, Number(options.maxSteps) || 4));
     function load() { try { return { ...DEFAULT_CONTEXT, ...JSON.parse(storage?.getItem(key) || "{}") }; } catch { return { ...DEFAULT_CONTEXT }; } }
@@ -95,5 +128,5 @@
     return Object.freeze({ load, save, plan, submit, ordinalIndex: (text) => ordinalIndex(text, load().lastResults.length), maxSteps });
   }
 
-  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, normalizeSpeechTranscript, venueSimilarity, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
+  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, validatePlannerPlan, requestPlanner, executePlannerPlan, shouldUsePlanner, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, normalizeSpeechTranscript, venueSimilarity, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
 })(window);

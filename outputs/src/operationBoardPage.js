@@ -87,16 +87,94 @@
     proposeAssetChange: ({ text, selection = null, context = null }) => interpretAsset(text, selection, context),
   });
   const actionRegistry = window.erpActionRegistry.create({
-    search_events: (args) => erpTools.run("findEvents", args), get_event_detail: (args) => erpTools.run("getEventDetail", args), get_event_guest_count: (args) => erpTools.run("getEventDetail", { ...args, queryType: "get_event_guest_count" }), get_event_schedule: (args) => erpTools.run("getEventSchedule", args), get_event_layout: (args) => erpTools.run("getEventLayout", args), get_event_document_section: (args) => erpTools.run("getEventDocumentSection", args), get_event_requests: (args) => erpTools.run("getEventRequests", args), get_event_attachments: (args) => erpTools.run("getEventAttachments", args), open_event_original: (args) => erpTools.run("openEventOriginal", args),
+    search_events: (args) => erpTools.run("findEvents", args), query_events: plannerQueryEvents, get_event_detail: plannerEventDetail, get_event_guest_count: (args) => erpTools.run("getEventDetail", { ...args, queryType: "get_event_guest_count" }), get_event_schedule: plannerEventSchedule, get_event_items: plannerEventItems, get_event_notes: plannerEventNotes, get_event_layout: (args) => erpTools.run("getEventLayout", args), get_event_document_section: (args) => erpTools.run("getEventDocumentSection", args), get_event_requests: (args) => erpTools.run("getEventRequests", args), get_event_attachments: plannerEventAttachments, resolve_next_event: plannerResolveNextEvent, open_event_original: (args) => erpTools.run("openEventOriginal", args),
     search_assets: (args) => erpTools.run("findAsset", args), get_asset_quantity: (args) => erpTools.run("getAssetQuantity", args), get_asset_location: (args) => erpTools.run("findAsset", args), get_asset_movement: (args) => erpTools.run("getAssetMovement", args), create_asset: (args) => erpTools.run("proposeAssetChange", args), increase_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), decrease_asset_quantity: (args) => erpTools.run("proposeAssetChange", args), update_asset_location: (args) => erpTools.run("proposeAssetChange", args),
-    get_current_setup: (args) => erpTools.run("getCurrentHallState", args), confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args),
+    get_current_setup: (args) => erpTools.run("getCurrentHallState", args), get_current_setup_state: plannerCurrentSetupState, get_next_setup_tasks: plannerNextSetupTasks, confirm_current_setup: (args) => erpTools.run("proposeCurrentSetupUpdate", args), record_field_setup: (args) => erpTools.run("proposeFieldSetupObservation", args), recommend_layouts: (args) => erpTools.run("recommendLayouts", args), search_layouts: (args) => erpTools.run("recommendLayouts", args), get_layout_info: plannerLayoutInfo,
     add_schedule: (args) => erpTools.run("proposeScheduleChange", args), update_schedule_time: (args) => erpTools.run("proposeScheduleChange", args), add_manual_task: (args) => erpTools.run("proposeManualTask", args),
-    get_beverage_inventory_status: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events),
+    get_beverage_inventory_status: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events), get_beverage_inventory: ({ question }) => window.BANQUET_ERP_BEVERAGE_INVENTORY?.answerQuestion(question, events), get_asset_status: plannerAssetStatus,
     "event.query": ({ question, previous, options }) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.answerQuestion(question, events, previous, options),
     "event.items.query": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.queryEventOrderItems({ events, ...args }),
     "event.items.aggregate": (args) => window.BANQUET_ERP_EVENT_ORDER_ANALYTICS?.aggregateEventOrderItems({ events, ...args }),
   });
   function actionResultValue(result) { if (!result?.ok) throw new Error(result?.message || "ERP 작업을 실행하지 못했습니다."); return result.requiresApproval ? result.proposal : result.data; }
+  function plannerDateRange(value) {
+    const today = board.getActualTodaySeoul();
+    if (value === "tomorrow") return { start: window.erpConversationAgent.shiftDateKey(today, 1), end: window.erpConversationAgent.shiftDateKey(today, 1) };
+    if (value === "this_week") { const day = new Date(`${today}T00:00:00Z`).getUTCDay(); const start = window.erpConversationAgent.shiftDateKey(today, day === 0 ? -6 : 1 - day); return { start, end: window.erpConversationAgent.shiftDateKey(start, 6) }; }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return { start: value, end: value };
+    return { start: today, end: today };
+  }
+  function plannerEventsFromArgs(args = {}) {
+    const sources = [args.lastResult, ...(args.previousResults || []).slice().reverse()];
+    for (const source of sources) if (Array.isArray(source?.events)) return source.events;
+    return [];
+  }
+  function plannerQueryEvents(args = {}) {
+    const range = plannerDateRange(args.dateRange || args.date || "today"); const venue = String(args.venue || "");
+    const matched = events.filter((event) => eventDateKeys(event).some((date) => date >= range.start && date <= range.end) && (!venue || eventVenueMatches(event, venue)));
+    return { events: matched, range, venue };
+  }
+  function plannerEventDetail(args = {}) { const selected = plannerEventsFromArgs(args); return { events: selected.map((event) => ({ id: event.id, venue: eventVenue(event), organizer: event.companyName || event.eventName, eventName: event.eventName, guestCount: event.guestCount, dates: eventDateKeys(event), eventType: event.eventType })) }; }
+  function plannerEventSchedule(args = {}) { const selected = plannerEventsFromArgs(args); const pattern = args.filter === "coffee_break" ? /커피\s*브레이크|커피브레이크|coffee\s*break/i : args.filter === "meal" ? /중식|석식|식사|뷔페|lunch|dinner/i : null; return { events: selected, schedules: selected.flatMap((event) => (event.schedule || []).filter((row) => !pattern || pattern.test(row.content || "")).map((row) => ({ ...row, eventOrderId: event.id, venue: row.venue || eventVenue(event), organizer: event.companyName || event.eventName, guestCount: event.guestCount }))) }; }
+  function plannerEventItems(args = {}) { const selected = plannerEventsFromArgs(args); const pattern = args.filter === "coffee_break" ? /커피|coffee|다과|쿠키|차\b/i : null; return { events: selected, items: selected.flatMap((event) => (event.items || []).filter((row) => !pattern || pattern.test([row.item_name, row.name, row.description].join(" "))).map((row) => ({ ...row, eventOrderId: event.id, organizer: event.companyName || event.eventName }))) }; }
+  function plannerEventNotes(args = {}) { const selected = plannerEventsFromArgs(args); const reinformOnly = args.filter === "reinform"; return { events: selected, notes: selected.map((event) => ({ eventOrderId: event.id, venue: eventVenue(event), organizer: event.companyName || event.eventName, layout: event.layoutText || "", others: event.othersText || event.internalMemo || "", notes: (event.notes || []).map((row) => row.content).filter(Boolean) })).map((row) => reinformOnly ? { ...row, layout: /re-?inform|재인폼/i.test(row.layout) ? row.layout : "", others: /re-?inform|재인폼/i.test(row.others) ? row.others : "", notes: row.notes.filter((value) => /re-?inform|재인폼/i.test(value)) } : row).filter((row) => row.layout || row.others || row.notes.length) }; }
+  function plannerEventAttachments(args = {}) { const selected = plannerEventsFromArgs(args); return { events: selected, attachments: selected.flatMap((event) => (event.attachments || []).map((row) => ({ ...row, eventOrderId: event.id }))) }; }
+  function plannerNextSetupTasks(args = {}) { const today = board.getActualTodaySeoul(); const tasks = (board.getPersistentSetupTasks?.() || []).filter((task) => task.completed !== true && (!args.scheduledOnOrBeforeToday || String(task.scheduledDate || task.metadata?.scheduledDate || "") <= today)).sort((left, right) => String(left.scheduledDate || "").localeCompare(String(right.scheduledDate || "")) || String(left.scheduledTime || "").localeCompare(String(right.scheduledTime || ""))); return { today, tasks }; }
+  async function plannerCurrentSetupState() { return { states: await request("hall_current_states?select=*&order=updated_at.desc&limit=100") }; }
+  function plannerResolveNextEvent(args = {}) { const selected = plannerEventsFromArgs(args); const pairs = selected.map((event) => { const date = eventDateKeys(event).at(-1) || board.getActualTodaySeoul(); const time = (event.schedule || []).map((row) => row.time).filter(Boolean).sort().at(-1) || "23:59"; const next = board.resolveNextEventForVenue({ venue: eventVenue(event), afterDateTime: `${date}T${time}`, events, excludeEventOrderId: event.id }); return { current: event, next: next?.event || null, nextDate: next?.date || "", nextTime: next?.time || "", venue: eventVenue(event) }; }).filter((row) => row.next); return { events: selected, pairs }; }
+  function plannerLayoutInfo(args = {}) { const source = args.lastResult?.pairs ? args.lastResult : (args.previousResults || []).slice().reverse().find((row) => row?.pairs) || {}; return { pairs: (source.pairs || []).map((pair) => ({ ...pair, currentLayout: pair.current?.layoutText || "", nextLayout: pair.next?.layoutText || "", changed: String(pair.current?.layoutText || "").trim() !== String(pair.next?.layoutText || "").trim() })) }; }
+  async function plannerAssetStatus(args = {}) { const term = encodeURIComponent(`*${String(args.asset || args.term || "").replace(/[,*()]/g, "") }*`); return { assets: await request(`banquet_assets?select=id,asset_name,quantity,location&asset_name=ilike.${term}&limit=100`) }; }
+  function plannerResult(execution, action) { return execution.results.slice().reverse().find((row) => row.action === action)?.data || null; }
+  function plannerNumber(row) { return Number(row?.quantity ?? row?.item_quantity ?? row?.qty ?? row?.metadata?.quantity); }
+  function formatPlannerExecution(execution, question) {
+    const actions = new Set(execution.results.map((row) => row.action)); const eventData = plannerResult(execution, "query_events") || {}; const matchedEvents = eventData.events || [];
+    let answer = ""; let ttsText = "";
+    if (actions.has("get_event_schedule") && /커피|coffee/i.test(question)) {
+      const schedules = plannerResult(execution, "get_event_schedule")?.schedules || []; const items = plannerResult(execution, "get_event_items")?.items || [];
+      const explicit = items.map(plannerNumber).filter(Number.isFinite); const people = [...new Map(matchedEvents.map((event) => [String(event.id), Number(event.guestCount) || 0])).values()].reduce((sum, value) => sum + value, 0);
+      answer = explicit.length ? `커피브레이크 관련 ${schedules.length}건이며, 이벤오더에 명시된 수량은 총 ${explicit.reduce((sum, value) => sum + value, 0)}개입니다.` : `커피브레이크 행사는 ${schedules.length}건이고 총 ${people}명입니다.\n다만 이벤오더에 커피 수량은 별도로 적혀 있지 않습니다.`;
+      ttsText = explicit.length ? `커피브레이크 준비 수량은 총 ${explicit.reduce((sum, value) => sum + value, 0)}개예요.` : `커피브레이크는 ${schedules.length}건, 총 ${people}명이에요. 커피 수량은 따로 적혀 있지 않아요.`;
+    } else if (actions.has("get_event_schedule") && /식사|중식|석식|몇\s*명/i.test(question)) {
+      const schedules = plannerResult(execution, "get_event_schedule")?.schedules || []; const people = schedules.reduce((sum, row) => sum + (Number(row.people) || Number(row.guestCount) || 0), 0);
+      answer = `${schedules.length}건의 식사 일정이 있으며 준비 인원은 총 ${people}명입니다.\n${schedules.map((row) => `${row.venue} · ${row.organizer} · ${row.time || "시간 미정"} · ${Number(row.people) || Number(row.guestCount) || 0}명`).join("\n")}`;
+      ttsText = `식사 일정은 ${schedules.length}건, 총 ${people}명이에요.`;
+    } else if (actions.has("get_next_setup_tasks")) {
+      const data = plannerResult(execution, "get_next_setup_tasks") || {}; const tasks = data.tasks || [];
+      answer = tasks.length ? tasks.map((task, index) => { const linked = events.find((event) => String(event.id) === String(task.eventOrderId)); const date = task.scheduledDate || task.metadata?.scheduledDate || "날짜 미정"; const timing = date < data.today ? "지연" : "오늘"; return `${index + 1}. [${timing}] ${task.venue} · ${linked?.companyName || task.title || "행사"}${task.scheduledTime ? ` · ${task.scheduledTime}` : ""}`; }).join("\n") : "오늘까지 해야 할 미완료 다음 세팅은 없습니다.";
+      ttsText = tasks.length ? `남은 다음 세팅은 ${tasks.length}건이에요. 가장 먼저 ${tasks[0].venue} 세팅을 확인해 주세요.` : "오늘까지 남은 다음 세팅은 없어요.";
+    } else if (actions.has("get_event_notes")) {
+      const notes = plannerResult(execution, "get_event_notes")?.notes || [];
+      answer = notes.length ? notes.map((row) => `${row.venue} · ${row.organizer}\n${[row.layout, row.others, ...(row.notes || [])].filter(Boolean).join(" / ")}`).join("\n\n") : "조건에 맞는 행사에서 별도 특이사항을 찾지 못했습니다.";
+      ttsText = notes.length ? `특이사항이 있는 행사는 ${notes.length}건이에요. ${notes.map((row) => `${row.venue} ${row.organizer}`).join(", ")}입니다.` : "별도 특이사항은 없어요.";
+    } else if (actions.has("get_layout_info")) {
+      const pairs = (plannerResult(execution, "get_layout_info")?.pairs || []).filter((row) => row.changed);
+      answer = pairs.length ? pairs.map((row) => `${row.venue} · ${row.current.companyName || row.current.eventName} → ${row.next.companyName || row.next.eventName}\n${row.currentLayout || "현재 세팅 미등록"} → ${row.nextLayout || "다음 세팅 미등록"}`).join("\n\n") : "오늘 행사 종료 후 레이아웃 변경이 확인되는 홀은 없습니다.";
+      ttsText = pairs.length ? `행사 종료 후 세팅을 바꿔야 하는 홀은 ${pairs.length}곳이에요. ${pairs.map((row) => row.venue).join(", ")}입니다.` : "행사 종료 후 세팅 변경이 확인되는 홀은 없어요.";
+    } else if (actions.has("get_beverage_inventory")) {
+      const data = plannerResult(execution, "get_beverage_inventory"); answer = data?.text || data?.answer || "음주류 재고 결과를 확인하지 못했습니다."; ttsText = data?.ttsText || answer.split("\n")[0];
+    } else if (actions.has("get_asset_status")) {
+      const assets = plannerResult(execution, "get_asset_status")?.assets || []; answer = assets.length ? assets.map((row) => `${row.asset_name} · ${row.quantity ?? "수량 미입력"}${row.location ? ` · ${row.location}` : ""}`).join("\n") : "조건에 맞는 자산을 찾지 못했습니다."; ttsText = assets.length ? `조건에 맞는 자산은 ${assets.length}건이에요.` : answer;
+    } else if (actions.has("get_current_setup_state")) {
+      const states = plannerResult(execution, "get_current_setup_state")?.states || []; answer = states.length ? states.map((row) => `${row.venue_name || row.space_name || "홀"} · ${row.layout_type || row.setup_summary || row.status || "상태 미입력"}`).join("\n") : "저장된 현재 세팅 상태가 없습니다."; ttsText = states.length ? `현재 세팅 상태는 ${states.length}곳에 저장돼 있어요.` : answer;
+    } else if (actions.has("get_event_attachments")) {
+      const attachments = plannerResult(execution, "get_event_attachments")?.attachments || []; answer = attachments.length ? `첨부자료 ${attachments.length}건이 있습니다.\n${attachments.map((row) => row.original_name || row.file_name || "첨부파일").join("\n")}` : "조건에 맞는 첨부자료가 없습니다."; ttsText = attachments.length ? `첨부자료는 ${attachments.length}건이에요.` : answer;
+    } else if (matchedEvents.length) {
+      answer = matchedEvents.map((event) => `${eventVenue(event)} · ${event.companyName || event.eventName} · ${event.guestCount || "인원 미정"}명`).join("\n");
+      ttsText = `조건에 맞는 행사는 ${matchedEvents.length}건이에요.`;
+    } else answer = "조건에 맞는 저장 데이터를 찾지 못했습니다.";
+    if (execution.failures.length) answer += `\n\n일부 조회 실패: ${execution.failures.map((failure) => `${failure.action} (${failure.message})`).join(", ")}`;
+    return { answer, ttsText: ttsText || answer.split("\n")[0] };
+  }
+  async function tryRunReadPlanner(text, fastRoute) {
+    if (!window.erpConversationAgent.shouldUsePlanner(text, fastRoute, conversationContext)) return false;
+    try {
+      const plan = await window.erpConversationAgent.requestPlanner({ question: text, context: { actualToday: board.getActualTodaySeoul(), selectedDate: board.getSelectedBoardDate(), lastDomain: conversationContext.lastDomain, lastResults: conversationContext.lastResults || [] }, registry: actionRegistry, maxSteps: 4, request: async (payload) => { const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "ERP 조회 계획을 만들지 못했습니다."); return body.plan || body; } });
+      const execution = await window.erpConversationAgent.executePlannerPlan(plan, actionRegistry, { question: text, actualToday: board.getActualTodaySeoul(), selectedDate: board.getSelectedBoardDate() });
+      if (!execution.ok) return false;
+      const formatted = formatPlannerExecution(execution, text); showMessage(formatted.answer, true, formatted.ttsText);
+      const lastEvents = plannerResult(execution, "query_events")?.events || []; saveConversationContext({ ...conversationContext, lastDomain: "planner", lastResults: lastEvents.map(eventContext).slice(0, 20), planner: { goal: plan.goal, responseMode: plan.responseMode } }); renderAiContext(); aiInput.value = ""; return true;
+    } catch (error) { console.warn("ERP read planner fallback", error); return false; }
+  }
   let settingAdvisorRows = [];
   let pendingEventQuery = null;
   let pendingSettingExecutionPlan = null;
@@ -1336,6 +1414,7 @@
     const attachedAssetMutation = selectedAssetImageFile && /(?:자산.*등록|등록해|등록해\s*줘|수량.*추가|입고|사용했|옮겼|위치.*바꿔)/i.test(text);
     const fastRoute = followupContext ? "asset_intake" : selectedAssetImageFile ? attachedAssetMutation ? "asset_intake" : "visual_query" : boardAiRoute(text);
     const agentPlan = conversationAgent.submit(text, { fastRoute }); const route = agentPlan.route; console.debug("conversation route", { rawTranscript: speechRawTranscript || text, normalizedTranscript: text, matchedVenue: speechNormalization.matchedVenue, confidence: speechNormalization.confidence, route });
+    if (!selectedAssetImageFile && await tryRunReadPlanner(text, fastRoute)) return;
     if (fastRoute === "conversation_agent" && !agentPlan.usesContext) { saveConversationContext({ ...conversationContext, lastDomain: "" }); renderAiContext(); }
     if (route === "field_setup_history") { showFieldSetupHistory(text); aiInput.value = ""; return; }
     if (route === "record_field_setup") {

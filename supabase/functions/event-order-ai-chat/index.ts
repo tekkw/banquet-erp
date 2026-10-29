@@ -124,6 +124,9 @@ Deno.serve(async (request) => {
       const proposal = await interpretBoardCommand(String(question ?? ""), payload.boardContext ?? {}, payload.selection ?? null);
       return jsonResponse({ proposal });
     }
+    if (mode === "erp_action_plan") {
+      return jsonResponse({ plan: await planErpReadActions(String(question ?? ""), payload.context ?? {}, payload.actions ?? [], payload.maxSteps) });
+    }
 
     const cleanQuestion = String(question ?? "").trim();
     if (!cleanQuestion) {
@@ -1388,6 +1391,37 @@ async function interpretBoardCommand(question: string, boardContext: Record<stri
   const change = proposal.change && typeof proposal.change === "object" ? proposal.change as Record<string, unknown> : {};
   const safeChange = intent === "add_schedule" ? { ...change, date: String(boardContext.selectedDate ?? ""), venue: String(event?.venue ?? change.venue ?? ""), people: toOptionalNumber(change.people) } : change;
   return { ...proposal, target, change: safeChange, intent, confidence: Math.max(0, Math.min(1, Number(proposal.confidence) || 0)), needsClarification: !!proposal.needsClarification || Number(proposal.confidence) < 0.7 };
+}
+
+const ERP_PLANNER_ACTIONS = new Set(["query_events", "get_event_detail", "get_event_schedule", "get_event_items", "get_event_notes", "get_event_attachments", "get_next_setup_tasks", "get_current_setup_state", "resolve_next_event", "get_beverage_inventory", "get_asset_status", "get_layout_info"]);
+async function planErpReadActions(question: string, context: Record<string, unknown>, requestedActions: unknown, requestedMaxSteps: unknown) {
+  const maxSteps = Math.min(4, Math.max(1, Math.floor(Number(requestedMaxSteps) || 4)));
+  const actions = (Array.isArray(requestedActions) ? requestedActions : []).map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {}).filter((item) => ERP_PLANNER_ACTIONS.has(String(item.id))).map((item) => ({ id: String(item.id), description: String(item.description || "") }));
+  if (!question.trim() || !actions.length) throw new Error("ERP planner 입력 또는 action schema가 비어 있습니다.");
+  const systemPrompt = [
+    "You plan read-only actions for a Korean banquet ERP conversation agent.",
+    "Return only compact JSON: {goal,steps:[{action,arguments,reason}],responseMode}.",
+    `Use 1-${maxSteps} steps and only action IDs supplied by the user payload. Never invent an action.`,
+    "Never produce SQL, table names, mutations, writes, approvals, or UI actions.",
+    "Current utterance overrides prior context. Use prior lastResults only for real follow-up references.",
+    "For list or aggregate questions, query all matching events and do not ask the user to select one.",
+    "Use detail clarification only when exactly one event is required and cannot be identified.",
+    "Arguments may include date=today|tomorrow, dateRange=this_week, venue, filters, aggregate, compareWithNext, incompleteOnly, scheduledOnOrBeforeToday.",
+    "Coffee preparation normally needs query_events then get_event_schedule and get_event_items.",
+    "Remaining setup needs get_next_setup_tasks. Hall turnover needs query_events, resolve_next_event, and get_layout_info.",
+    "Special notes need query_events then get_event_notes.",
+    "For RE-INFORM or 재인폼 questions pass filter=reinform to get_event_notes.",
+    "responseMode must be list, detail, or aggregate.",
+  ].join("\n");
+  const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ question, context, actions, maxSteps }) }] }) });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(body?.error?.message || "OpenAI ERP planner request failed");
+  const rawText = body?.output_text || body?.output?.[0]?.content?.[0]?.text || body?.choices?.[0]?.message?.content;
+  const parsed = parseJsonObject(String(rawText ?? "")) as Record<string, unknown> | null;
+  if (!parsed || !Array.isArray(parsed.steps)) throw new Error("ERP planner JSON parsing failed.");
+  const steps = parsed.steps.slice(0, maxSteps).map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {}).map((item) => ({ action: String(item.action || ""), arguments: item.arguments && typeof item.arguments === "object" && !Array.isArray(item.arguments) ? item.arguments : {}, reason: String(item.reason || "") }));
+  if (!steps.length || steps.some((step) => !ERP_PLANNER_ACTIONS.has(step.action) || !actions.some((action) => action.id === step.action))) throw new Error("ERP planner returned an unsupported action.");
+  return { goal: String(parsed.goal || question), steps, responseMode: ["list", "detail", "aggregate"].includes(String(parsed.responseMode)) ? String(parsed.responseMode) : "list" };
 }
 
 function normalizeVisualSummary(value: unknown) {
