@@ -840,6 +840,66 @@
       people: item.next?.people || item.people || event?.guestCount || "",
     };
   }
+  function seoulDateFromValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return "";
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  }
+  function completedSetupScheduledDate(item) {
+    const override = state.setupOverrides[item?.key] || {};
+    return override.scheduledDate || item?.scheduledDate || item?.metadata?.scheduledDate || item?.metadata?.setupOverride?.scheduledDate || item?.plannedDate || "";
+  }
+  function completedSetupEvent(item) {
+    const eventOrderId = item?.next?.eventOrderId || item?.eventOrderId;
+    return currentEvents.find((entry) => String(entry.id) === String(eventOrderId));
+  }
+  function completedSetupEventDate(item) {
+    const event = completedSetupEvent(item);
+    const fallback = item?.eventDate || item?.metadata?.setupOverride?.eventDate || item?.next?.eventDate || item?.next?.date || "";
+    return linkedEventStart(event, fallback).date || fallback;
+  }
+  function completedSetupReferenceDate(item) {
+    return completedSetupScheduledDate(item) || completedSetupEventDate(item) || seoulDateFromValue(item?.completedAt || item?.metadata?.completedAt);
+  }
+  function completedSetupWeekRange(actualToday = seoulDateKey()) {
+    const today = new Date(`${actualToday}T00:00:00Z`);
+    if (Number.isNaN(today.getTime())) return { start: "", end: "" };
+    const mondayOffset = (today.getUTCDay() + 6) % 7;
+    const format = (date) => date.toISOString().slice(0, 10);
+    const start = new Date(today); start.setUTCDate(today.getUTCDate() - mondayOffset);
+    const end = new Date(start); end.setUTCDate(start.getUTCDate() + 6);
+    return { start: format(start), end: format(end) };
+  }
+  function getRecentCompletedSetupTasks(tasks, actualToday = seoulDateKey()) {
+    const range = completedSetupWeekRange(actualToday);
+    return sortSetupTasks((tasks || []).filter((item) => {
+      const completed = item?.completed === true || state.completions[item?.key] === true;
+      const referenceDate = completedSetupReferenceDate(item);
+      return completed && referenceDate && referenceDate >= range.start && referenceDate <= range.end;
+    }));
+  }
+  function completedSetupDisplayInfo(item) {
+    const event = completedSetupEvent(item);
+    const setupDate = completedSetupScheduledDate(item);
+    const eventDate = completedSetupEventDate(item);
+    const venueValue = item?.venue || event?.venue || "행사장 미입력";
+    const venue = window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(venueValue) || venueValue;
+    const organizer = event?.companyName || event?.organizer || item?.organizer || item?.next?.name || item?.title || "주최 미입력";
+    const shortDate = (value) => value ? value.slice(5).replace("-", "/") : "";
+    const dates = setupDate && eventDate && setupDate !== eventDate
+      ? `세팅 ${shortDate(setupDate)} · 행사 ${shortDate(eventDate)}`
+      : eventDate ? `행사 ${shortDate(eventDate)}` : setupDate ? `세팅 ${shortDate(setupDate)}` : "날짜 미입력";
+    return { venue, organizer, setupDate, eventDate, summary: `${dates} · ${organizer}` };
+  }
+  function renderCompletedSetupRow(item) {
+    const info = completedSetupDisplayInfo(item);
+    return `<div class="completed-setup-row" data-key="${escapeHtml(item.key)}"><span><strong>${escapeHtml(info.venue)}</strong><small>${escapeHtml(info.summary)}</small></span><button type="button" data-restore-complete>복원</button></div>`;
+  }
   function setupReadiness(item, referenceDate = seoulDateKey()) { if (item.completed || state.completions[item.key]) return { value: "ready", label: "준비가능" }; const value = item.metadata?.readiness || (getPinnedSetupStatus(item, referenceDate) === "overdue" ? "blocked" : "needs_action"); return { value, label: { ready: "준비가능", needs_action: "작업필요", blocked: "확인필요" }[value] || "작업필요" }; }
   function renderSetupTaskBoard(blocks) {
     const groups = pinnedSetupSummary(blocks, selectedDate, seoulDateKey());
@@ -864,9 +924,8 @@
   }
   function renderSetupCandidates(blocks) {
     const active = sortSetupTasks(blocks.filter((item) => !item.completed));
-    const completed = sortSetupTasks(blocks.filter((item) => item.completed));
-    const completedRow = (item) => `<div class="completed-setup-row" data-key="${escapeHtml(item.key)}"><span><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)}</strong> · ${escapeHtml(item.next?.name || item.title)}</span><button type="button" data-restore-complete>복원</button></div>`;
-    return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(completedRow).join("") || '<p>완료된 세팅이 없습니다.</p>'}</details></section>`;
+    const completed = getRecentCompletedSetupTasks(blocks, seoulDateKey());
+    return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(renderCompletedSetupRow).join("") || '<p>이번 주 완료된 세팅이 없습니다.</p>'}</details></section>`;
   }
   function getTodayExecutionBoard(actualToday = seoulDateKey()) {
     const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; if (!autopilot?.buildTodayBoard) return { actualToday, tasks: [], exceptions: [], nextTask: null };
@@ -911,10 +970,10 @@
     }).join("")}</div>`;
   }
   function renderWeeklySetupSection(tasks) {
-    const active = tasks.filter((item) => !item.completed); const completed = tasks.filter((item) => item.completed);
+    const active = tasks.filter((item) => !item.completed); const completed = getRecentCompletedSetupTasks(tasks, seoulDateKey());
     const originalAction = (item) => renderOriginalAction(item.eventOrderId);
     const row = (item) => `<article class="weekly-setup-item" data-setup-key="${escapeHtml(item.key)}"><label><input type="checkbox" data-setup-complete ${item.completed ? "checked" : ""}><span><strong>${escapeHtml(item.venue)} · ${escapeHtml(item.title)}</strong><small>${escapeHtml(item.eventDate)} · ${escapeHtml(item.people || "-")}명${item.subtitle ? ` · ${escapeHtml(item.subtitle)}` : ""}</small></span></label><label class="setup-plan-date">세팅 예정일<input type="date" data-setup-date value="${escapeHtml(item.plannedDate)}"></label>${originalAction(item)}</article>`;
-    return `<section class="weekly-setup-section"><div class="operation-board-title"><div><span class="eyebrow">Next Setup</span><h3>다음 세팅 할 일</h3></div><strong>${active.length}건</strong></div><div class="weekly-setup-list">${active.map(row).join("") || "<p>예정된 세팅이 없습니다.</p>"}</div><details class="completed-setup-list"><summary>완료한 세팅 보기 (${completed.length})</summary>${completed.map(row).join("") || "<p>완료한 세팅이 없습니다.</p>"}</details></section>`;
+    return `<section class="weekly-setup-section"><div class="operation-board-title"><div><span class="eyebrow">Next Setup</span><h3>다음 세팅 할 일</h3></div><strong>${active.length}건</strong></div><div class="weekly-setup-list">${active.map(row).join("") || "<p>예정된 세팅이 없습니다.</p>"}</div><details class="completed-setup-list"><summary>완료한 세팅 보기 (${completed.length})</summary>${completed.map(renderCompletedSetupRow).join("") || "<p>이번 주 완료한 세팅이 없습니다.</p>"}</details></section>`;
   }
   function renderOriginalAction(eventOrderId) {
     const event = currentEvents.find((item) => String(item.id) === String(eventOrderId));
@@ -1186,6 +1245,7 @@
     dialog.addEventListener("click", (event) => { if (event.target === dialog) closeDialog(); });
     weeklyRoot?.querySelectorAll("[data-setup-complete]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = input.checked; if (task) { task.completed = input.checked; syncItem(task); } saveState(); render(); });
     weeklyRoot?.querySelectorAll("[data-setup-date]").forEach((input) => input.onchange = () => { const key = input.closest("[data-setup-key]").dataset.setupKey; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.plans[key] = input.value; if (task) { task.plannedDate = input.value; syncItem(task); } saveState(); render(); });
+    weeklyRoot?.querySelectorAll("[data-restore-complete]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const task = buildWeeklySetupTasks(currentEvents).find((item) => item.key === key); state.completions[key] = false; if (task) { task.completed = false; syncItem(task); } saveState(); render(); });
     root.querySelectorAll("[data-complete]").forEach((control) => { const complete = () => completeBoardItem(control.closest("[data-key]").dataset.key, control.matches('input[type="checkbox"]') ? control.checked : true, selectedDate); if (control.matches('input[type="checkbox"]')) control.onchange = complete; else control.onclick = complete; });
     root.querySelectorAll("[data-restore-complete]").forEach((button) => button.onclick = () => completeBoardItem(button.closest("[data-key]").dataset.key, false));
     root.querySelectorAll("[data-edit]").forEach((button) => button.onclick = () => openDialog(state.manual.find((x) => x.key === button.closest("[data-key]").dataset.key)));
@@ -1267,6 +1327,10 @@
   window.BANQUET_ERP_OPERATION_BOARD.getPinnedSetupStatus = getPinnedSetupStatus;
   window.BANQUET_ERP_OPERATION_BOARD.dedupePinnedSetupTasks = dedupePinnedSetupTasks;
   window.BANQUET_ERP_OPERATION_BOARD.setupCardInfo = setupCardInfo;
+  window.BANQUET_ERP_OPERATION_BOARD.getRecentCompletedSetupTasks = getRecentCompletedSetupTasks;
+  window.BANQUET_ERP_OPERATION_BOARD.completedSetupWeekRange = completedSetupWeekRange;
+  window.BANQUET_ERP_OPERATION_BOARD.completedSetupReferenceDate = completedSetupReferenceDate;
+  window.BANQUET_ERP_OPERATION_BOARD.completedSetupDisplayInfo = completedSetupDisplayInfo;
   window.BANQUET_ERP_OPERATION_BOARD.renderSetupTaskBoard = renderSetupTaskBoard;
   window.BANQUET_ERP_OPERATION_BOARD._setPinnedSetupUiForTest = (openGroup = "", expanded = []) => {
     pinnedSetupOpenGroup = openGroup;

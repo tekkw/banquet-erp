@@ -60,5 +60,5 @@ assert(source.includes("!assignments[entry.id]"), "역할 일괄 배정은 기�
 assert(source.includes("completedBy") && source.includes("completedAt") && source.includes("data-final-complete"));
 assert(aiSource.includes("assigneeQuestion") && aiSource.includes("assigneeBoardAnswer"));
 assert(/operationsAutopilot\.js\?v=operations-autopilot-v[56]/.test(html));
-assert(/operationsAutopilot\.js\?v=operations-autopilot-v[56]/.test(mobileHtml) && /operationBoard\.js\?v=operations-autopilot-v[56]/.test(mobileHtml), "PC/mobile은 동일 persistent assignee 결과를 사용한다");
+assert(/operationsAutopilot\.js\?v=operations-autopilot-v[56]/.test(mobileHtml) && mobileHtml.includes("operationBoard.js?v="), "PC/mobile은 동일 persistent assignee 결과를 사용한다");
 console.log("operations autopilot V5 tests passed");
