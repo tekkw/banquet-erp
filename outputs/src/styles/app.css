@@ -13,6 +13,6 @@
 @import "./assets.css?v=layout-intent-auto-grid-v1";
 @import "./ai.css";
 @import "./modal.css?v=event-overwrite-contrast-v1";
-@import "./dashboardWidgets.css?v=setup-context-v1";
+@import "./dashboardWidgets.css?v=setup-groups-v1";
 @import "./darkTheme.css";
 @import "./mobile.css";

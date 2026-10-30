@@ -345,6 +345,10 @@ body {
 .setup-task-group { display: grid; gap: 8px; }
 .setup-task-more { justify-self: center; border-radius: 7px; }
 .setup-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.setup-list-section { align-content: start; }
+.setup-section-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 34px; padding: 5px 8px; border: 0; background: transparent; color: var(--dash-text); font: inherit; cursor: pointer; }
+.setup-section-heading span { font-size: 14px; font-weight: 800; }
+.setup-section-heading strong { color: #f2c76e; font-size: 13px; }
 .setup-tab-toolbar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .setup-task-board h3 { margin: 0; font-size: 15px; }
 .setup-task-board header span { color: var(--dash-muted); font-size: 11px; }

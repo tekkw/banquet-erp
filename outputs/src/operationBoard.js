@@ -23,7 +23,10 @@
   let activeBoardTab = "operations";
   let todayRoleFilter = "all";
   let todayAssigneeFilter = "all";
-  let pinnedSetupOpenGroup = "";
+  let pinnedSetupOpenGroup = "all";
+  let pinnedSetupSectionOpen = true;
+  let setupCandidateSectionOpen = true;
+  let setupCandidateVisibleCount = 20;
   const expandedPinnedSetupGroups = new Set();
   const expandedSetupContextKeys = new Set();
   function coreRules() { return window.BANQUET_ERP_CORE_RULES; }
@@ -632,7 +635,7 @@
           state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== row.item_key), { key: row.item_key, date: row.board_date, eventOrderId: row.event_order_id, venue: row.venue_name, content: row.memo || row.title }];
         } else if (row.metadata?.recordType !== "board_ai_change_log" && row.item_kind === "manual") {
           const setupOverride = row.metadata?.setupOverride || {};
-          state.manual = [...state.manual.filter((x) => x.recordId !== row.id && x.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: row.metadata?.taskType || "manual", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || row.board_date, scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
+          state.manual = [...state.manual.filter((x) => x.recordId !== row.id && x.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: row.metadata?.taskType || "manual", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || (row.metadata?.candidateWithoutScheduledDate ? "" : row.board_date), scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
         }
       });
       state.checklist = [...state.checklist.filter((item) => item.date !== boardDate), ...(checklist || []).map((row) => ({ id: row.id, parentKey: row.parent_item_key, date: boardDate, name: row.item_name, quantity: row.quantity || "", unit: row.unit || "", memo: row.memo || "", completed: !!row.is_completed }))];
@@ -664,7 +667,7 @@
         if (row.metadata?.setupOverride) state.setupOverrides[row.item_key] = row.metadata.setupOverride;
         if (row.metadata?.reminderOverride != null) state.reminders[row.item_key] = String(row.metadata.reminderOverride);
         const setupOverride = row.metadata?.setupOverride || {};
-        state.manual = [...state.manual.filter((item) => item.recordId !== row.id && item.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: "next_setup", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || row.board_date, scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
+        state.manual = [...state.manual.filter((item) => item.recordId !== row.id && item.key !== row.item_key), { key: row.item_key, id: row.item_key, recordId: row.id, kind: "manual", type: "next_setup", date: row.board_date, scheduledDate: row.metadata?.scheduledDate || setupOverride.scheduledDate || setupOverride.eventDate || (row.metadata?.candidateWithoutScheduledDate ? "" : row.board_date), scheduledTime: row.metadata?.scheduledTime || setupOverride.scheduledTime || setupOverride.time || String(row.item_time || "").slice(0, 5), time: String(row.item_time || "").slice(0, 5), venue: row.venue_name, spaceId: row.space_id || row.metadata?.spaceKey || `venue:${row.venue_name}`, eventOrderId: row.event_order_id || row.metadata?.eventOrderId || null, title: row.title, people: row.people ?? setupOverride.people ?? "", memo: row.memo || "", completed: !!row.is_completed, metadataSource: row.metadata?.source || "", metadata: row.metadata || {} }];
       });
       if (setupKeys.size) {
         const checklist = await remoteRequest("operation_board_checklist_items?select=*&order=sort_order.asc");
@@ -677,9 +680,10 @@
   function syncItem(item, options = {}) {
     const override = state.reminders[item.key]; const resolved = override == null || override === "default" ? defaultReminder : override;
     const setupOverride = state.setupOverrides[item.key] || null;
-    const scheduledDate = setupOverride?.scheduledDate || item.scheduledDate || (item.type === "next_setup" ? setupOverride?.eventDate || item.next?.date || item.date : null);
-    const scheduledTime = setupOverride?.scheduledTime || item.scheduledTime || (item.type === "next_setup" ? setupOverride?.time || item.next?.time || item.time : null);
-    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(scheduledTime || item.time || "") ? scheduledTime || item.time : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", ...(item.metadata || {}), boardDate: item.date || dateKey(), scheduledDate, scheduledTime, venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
+    const scheduledDate = setupOverride?.scheduledDate || item.scheduledDate || (item.type === "next_setup" && !item.rawSetupCandidate && !item.metadata?.candidateWithoutScheduledDate ? setupOverride?.eventDate || item.next?.date || item.date : null);
+    const scheduledTime = setupOverride?.scheduledTime || item.scheduledTime || (item.type === "next_setup" && !item.rawSetupCandidate && !item.metadata?.candidateWithoutScheduledDate ? setupOverride?.time || item.next?.time || item.time : null);
+    const persistedTime = scheduledTime || (item.rawSetupCandidate || item.metadata?.candidateWithoutScheduledDate ? "" : item.time || "");
+    const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(persistedTime) ? persistedTime : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", ...(item.metadata || {}), boardDate: item.date || dateKey(), scheduledDate, scheduledTime, venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
     const path = item.recordId ? `operation_board_items?id=eq.${encodeURIComponent(item.recordId)}` : "operation_board_items?on_conflict=board_date,item_key";
     const requestOptions = item.recordId ? { method: "PATCH", body: JSON.stringify(payload) } : { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) };
     const pending = remoteRequest(path, requestOptions);
@@ -745,11 +749,12 @@
     const actualToday = seoulDateKey();
     if (actualToday !== selectedDate) hydrateRemote(actualToday);
     const blocks = allBlocks(selectedDate);
+    const setupLists = classifySetupBoardItems(currentEvents, state.manual, actualToday);
     const selectedEvents = currentEvents.filter((event) => eventDates(event).includes(selectedDate));
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
     const operationBlocks = blocks.filter((block) => block.type !== "next_setup");
-    const setupBlocks = blocks.filter((block) => block.type === "next_setup");
+    counts.next_setup = setupLists.pinned.length + setupLists.candidates.length;
     const agenda = agendaBlocks(operationBlocks);
     const activeAgenda = agenda.filter((block) => !block.completed);
     const completedAgenda = agenda.filter((block) => block.completed);
@@ -767,8 +772,8 @@
       </section>
       <section class="operation-board-tab-panel" data-board-tab-panel="setup" ${activeBoardTab === "setup" ? "" : "hidden"}>
         <div class="setup-tab-toolbar"><button type="button" class="primary-button" data-setup-create>+ 다음 세팅 추가</button></div>
-        ${renderSetupTaskBoard(blocks)}
-        ${renderSetupCandidates(setupBlocks)}
+        ${renderSetupTaskBoard(setupLists.pinned, actualToday)}
+        ${renderSetupCandidates(setupLists.candidates)}
       </section>
       <dialog class="operation-dialog"><form data-board-form><h3>운영 작업</h3><input name="id" type="hidden"><input name="eventOrderId" type="hidden"><input name="spaceId" type="hidden"><label>시간<input name="time" type="time" required></label><label>장소<input name="venue" list="operationVenueList" required></label><datalist id="operationVenueList">${[...new Set(currentEvents.flatMap((e) => [e.venue, ...(e.schedule || []).map((s) => s.venue)]).filter(Boolean))].map((v) => `<option value="${escapeHtml(v)}">`).join("")}</datalist><label>작업명<input name="title" required></label><label>메모<textarea name="memo"></textarea></label><div class="operation-dialog-actions"><button type="button" data-board-cancel>취소</button><button class="primary-button" type="submit">저장</button></div></form></dialog>
       <dialog class="operation-dialog operation-detail-dialog" data-operation-detail><div data-operation-detail-content></div></dialog>
@@ -891,7 +896,7 @@
       eventOrderId,
       title: event ? eventDisplayTitle(event) : item.next?.name || item.title || "행사",
       date: setupScheduledDate(item),
-      time: item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "",
+      time: item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || (item.rawSetupCandidate ? "" : item.next?.time || item.time || ""),
       eventDate: eventStart.date,
       eventTime: eventStart.time,
       venue: window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue,
@@ -973,11 +978,14 @@
       const info = setupCardInfo(item); const setupDate = info.date || "";
       const sourceBadge = item.metadataSource === "manual_setup_task" ? "수동" : "자동";
       const status = getSetupTaskTimingBucket(item, actualToday); const readiness = setupReadiness(item, actualToday); const overdueDays = status === "overdue" && setupDate ? Math.max(1, Math.round((new Date(`${actualToday}T12:00:00+09:00`) - new Date(`${setupDate}T12:00:00+09:00`)) / 86400000)) : 0;
-      const setupLabel = [setupDate && setupDate.slice(5).replace("-", "/"), info.time].filter(Boolean).join(" "); const eventLabel = [info.eventDate && info.eventDate.slice(5).replace("-", "/"), info.eventTime].filter(Boolean).join(" "); const metadata = [`세팅 ${setupLabel}`, eventLabel && `행사 ${eventLabel}`, info.people && `${info.people}명`].filter(Boolean).join(" · ");
-      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}" data-task-id="${escapeHtml(item.recordId || "")}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(info.venue)}</span><div><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(metadata)}</small></div>${status === "today" ? '<span class="setup-today-badge">오늘 세팅</span>' : ""}${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-readiness-badge ${readiness.value}">${readiness.label}</span><span class="setup-source-badge">${sourceBadge}</span></div><div class="setup-task-actions"><button type="button" data-setup-detail>상세 보기</button>${renderOriginalAction(info.eventOrderId)}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
+      const setupLabel = [setupDate && setupDate.slice(5).replace("-", "/"), info.time].filter(Boolean).join(" "); const eventLabel = [info.eventDate && info.eventDate.slice(5).replace("-", "/"), info.eventTime].filter(Boolean).join(" "); const metadata = [setupLabel ? `세팅 ${setupLabel}` : "세팅일 미정", eventLabel && `행사 ${eventLabel}`, info.people && `${info.people}명`].filter(Boolean).join(" · ");
+      const contextOpen = expandedSetupContextKeys.has(item.key); const event = currentEvents.find((entry) => String(entry.id) === String(info.eventOrderId)); const fieldNoteCount = (event?.notes || []).filter((note) => window.BANQUET_ERP_EVENT_ATTACHMENTS?.isFieldNote(note)).length;
+      return `<article class="setup-task-card" data-key="${escapeHtml(item.key)}" data-task-id="${escapeHtml(item.recordId || "")}"><div class="setup-task-main"><span class="setup-venue-badge">${escapeHtml(info.venue)}</span><div><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(metadata)}</small></div>${status === "today" ? '<span class="setup-today-badge">오늘 세팅</span>' : ""}${status === "overdue" ? `<span class="setup-overdue-badge">지연${overdueDays ? ` ${overdueDays}일` : ""}</span>` : ""}<span class="setup-readiness-badge ${readiness.value}">${readiness.label}</span><span class="setup-source-badge">${sourceBadge}</span></div>${contextOpen ? renderSetupContextDetails(item, item.key) : ""}<div class="setup-task-actions"><button type="button" data-setup-context-toggle aria-expanded="${String(contextOpen)}">${contextOpen ? "세팅 맥락 닫기" : "세팅 맥락"}</button><button type="button" data-setup-detail>상세 보기</button>${renderOriginalAction(info.eventOrderId)}${info.eventOrderId ? `<button type="button" data-event-attachments data-event-order-id="${escapeHtml(info.eventOrderId)}">첨부자료</button><button type="button" data-field-notes data-event-order-id="${escapeHtml(info.eventOrderId)}">특이사항${fieldNoteCount ? ` ${fieldNoteCount}건` : ""}</button>` : ""}<button type="button" data-setup-edit>수정</button><button type="button" data-setup-pin>고정 해제</button><button type="button" data-complete>완료</button></div></article>`;
     };
-    const allCount = groups.today.length + groups.overdue.length + groups.upcoming.length;
-    if (!allCount && !groups.attention.length) return '<section class="setup-task-board"><p>상단에 고정된 작업이 없습니다.</p></section>';
+    const allCount = groups.today.length + groups.overdue.length + groups.upcoming.length + groups.undated.length;
+    const totalCount = allCount; const heading = `<button type="button" class="setup-section-heading" data-setup-section-toggle="pinned" aria-expanded="${String(pinnedSetupSectionOpen)}"><span>${pinnedSetupSectionOpen ? "▼" : "▶"} 상단고정 세팅</span><strong>${totalCount}</strong></button>`;
+    if (!pinnedSetupSectionOpen) return `<section class="setup-task-board setup-list-section">${heading}</section>`;
+    if (!totalCount) return `<section class="setup-task-board setup-list-section">${heading}<p>상단에 고정된 작업이 없습니다.</p></section>`;
     const isOpen = (name) => pinnedSetupOpenGroup === name || pinnedSetupOpenGroup === "all";
     const panel = (name, title, tasks) => {
       if (!tasks.length || !isOpen(name)) return "";
@@ -985,13 +993,15 @@
       return `<section class="setup-task-group ${name}" data-setup-panel="${name}"><div class="setup-task-heading"><h3>${title}</h3><strong>${tasks.length}건</strong></div><div class="setup-task-list">${visible.map((item) => card(item)).join("")}</div>${remaining > 0 ? `<button type="button" class="setup-task-more" data-setup-more="${name}">+${remaining}건 더 보기</button>` : ""}</section>`;
     };
     const summaryButton = (name, label, count) => `<button type="button" data-setup-summary-group="${name}" aria-expanded="${String(isOpen(name))}">${label} <strong>${count}</strong></button>`;
-    const summary = `<div class="setup-task-summary-bar" aria-label="상단 고정 작업 요약">${summaryButton("today", "오늘 세팅", groups.today.length)}${summaryButton("overdue", "지연", groups.overdue.length)}${summaryButton("upcoming", "세팅 예정", groups.upcoming.length)}${groups.attention.length ? summaryButton("attention", "확인 필요", groups.attention.length) : ""}<button type="button" data-setup-summary-all aria-expanded="${String(pinnedSetupOpenGroup === "all")}">${pinnedSetupOpenGroup === "all" ? "전체 닫기" : "전체 보기"}</button></div>`;
-    return `<section class="setup-task-board">${summary}${panel("today", "오늘 세팅", groups.today)}${panel("overdue", "지연된 세팅", groups.overdue)}${panel("upcoming", "세팅 예정", groups.upcoming)}${panel("attention", "확인 필요", groups.attention)}</section>`;
+    const summary = `<div class="setup-task-summary-bar" aria-label="상단 고정 작업 요약">${summaryButton("today", "오늘 세팅", groups.today.length)}${summaryButton("overdue", "지연", groups.overdue.length)}${summaryButton("upcoming", "세팅 예정", groups.upcoming.length)}${groups.undated.length ? summaryButton("undated", "날짜 미정", groups.undated.length) : ""}${groups.attention.length ? summaryButton("attention", "확인 필요", groups.attention.length) : ""}<button type="button" data-setup-summary-all aria-expanded="${String(pinnedSetupOpenGroup === "all")}">${pinnedSetupOpenGroup === "all" ? "전체 닫기" : "전체 보기"}</button></div>`;
+    return `<section class="setup-task-board setup-list-section">${heading}${summary}${panel("today", "오늘 세팅", groups.today)}${panel("overdue", "지연된 세팅", groups.overdue)}${panel("upcoming", "세팅 예정", groups.upcoming)}${panel("undated", "세팅일 미정", groups.undated)}${panel("attention", "확인 필요", groups.attention)}</section>`;
   }
   function renderSetupCandidates(blocks) {
-    const active = sortSetupTasks(blocks.filter((item) => !item.completed));
-    const completed = getRecentCompletedSetupTasks(blocks, seoulDateKey());
-    return `<section class="next-setup-candidates"><div class="setup-task-heading"><h3>다음 세팅 후보</h3><strong>${active.length}건</strong></div><div class="next-setup-candidate-list">${active.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div><details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(renderCompletedSetupRow).join("") || '<p>이번 주 완료된 세팅이 없습니다.</p>'}</details></section>`;
+    const active = blocks.filter((item) => !item.completed); const visible = active.slice(0, setupCandidateVisibleCount); const remaining = active.length - visible.length;
+    const completed = getRecentCompletedSetupTasks(state.manual.filter((item) => item.type === "next_setup"), seoulDateKey());
+    const heading = `<button type="button" class="setup-section-heading" data-setup-section-toggle="candidates" aria-expanded="${String(setupCandidateSectionOpen)}"><span>${setupCandidateSectionOpen ? "▼" : "▶"} 다음 세팅 후보</span><strong>${active.length}</strong></button>`;
+    if (!setupCandidateSectionOpen) return `<section class="next-setup-candidates setup-list-section">${heading}</section>`;
+    return `<section class="next-setup-candidates setup-list-section">${heading}<div class="next-setup-candidate-list">${visible.map(renderBlock).join("") || '<p>예정된 다음 세팅이 없습니다.</p>'}</div>${remaining > 0 ? `<button type="button" class="setup-task-more" data-setup-candidate-more>+${remaining}건 더 보기</button>` : ""}<details class="setup-task-completed"><summary>완료된 세팅 보기 (${completed.length})</summary>${completed.map(renderCompletedSetupRow).join("") || '<p>이번 주 완료된 세팅이 없습니다.</p>'}</details></section>`;
   }
   function getTodayExecutionBoard(actualToday = seoulDateKey()) {
     const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; if (!autopilot?.buildTodayBoard) return { actualToday, tasks: [], exceptions: [], nextTask: null };
@@ -1056,7 +1066,9 @@
     const noteCount = state.fieldNotes.filter((note) => note.date === selectedDate && String(note.eventOrderId) === String(block.eventOrderId)).length;
     const setupInfo = block.type === "next_setup" ? setupCardInfo(block) : null;
     const readiness = block.type === "next_setup" ? setupReadiness(block) : null;
-    const setupMetadata = setupInfo ? [setupInfo.date && setupInfo.date.slice(5).replace("-", "/"), setupInfo.time, setupInfo.venue, setupInfo.people && `${setupInfo.people}명`].filter(Boolean).join(" · ") : "";
+    const setupLabel = setupInfo?.date ? `세팅 ${[setupInfo.date.slice(5).replace("-", "/"), setupInfo.time].filter(Boolean).join(" ")}` : "세팅일 미정";
+    const eventLabel = setupInfo?.eventDate ? `행사 ${[setupInfo.eventDate.slice(5).replace("-", "/"), setupInfo.eventTime].filter(Boolean).join(" ")}` : "";
+    const setupMetadata = setupInfo ? [setupLabel, eventLabel, setupInfo.people && `${setupInfo.people}명`].filter(Boolean).join(" · ") : "";
     const mobileNextSummary = block.next ? `<div class="next-setup-mobile-summary"><strong>${escapeHtml(setupInfo.title)}</strong><small>${escapeHtml(setupMetadata)}</small></div>` : "";
     const reminderValue = state.reminders[block.key] ?? "default";
     const linkedEvent = currentEvents.find((item) => String(item.id) === String(block.eventOrderId));
@@ -1110,16 +1122,21 @@
   }
   function setSetupPin(key, pinned) {
     state.pins[key] = !!pinned;
-    const item = ensurePersistentSetupBlock(allBlocks().find((block) => block.key === key) || allBlocks(seoulDateKey(), currentEvents).find((block) => block.key === key));
+    const item = ensurePersistentSetupBlock(findSetupListItem(key));
     saveState();
     if (item) syncItem(item);
     render();
+  }
+  function findSetupListItem(key) {
+    const persistent = state.manual.find((item) => item.key === key); if (persistent) return applySetupOverride(persistent);
+    const lists = classifySetupBoardItems(currentEvents, state.manual, seoulDateKey());
+    return [...lists.pinned, ...lists.candidates].find((item) => item.key === key) || allBlocks().find((item) => item.key === key) || allBlocks(seoulDateKey(), currentEvents).find((item) => item.key === key);
   }
   function ensurePersistentSetupBlock(block) {
     if (!block || block.type !== "next_setup" || block.kind === "manual") return block;
     const existing = state.manual.find((item) => item.key === block.key);
     if (existing) return existing;
-    const item = { ...block, kind: "manual", metadataSource: "daily_briefing", title: block.next?.name || block.title, memo: block.next ? setupDocumentSummary(currentEvents.find((event) => String(event.id) === String(block.next.eventOrderId))) : block.memo || "" };
+    const item = { ...block, kind: "manual", metadataSource: "daily_briefing", metadata: { ...(block.metadata || {}), ...(block.rawSetupCandidate ? { candidateWithoutScheduledDate: true } : {}) }, title: block.next?.name || block.title, memo: block.next ? setupDocumentSummary(currentEvents.find((event) => String(event.id) === String(block.next.eventOrderId))) : block.memo || "" };
     state.manual.push(item);
     return item;
   }
@@ -1129,13 +1146,13 @@
     const persistent = state.manual.find((item) => item.key === key);
     if (completed && persistent?.metadata?.source === "autopilot") { const verification = taskCompletionVerification(persistent); if (!verified || !verification.canComplete) { openFinalVerificationDialog(persistent, verification, boardDate); return; } const user = currentUser(); persistent.metadata = { ...(persistent.metadata || {}), completedBy: user?.id || null, completedByName: user?.label || "", completedAt: new Date().toISOString() }; }
     state.completions[key] = completed;
-    let block = allBlocks(boardDate, currentEvents).find((item) => item.key === key); block = ensurePersistentSetupBlock(block); if (block) block.completed = completed;
+    let block = allBlocks(boardDate, currentEvents).find((item) => item.key === key) || findSetupListItem(key); block = ensurePersistentSetupBlock(block); if (block) block.completed = completed;
     const manual = state.manual.find((item) => item.key === key); if (manual) manual.completed = completed;
     saveState(); if (block) syncItem(block); render();
   }
   function updateSetupTask(key, changes) {
     state.setupOverrides[key] = { ...(state.setupOverrides[key] || {}), ...changes };
-    const item = allBlocks().find((block) => block.key === key);
+    const item = findSetupListItem(key);
     saveState();
     if (item) syncItem(item);
     render();
@@ -1154,9 +1171,28 @@
     const row = normalizedScheduleRows(event).filter((entry) => !eventDate || entry.day === eventDate).sort((left, right) => left.time.localeCompare(right.time))[0];
     return { eventDate, time: row?.time || timeValue(event.eventDateTime), venue: venueName(row?.row || {}, event), title: eventDisplayTitle(event), subtitle: eventSecondaryTitle(event), people: row?.row?.people || event.guestCount || "" };
   }
+  function futureEventDate(event, actualToday = seoulDateKey()) {
+    return eventDates(event).sort().find((day) => day >= actualToday) || "";
+  }
+  function rawSetupCandidate(event, eventDate) {
+    const details = setupEventDetails(event, eventDate); const venue = details.venue || event.venue || "장소 미입력";
+    return { key: `setup-event:${event.id}`, id: `setup-event:${event.id}`, kind: "next_setup", type: "next_setup", rawSetupCandidate: true, date: eventDate, time: details.time || "", venue, spaceId: spaceKey({}, event), eventOrderId: event.id, title: details.title, eventSubtitle: details.subtitle, people: details.people, completed: false, metadataSource: "future_event_candidate", next: { eventOrderId: event.id, date: eventDate, time: details.time || "", name: details.title, subtitle: details.subtitle, people: details.people, layoutType: inferLayoutType(event), recommendation: recommendLayout(event.venueLayouts || [], inferLayoutType(event), details.people) } };
+  }
+  function classifySetupBoardItems(events = currentEvents, setupTasks = state.manual, actualToday = seoulDateKey()) {
+    const tasks = coreRules().dedupeSetupCandidates((setupTasks || []).filter((item) => item.type === "next_setup"));
+    const completedEventIds = new Set(tasks.filter((item) => item.completed === true || state.completions[item.key] === true).map((item) => String(item.eventOrderId || item.next?.eventOrderId || "")).filter(Boolean));
+    const activeTasks = tasks.filter((item) => item.completed !== true && state.completions[item.key] !== true).map(applySetupOverride); const activeByEvent = new Map();
+    activeTasks.forEach((item) => { const id = String(item.eventOrderId || item.next?.eventOrderId || ""); if (!id) return; const current = activeByEvent.get(id); if (!current || (!state.pins[current.key] && state.pins[item.key])) activeByEvent.set(id, item); });
+    const pinned = [...activeByEvent.values(), ...activeTasks.filter((item) => !(item.eventOrderId || item.next?.eventOrderId))].filter((item) => state.pins[item.key]);
+    const pinnedEventIds = new Set(pinned.map((item) => String(item.eventOrderId || item.next?.eventOrderId || "")));
+    const candidatesByEvent = new Map();
+    [...activeByEvent.values()].filter((item) => !state.pins[item.key]).forEach((item) => { const id = String(item.eventOrderId || item.next?.eventOrderId || ""); const event = (events || []).find((entry) => String(entry.id) === id); if (event && futureEventDate(event, actualToday)) candidatesByEvent.set(id, item); });
+    (events || []).forEach((event) => { const id = String(event.id || ""); const eventDate = futureEventDate(event, actualToday); if (!id || !eventDate || completedEventIds.has(id) || pinnedEventIds.has(id) || candidatesByEvent.has(id)) return; candidatesByEvent.set(id, rawSetupCandidate(event, eventDate)); });
+    const candidateSort = (left, right) => { const leftInfo = setupCardInfo(left); const rightInfo = setupCardInfo(right); return String(leftInfo.eventDate).localeCompare(String(rightInfo.eventDate)) || String(leftInfo.eventTime).localeCompare(String(rightInfo.eventTime)) || String(leftInfo.venue).localeCompare(String(rightInfo.venue), "ko"); };
+    return { pinned: sortSetupTasks(pinned, actualToday), candidates: [...candidatesByEvent.values()].sort(candidateSort) };
+  }
   function setupEventCandidates(venue, today = seoulDateKey()) {
-    const range = setupCandidateDateRange(today);
-    return currentEvents.flatMap((event) => { const eventDate = eventDates(event).sort().find((day) => day >= range.start && day <= range.end); if (!eventDate) return []; const details = setupEventDetails(event, eventDate); return [{ event, details, overlap: spacesOverlap({ venue }, event) }]; })
+    return currentEvents.flatMap((event) => { const eventDate = futureEventDate(event, today); if (!eventDate) return []; const details = setupEventDetails(event, eventDate); return [{ event, details, overlap: spacesOverlap({ venue }, event) }]; })
       .sort((left, right) => left.details.eventDate.localeCompare(right.details.eventDate) || String(left.details.time).localeCompare(String(right.details.time)) || Number(right.overlap) - Number(left.overlap) || left.details.title.localeCompare(right.details.title, "ko"));
   }
   function formatSetupCandidateLabel(details, includeSecondary = false) {
@@ -1181,7 +1217,7 @@
     const placeholder = `<option value="">대상 공간을 선택하세요</option>`;
     return placeholder + groups.map((group) => { const rows = options.filter((item) => item.group === group); return rows.length ? `<optgroup label="${group}">${rows.map((item) => `<option value="${item.label}" ${item.code === selectedCode ? "selected" : ""}>${item.label}</option>`).join("")}</optgroup>` : ""; }).join("");
   }
-  function setupScheduledDate(item) { const override = state.setupOverrides[item?.key] || {}; return override.scheduledDate || item?.scheduledDate || item?.metadata?.scheduledDate || item?.metadata?.setupOverride?.scheduledDate || override.eventDate || item?.metadata?.setupOverride?.eventDate || item?.next?.date || ""; }
+  function setupScheduledDate(item) { const override = state.setupOverrides[item?.key] || {}; return override.scheduledDate || item?.scheduledDate || item?.metadata?.scheduledDate || item?.metadata?.setupOverride?.scheduledDate || (item?.rawSetupCandidate ? "" : override.eventDate || item?.metadata?.setupOverride?.eventDate || item?.next?.date || ""); }
   function findLocalSetupDuplicate(eventOrderId, venue, eventDate, blocks = null) {
     if (!blocks) { const range = setupCandidateDateRange(); blocks = []; for (let day = range.start; day <= range.end; day = addDays(day, 1)) blocks.push(...allBlocks(day)); }
     return blocks.find((item) => item.type === "next_setup" && String(item.eventOrderId) === String(eventOrderId) && normalize(item.venue) === normalize(venue) && setupScheduledDate(item) === eventDate) || null;
@@ -1235,6 +1271,7 @@
     dialog.showModal();
   }
   function editSetupTask(item) {
+    item = ensurePersistentSetupBlock(item);
     const dialog = root.querySelector("[data-setup-editor]");
     const initialVenue = window.BANQUET_ERP_VENUE_UTILS.venueLabel(item.venue);
     dialog.innerHTML = `<form method="dialog" data-setup-editor-form data-key="${escapeHtml(item.key)}"><header><div><span class="eyebrow">Pinned setup</span><h3>세팅 작업 수정</h3></div><button type="button" data-setup-editor-close aria-label="닫기">×</button></header><label class="setup-venue-picker">공간<input type="search" data-setup-venue-search placeholder="공간 검색 (예: 부, 카2, 컨A)" autocomplete="off"><select name="venue" required>${renderSetupVenueOptions(initialVenue)}</select></label><label>연결 행사<select name="eventOrderId">${renderSetupEventOptions(initialVenue, item.eventOrderId)}</select></label><p class="setup-event-secondary" data-setup-event-secondary></p><div class="setup-editor-grid"><label>예정 날짜<input name="scheduledDate" type="date" value="${escapeHtml(setupScheduledDate(item))}"></label><label>예정 시간<input name="scheduledTime" type="time" value="${escapeHtml(item.scheduledTime || state.setupOverrides[item.key]?.scheduledTime || item.next?.time || item.time || "")}"></label></div><label>메모<textarea name="memo">${escapeHtml(item.memo || "")}</textarea></label><section class="setup-editor-items"><div><strong>하위 세팅 항목</strong><button type="button" data-editor-child-add>+ 세팅 항목</button></div><div data-editor-child-list>${renderSetupEditorChildren(item.key)}</div></section><footer><button type="button" data-setup-editor-close>취소</button><button type="submit" class="primary-button">저장</button></footer></form>`;
@@ -1255,6 +1292,8 @@
     dialog.showModal();
   }
   function bindEvents() {
+    root.querySelectorAll("[data-setup-section-toggle]").forEach((button) => button.onclick = () => { if (button.dataset.setupSectionToggle === "pinned") pinnedSetupSectionOpen = !pinnedSetupSectionOpen; else setupCandidateSectionOpen = !setupCandidateSectionOpen; render(); });
+    root.querySelector("[data-setup-candidate-more]")?.addEventListener("click", () => { setupCandidateVisibleCount += 20; render(); });
     root.querySelectorAll("[data-setup-summary-group]").forEach((button) => button.onclick = () => { const group = button.dataset.setupSummaryGroup; pinnedSetupOpenGroup = pinnedSetupOpenGroup === group ? "" : group; expandedPinnedSetupGroups.delete(group); render(); });
     root.querySelector("[data-setup-summary-all]")?.addEventListener("click", () => { pinnedSetupOpenGroup = pinnedSetupOpenGroup === "all" ? "" : "all"; if (pinnedSetupOpenGroup === "all") expandedPinnedSetupGroups.clear(); render(); });
     root.querySelectorAll("[data-setup-more]").forEach((button) => button.onclick = () => { expandedPinnedSetupGroups.add(button.dataset.setupMore); render(); });
@@ -1277,7 +1316,7 @@
     root.querySelectorAll("[data-assignee-select]").forEach((select) => select.onchange = () => setChecklistAssignee(select.closest("[data-key]").dataset.key, select.closest("[data-item-id]").dataset.itemId, select.value));
     root.querySelector("[data-general-board-add]")?.addEventListener("click", () => openDialog());
     root.querySelector("[data-setup-create]")?.addEventListener("click", createSetupTask);
-    root.querySelectorAll("[data-setup-detail]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = allBlocks(seoulDateKey(), currentEvents).find((block) => block.key === key); if (item) openDetailDialog(item); });
+    root.querySelectorAll("[data-setup-detail]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = findSetupListItem(key); if (item) openDetailDialog(item); });
     root.querySelectorAll("[data-venue-task-add]").forEach((button) => button.onclick = () => openDialog(null, { eventOrderId: button.dataset.eventOrderId, venue: button.dataset.venue, spaceId: button.dataset.spaceId }));
     root.querySelector("[data-board-cancel]").onclick = () => closeDialog();
     root.querySelector("[data-board-date]").onchange = (event) => { selectDate(event.target.value); render(); };
@@ -1293,7 +1332,7 @@
     if (window.matchMedia?.("(max-width: 768px)").matches) root.querySelectorAll("[data-detail-key]").forEach((card) => {
       const open = (event) => {
         if (event.target.closest("button,input,select,textarea,a,label")) return;
-        const block = allBlocks().find((item) => item.key === card.dataset.detailKey);
+        const block = allBlocks().find((item) => item.key === card.dataset.detailKey) || findSetupListItem(card.dataset.detailKey);
         if (block) openDetailDialog(block);
       };
       card.onclick = open;
@@ -1332,7 +1371,7 @@
     root.querySelectorAll("[data-briefing-add]").forEach((button) => button.onclick = () => { const key = button.closest("[data-key]").dataset.key; const item = ensurePersistentSetupBlock(allBlocks(seoulDateKey(), currentEvents).find((block) => block.key === key)); if (item) { saveState(); syncItem(item); render(); } });
     root.querySelectorAll("[data-field-notes]").forEach((button) => button.onclick = () => { const event = currentEvents.find((item) => String(item.id) === String(button.dataset.eventOrderId)); window.BANQUET_ERP_EVENT_ATTACHMENTS?.openFieldNotes(button.dataset.eventOrderId, event?.eventName || event?.companyName || "행사"); });
     root.querySelectorAll("[data-event-attachments]").forEach((button) => button.onclick = () => { const event = currentEvents.find((item) => String(item.id) === String(button.dataset.eventOrderId)); window.BANQUET_ERP_EVENT_ATTACHMENTS?.openEventAttachments(button.dataset.eventOrderId, event?.eventName || event?.companyName || "행사"); });
-    root.querySelectorAll("[data-setup-edit]").forEach((button) => button.onclick = () => { const item = allBlocks().find((block) => block.key === button.closest("[data-key]").dataset.key); if (item) editSetupTask(item); });
+    root.querySelectorAll("[data-setup-edit]").forEach((button) => button.onclick = () => { const item = findSetupListItem(button.closest("[data-key]").dataset.key); if (item) editSetupTask(item); });
     root.querySelectorAll("[data-add-item]").forEach((button) => button.onclick = () => { const name = prompt("세팅 항목명"); if (!normalize(name)) return; const quantity = prompt("수량 (선택)", "") || ""; const unit = prompt("단위 (선택)", "") || ""; const memo = prompt("메모 (선택)", "") || ""; const item = { id: crypto.randomUUID(), parentKey: button.closest("[data-key]").dataset.key, date: selectedDate, name: normalize(name), quantity, unit, memo, completed: false }; state.checklist.push(item); saveState(); syncChecklist(item); render(); });
     root.querySelectorAll("[data-check-item]").forEach((input) => input.onchange = () => { const item = state.checklist.find((x) => x.id === input.closest("[data-item-id]").dataset.itemId); if (item) { item.completed = input.checked; syncChecklist(item); } saveState(); render(); });
     root.querySelectorAll("[data-edit-item]").forEach((button) => button.onclick = () => { const item = state.checklist.find((entry) => entry.id === button.closest("[data-item-id]").dataset.itemId); if (!item) return; const name = prompt("세팅 항목명", item.name); if (!normalize(name)) return; const quantity = prompt("수량 (선택)", item.quantity || ""); if (quantity === null) return; const unit = prompt("단위 (선택)", item.unit || ""); if (unit === null) return; const memo = prompt("메모 (선택)", item.memo || ""); if (memo === null) return; Object.assign(item, { name: normalize(name), quantity, unit, memo }); saveState(); syncChecklist(item); render(); });
@@ -1411,6 +1450,9 @@
   window.BANQUET_ERP_OPERATION_BOARD.resolveSetupContext = resolveSetupContext;
   window.BANQUET_ERP_OPERATION_BOARD.getSetupScheduleWarnings = getSetupScheduleWarnings;
   window.BANQUET_ERP_OPERATION_BOARD.renderSetupContextDetails = renderSetupContextDetails;
+  window.BANQUET_ERP_OPERATION_BOARD.futureEventDate = futureEventDate;
+  window.BANQUET_ERP_OPERATION_BOARD.rawSetupCandidate = rawSetupCandidate;
+  window.BANQUET_ERP_OPERATION_BOARD.classifySetupBoardItems = classifySetupBoardItems;
   window.BANQUET_ERP_OPERATION_BOARD.dedupePinnedSetupTasks = dedupePinnedSetupTasks;
   window.BANQUET_ERP_OPERATION_BOARD.setupCardInfo = setupCardInfo;
   window.BANQUET_ERP_OPERATION_BOARD.getRecentCompletedSetupTasks = getRecentCompletedSetupTasks;

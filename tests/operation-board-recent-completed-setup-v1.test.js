@@ -47,7 +47,7 @@ const sameDate = board.completedSetupDisplayInfo({ key: "same", completed: true,
 assert.strictEqual(sameDate.summary, "행사 10/28 · 대한전기학회");
 assert.strictEqual((sameDate.summary.match(/10\/28/g) || []).length, 1, "세팅일과 행사일이 같으면 날짜를 중복 표시하지 않아야 한다");
 
-assert(source.includes("getRecentCompletedSetupTasks(blocks, seoulDateKey())"));
+assert(source.includes('getRecentCompletedSetupTasks(state.manual.filter((item) => item.type === "next_setup"), seoulDateKey())'));
 assert(source.includes("getRecentCompletedSetupTasks(tasks, seoulDateKey())"), "PC/모바일 및 주간 UI가 같은 완료 필터를 사용해야 한다");
 assert(source.includes("completed.map(renderCompletedSetupRow)"), "표시 count와 렌더 목록이 같은 filtered collection을 사용해야 한다");
 assert(source.includes('data-restore-complete>복원'), "기존 복원 기능을 유지해야 한다");
