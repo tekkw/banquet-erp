@@ -160,15 +160,18 @@ const groupedTasks = [
 board._setStateForTest({ pins: Object.fromEntries(groupedTasks.map((item) => [item.key, true])), completions: {} });
 const groupedOn23 = board.groupPinnedSetupTasks(groupedTasks, "2026-10-23", "2026-10-23");
 assert.deepStrictEqual(Array.from(groupedOn23.overdue, (item) => item.key), ["past-old", "past-near"], "A/G. 지연은 오래된 scheduledDate/time 순이다");
-assert.deepStrictEqual(Array.from(groupedOn23.upcoming, (item) => item.key), ["today", "future-b", "future-a"], "B/C/H. 예정은 가까운 날짜/time/venue 순이다");
+assert.deepStrictEqual(Array.from(groupedOn23.today, (item) => item.key), ["today"], "B. 실제 오늘 task는 별도 오늘 세팅 그룹이어야 한다");
+assert.deepStrictEqual(Array.from(groupedOn23.upcoming, (item) => item.key), ["future-b", "future-a"], "C/H. 예정은 가까운 날짜/time/venue 순이다");
 const groupedOn24 = board.groupPinnedSetupTasks(groupedTasks, "2026-10-24", "2026-10-24");
 assert(groupedOn24.overdue.some((item) => item.key === "today") && !groupedOn24.upcoming.some((item) => item.key === "today"), "E. 같은 task가 날짜 경과 후 예정에서 지연으로 이동한다");
 assert(!groupedOn23.overdue.some((item) => item.key === "done") && !groupedOn23.upcoming.some((item) => item.key === "done"), "D. 완료 task는 양쪽에서 제외한다");
+const actualTodayKey = board.getActualTodaySeoul(new Date());
+const shiftDate = (days) => { const date = new Date(`${actualTodayKey}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
 const accordionTasks = [
-  ...Array.from({ length: 9 }, (_, index) => ({ ...futurePinned, key: `accordion-overdue-${index}`, scheduledDate: `2026-10-${String(index + 1).padStart(2, "0")}`, scheduledTime: "09:00", metadata: index < 2 ? { readiness: "blocked" } : {} })),
-  { ...futurePinned, key: "accordion-upcoming", scheduledDate: "2026-10-24", scheduledTime: "07:00" },
+  ...Array.from({ length: 9 }, (_, index) => ({ ...futurePinned, key: `accordion-overdue-${index}`, scheduledDate: shiftDate(-(index + 1)), scheduledTime: "09:00", metadata: index < 2 ? { readiness: "blocked" } : {} })),
+  { ...futurePinned, key: "accordion-upcoming", scheduledDate: shiftDate(1), scheduledTime: "07:00" },
 ];
-board.setSelectedDate("2026-10-23");
+board.setSelectedDate(shiftDate(3));
 board._setStateForTest({ pins: Object.fromEntries(accordionTasks.map((item) => [item.key, true])), completions: {} });
 board._setPinnedSetupUiForTest();
 const collapsedSetup = board.renderSetupTaskBoard(accordionTasks);
@@ -187,7 +190,7 @@ const allPanels = board.renderSetupTaskBoard(accordionTasks);
 assert(allPanels.includes('data-setup-panel="overdue"') && allPanels.includes('data-setup-panel="upcoming"') && allPanels.includes('data-setup-panel="attention"'), "전체 보기는 세 그룹을 함께 표시해야 한다");
 const withoutOneTask = accordionTasks.slice(1);
 board._setStateForTest({ pins: Object.fromEntries(withoutOneTask.map((item) => [item.key, true])), completions: {} });
-assert.strictEqual(board.pinnedSetupSummary(withoutOneTask, "2026-10-23", "2026-10-23").overdue.length, 8, "E/F. 완료 또는 고정 해제 후 summary count가 즉시 감소해야 한다");
+assert.strictEqual(board.pinnedSetupSummary(withoutOneTask, shiftDate(3), actualTodayKey).overdue.length, 8, "E/F. 완료 또는 고정 해제 후 summary count가 즉시 감소해야 한다");
 context.window.matchMedia = () => ({ matches: true }); const mobilePersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 context.window.matchMedia = () => ({ matches: false }); const pcPersistent = Array.from(board.allBlocks("2026-10-21", []), (item) => item.key);
 assert.deepStrictEqual(pcPersistent, mobilePersistent, "F. PC/모바일이 같은 지속 표시 결과를 사용해야 한다");

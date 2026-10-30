@@ -372,6 +372,7 @@ body {
 .setup-task-completed { font-size: 11px; }
 .setup-task-completed summary { cursor: pointer; color: var(--dash-muted); }
 .setup-overdue-badge { color: #fecaca; border-color: rgba(248, 113, 113, .45); background: rgba(127, 29, 29, .35); }
+.setup-today-badge { padding: 2px 6px; border: 1px solid rgba(96, 165, 250, .48); border-radius: 999px; background: rgba(30, 64, 175, .3); color: #bfdbfe; font-size: 9px !important; font-weight: 800; }
 .daily-operations-briefing { display: grid; gap: 10px; margin: 12px 0; padding: 14px; border: 1px solid rgba(198, 166, 103, .32); border-radius: 12px; background: rgba(198, 166, 103, .08); }
 .daily-operations-briefing-heading strong, .daily-operations-briefing-heading small { display: block; }
 .daily-operations-briefing-heading small { margin-top: 3px; color: var(--dash-muted, #94a3b8); font-size: 11px; }
@@ -416,7 +417,7 @@ body {
   .setup-task-card { grid-template-columns: minmax(0, 1fr); gap: 7px; }
   .setup-task-main { grid-template-columns: auto minmax(0, 1fr) auto; }
   .setup-task-main > div strong { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
-  .setup-task-main .setup-overdue-badge, .setup-task-main .setup-source-badge { grid-column: 3; max-width: 72px; }
+  .setup-task-main .setup-today-badge, .setup-task-main .setup-overdue-badge, .setup-task-main .setup-source-badge { grid-column: 3; max-width: 72px; }
   .setup-task-summary { display: -webkit-box; white-space: normal; word-break: keep-all; overflow-wrap: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
   .setup-task-actions { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; }
   .setup-task-actions button { flex: 0 0 auto; white-space: nowrap; }
