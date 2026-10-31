@@ -1529,7 +1529,7 @@
       const openButton = document.createElement("button");
       openButton.id = "layoutWorkspaceAutoGridButton";
       openButton.type = "button";
-      openButton.textContent = "자동 Grid";
+      openButton.textContent = "Auto Grid";
       if (workspaceImportBaseButton) workspaceImportBaseButton.insertAdjacentElement("afterend", openButton);
       else toolbar.append(openButton);
       const panel = document.createElement("section");
@@ -1539,15 +1539,11 @@
       panel.innerHTML = `
         <div class="layout-auto-grid-header"><strong>mm 자동 Grid 배치</strong><button type="button" data-auto-grid-close aria-label="닫기">×</button></div>
         <div class="layout-auto-grid-fields">
-          <label>테이블 폭(mm)<input data-auto-grid-width type="number" min="1" value="1800"></label>
-          <label>테이블 깊이(mm)<input data-auto-grid-depth type="number" min="1" value="450"></label>
-          <label>열<input data-auto-grid-columns type="number" min="1" value="3"></label>
-          <label>행<input data-auto-grid-rows type="number" min="1" value="7"></label>
-          <label>좌우 간격(mm)<input data-auto-grid-hgap type="number" min="0" value="900"></label>
-          <label>앞뒤 간격(mm)<input data-auto-grid-vgap type="number" min="0" value="1300"></label>
-          <label>시작 X(mm)<input data-auto-grid-origin-x type="number" step="10"></label>
-          <label>시작 Y(mm)<input data-auto-grid-origin-y type="number" step="10"></label>
-          <label>정면 방향<select data-auto-grid-front><option value="north">북</option><option value="south">남</option><option value="east">동</option><option value="west">서</option></select></label>
+          <div class="layout-auto-grid-field-group"><strong>테이블</strong><div><label>폭(mm)<input data-auto-grid-width type="number" min="1" value="1800"></label><label>깊이(mm)<input data-auto-grid-depth type="number" min="1" value="450"></label></div></div>
+          <div class="layout-auto-grid-field-group"><strong>배치</strong><div><label>열<input data-auto-grid-columns type="number" min="1" value="3"></label><label>행<input data-auto-grid-rows type="number" min="1" value="7"></label></div></div>
+          <div class="layout-auto-grid-field-group"><strong>간격</strong><div><label>좌우(mm)<input data-auto-grid-hgap type="number" min="0" value="900"></label><label>앞뒤(mm)<input data-auto-grid-vgap type="number" min="0" value="1300"></label></div></div>
+          <div class="layout-auto-grid-field-group"><strong>시작 위치</strong><div><label>X(mm)<input data-auto-grid-origin-x type="number" step="10"></label><label>Y(mm)<input data-auto-grid-origin-y type="number" step="10"></label></div></div>
+          <div class="layout-auto-grid-field-group direction"><strong>방향</strong><div><label>정면 방향<select data-auto-grid-front><option value="north">북</option><option value="south">남</option><option value="east">동</option><option value="west">서</option></select></label></div></div>
         </div>
         <p class="layout-auto-grid-helper">자연어 명령 또는 아래 값을 사용해 mm 좌표 미리보기를 만듭니다.</p>
         <p class="layout-auto-grid-parsed" data-auto-grid-parsed hidden></p>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=layout-intent-auto-grid-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=floorplan-toolbar-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -465,25 +465,36 @@
               <select id="layoutWorkspaceSavedLayoutSelect" aria-label="저장된 레이아웃 불러오기"><option value="">저장된 레이아웃</option></select>
             </div>
             <div class="layout-editor-toolbar-row tool-row">
-              <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
-              <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
-              <button id="layoutWorkspaceImportBaseButton" type="button">＋ 기본도면 불러오기</button>
-              <button id="layoutWorkspaceBackLibraryButton" type="button">← 라이브러리</button>
-              <button id="layoutWorkspaceSaveButton" type="button">레이아웃 저장</button>
-              <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
-              <button id="layoutWorkspacePreviewButton" type="button">미리보기</button>
-              <button id="layoutWorkspaceExportButton" type="button">PNG 내보내기</button>
-              <button id="layoutWorkspaceExportPdfButton" type="button">PDF 내보내기</button>
-              <button id="layoutWorkspaceUndoButton" type="button">↶ 실행 취소</button>
-              <button id="layoutWorkspaceRedoButton" type="button">↷ 다시 실행</button>
-              <button id="layoutWorkspaceZoomInButton" type="button">＋ 확대</button>
-              <button id="layoutWorkspaceZoomOutButton" type="button">－ 축소</button>
-              <button id="layoutWorkspaceFitButton" type="button">□ 화면 맞춤</button>
-              <button id="layoutWorkspaceActualSizeButton" type="button">100%</button>
-              <button id="layoutWorkspaceCenterButton" type="button">가운데</button>
-              <button id="layoutWorkspaceGridButton" type="button">격자</button>
-              <button id="layoutWorkspaceSnapButton" type="button">스냅</button>
-              <label class="layout-inline-control">도면 크기
+              <div class="layout-toolbar-core">
+                <input id="layoutWorkspaceNameInput" type="text" placeholder="행사 레이아웃 이름" aria-label="행사 레이아웃 이름">
+                <button id="layoutWorkspaceNewButton" type="button">새 레이아웃</button>
+                <button id="layoutWorkspaceImportBaseButton" type="button">＋ 기본도면 불러오기</button>
+                <button id="layoutWorkspaceBackLibraryButton" type="button">← 라이브러리</button>
+                <button id="layoutWorkspaceSaveButton" type="button">저장</button>
+                <button id="layoutWorkspacePreviewButton" type="button">미리보기</button>
+                <button id="layoutWorkspaceUndoButton" class="layout-toolbar-icon" type="button" title="실행 취소" aria-label="실행 취소">↶</button>
+                <button id="layoutWorkspaceRedoButton" class="layout-toolbar-icon" type="button" title="다시 실행" aria-label="다시 실행">↷</button>
+              </div>
+              <details class="layout-toolbar-menu">
+                <summary>보기/편집</summary>
+                <div class="layout-toolbar-menu-content">
+                  <button id="layoutWorkspaceZoomInButton" type="button">＋ 확대</button>
+                  <button id="layoutWorkspaceZoomOutButton" type="button">－ 축소</button>
+                  <button id="layoutWorkspaceFitButton" type="button">□ 화면 맞춤</button>
+                  <button id="layoutWorkspaceActualSizeButton" type="button">100%</button>
+                  <button id="layoutWorkspaceCenterButton" type="button">가운데</button>
+                  <button id="layoutWorkspaceGridButton" type="button">격자</button>
+                  <button id="layoutWorkspaceSnapButton" type="button">스냅</button>
+                  <label class="layout-inline-control">도면 투명도<input id="layoutWorkspaceReferenceOpacityInput" type="range" min="10" max="100" value="40"></label>
+                  <label class="layout-inline-control">격자<select id="layoutWorkspaceGridSizeSelect" aria-label="격자 간격"><option value="50">50mm</option><option value="100">100mm</option><option value="250">250mm</option><option value="500" selected>500mm</option><option value="1000">1000mm</option><option value="2000">2000mm</option><option value="5000">5000mm</option><option value="10000">10000mm</option><option value="custom">직접 입력</option></select></label>
+                  <label id="layoutWorkspaceCustomGridControl" class="layout-inline-control" hidden>격자 간격<span class="layout-measure-row compact"><input id="layoutWorkspaceCustomGridInput" type="number" min="1" step="0.001" inputmode="decimal" value="1000"><select id="layoutWorkspaceCustomGridUnitSelect"><option value="m">m</option><option value="cm">cm</option><option value="mm" selected>mm</option></select></span></label>
+                  <div class="layout-toolbar-checks" aria-label="보기 항목"><label><input id="layoutWorkspaceViewGridInput" type="checkbox"> Grid</label><label><input id="layoutWorkspaceViewFloorplanInput" type="checkbox" checked> 기본 도면</label><label><input id="layoutWorkspaceViewDimensionsInput" type="checkbox" checked> 치수 표시</label><label><input id="layoutWorkspaceViewNamesInput" type="checkbox" checked> 오브젝트 이름</label><label><input id="layoutWorkspaceViewCoordsInput" type="checkbox"> 좌표 표시</label></div>
+                </div>
+              </details>
+              <details class="layout-toolbar-menu">
+                <summary>도면 도구</summary>
+                <div class="layout-toolbar-menu-content">
+                  <label class="layout-inline-control">도면 크기
                 <select id="layoutWorkspaceDrawingPresetSelect" aria-label="도면 크기 프리셋">
                   <option value="20000x20000">20m × 20m</option>
                   <option value="30000x20000">30m × 20m</option>
@@ -513,69 +524,45 @@
                   </select>
                 </span>
               </label>
-              <button id="layoutWorkspaceApplyDrawingSizeButton" type="button">도면 크기 적용</button>
-              <div class="layout-tool-group" aria-label="편집 모드">
+                  <button id="layoutWorkspaceApplyDrawingSizeButton" type="button">도면 크기 적용</button>
+                  <div class="layout-tool-group" aria-label="편집 모드">
                 <button id="layoutWorkspaceModeBaseButton" type="button">기본도면</button>
                 <button id="layoutWorkspaceModeLayoutButton" type="button">레이아웃</button>
-              </div>
-              <div class="layout-tool-group" aria-label="도구">
+                  </div>
+                  <div class="layout-tool-group" aria-label="도구">
                 <button id="layoutWorkspaceSelectToolButton" type="button">선택</button>
                 <button id="layoutWorkspaceWallToolButton" type="button">벽</button>
                 <button id="layoutWorkspaceRectToolButton" type="button">사각 영역</button>
                 <button id="layoutWorkspaceCalibrateToolButton" type="button">축척 보정</button>
-              </div>
-              <label class="layout-inline-control">도면 투명도
-                <input id="layoutWorkspaceReferenceOpacityInput" type="range" min="10" max="100" value="40">
-              </label>
-              <label class="layout-inline-control">격자
-                <select id="layoutWorkspaceGridSizeSelect" aria-label="격자 간격">
-                  <option value="50">50mm</option>
-                  <option value="100">100mm</option>
-                  <option value="250">250mm</option>
-                  <option value="500" selected>500mm</option>
-                  <option value="1000">1000mm</option>
-                  <option value="2000">2000mm</option>
-                  <option value="5000">5000mm</option>
-                  <option value="10000">10000mm</option>
-                  <option value="custom">직접 입력</option>
-                </select>
-              </label>
-              <label id="layoutWorkspaceCustomGridControl" class="layout-inline-control" hidden>격자 간격
-                <span class="layout-measure-row compact">
-                  <input id="layoutWorkspaceCustomGridInput" type="number" min="1" step="0.001" inputmode="decimal" value="1000">
-                  <select id="layoutWorkspaceCustomGridUnitSelect">
-                    <option value="m">m</option>
-                    <option value="cm">cm</option>
-                    <option value="mm" selected>mm</option>
-                  </select>
-                </span>
-              </label>
-              <details class="layout-view-menu">
-                <summary>보기</summary>
-                <label><input id="layoutWorkspaceViewGridInput" type="checkbox"> Grid</label>
-                <label><input id="layoutWorkspaceViewFloorplanInput" type="checkbox" checked> 기본 도면</label>
-                <label><input id="layoutWorkspaceViewDimensionsInput" type="checkbox" checked> 치수 표시</label>
-                <label><input id="layoutWorkspaceViewNamesInput" type="checkbox" checked> 오브젝트 이름</label>
-                <label><input id="layoutWorkspaceViewCoordsInput" type="checkbox"> 좌표 표시</label>
-              </details>
-              <label class="layout-inline-control">치수
+                  </div>
+                  <label class="layout-inline-control">치수
                 <select id="layoutWorkspaceDimensionModeSelect" aria-label="치수 보기 모드">
                   <option value="hidden">치수 숨김</option>
                   <option value="selected" selected>선택한 객체만 표시</option>
                   <option value="all">모든 객체 표시</option>
                 </select>
               </label>
-              <label class="layout-inline-control">치수 단위
+                  <label class="layout-inline-control">치수 단위
                 <select id="layoutWorkspaceDimensionUnitSelect" aria-label="치수 표시 단위">
                   <option value="m" selected>m</option>
                   <option value="cm">cm</option>
                   <option value="mm">mm</option>
                 </select>
               </label>
-              <label class="layout-inline-check">
+                  <label class="layout-inline-check">
                 <input id="layoutWorkspaceExportDimensionsInput" type="checkbox" checked>
                 미리보기/PNG 치수 포함
-              </label>
+                  </label>
+                </div>
+              </details>
+              <details class="layout-toolbar-menu">
+                <summary>저장/내보내기</summary>
+                <div class="layout-toolbar-menu-content compact">
+                  <button id="layoutWorkspaceSaveAsButton" type="button">다른 이름 저장</button>
+                  <button id="layoutWorkspaceExportButton" type="button">PNG 내보내기</button>
+                  <button id="layoutWorkspaceExportPdfButton" type="button">PDF 내보내기</button>
+                </div>
+              </details>
             </div>
           </div>
           <div id="layoutWorkspaceFloorplanInfo" class="layout-floorplan-info">
@@ -1127,7 +1114,7 @@
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=layout-intent-auto-grid-v1"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-toolbar-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
   <script src="./src/operationBoard.js?v=setup-groups-v1"></script>
