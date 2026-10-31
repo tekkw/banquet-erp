@@ -643,7 +643,7 @@ function classifyChatQuestion(question: string): ChatIntent {
   const event = /(행사|일정|스케줄|캘린더|예약|오늘|내일|이번주|다음주|이번달|월별|연간|주최|고객|인원|매출|조식|중식|석식|디너|뷔페|커피브레이크|이벤트오더)/i.test(text);
   const asset = /(자산|비품|장비|재고|수량|몇개|몇대|입고|출고|이동|반납|파손|분실|테이블|의자|이젤|냉온수기|스탠드|포디움|고블렛|하이볼|소주잔|나이프|포크|스푼|커트러리)/i.test(text);
   const recommendItem = /(추천|필요기물|준비물|기물|커트러리|세팅|양식|웨스턴|뷔페기물|음주류|음료|계산|체크리스트)/i.test(text);
-  const knowledge = /(규칙|노하우|방법|기준|주의|해야|어떻게|가능|불가|추천|운영|배운|지식|알려줘|설명|왜|버전|이력|수정|폐기|대체)/i.test(text);
+  const knowledge = /(규칙|노하우|방법|기준|주의사항|어떻게\s*운영|운영\s*지식|배운\s*점|지식|설명|왜|버전|이력|폐기|대체)/i.test(text);
   const operationResult = /(운영결과|운영 결과|결과|실제운영|실제 운영|사후|리뷰|평가|고객피드백|고객 피드백|계획대비|계획 대비|실적)/i.test(text);
   const incident = /(사고|문제|클레임|불만|컴플레인|파손|분실|원인|조치|재발|주의사항|이슈|incident|claim)/i.test(text);
   const staffResult = /(인력|직원|스태프|투입|충분|부족|추천인원|추천 인원|실제인원|실제 인원|staff)/i.test(text);
@@ -688,7 +688,7 @@ function normalizeIntentText(value: string) {
 
 async function loadChatDataContext(question: string): Promise<ChatDataContext> {
   const intent = classifyChatQuestion(question);
-  const shouldLoadKnowledge = true;
+  const shouldLoadKnowledge = intent.knowledge;
   const sources = new Set<string>();
 
   const [eventData, venueData, banquetAssets, recommendItems, venueLayoutImages, operationalHistoryData, approvedKnowledge] = await Promise.all([
@@ -1400,18 +1400,18 @@ async function planErpReadActions(question: string, context: Record<string, unkn
   if (!question.trim() || !actions.length) throw new Error("ERP planner 입력 또는 action schema가 비어 있습니다.");
   const systemPrompt = [
     "You plan read-only actions for a Korean banquet ERP conversation agent.",
-    "Return only compact JSON: {goal,steps:[{action,arguments,reason}],responseMode}.",
+    "Return only compact JSON: {goal,steps:[{action,arguments,reason}],responseMode,groupBy,includeCount,includePeople}.",
     `Use 1-${maxSteps} steps and only action IDs supplied by the user payload. Never invent an action.`,
     "Never produce SQL, table names, mutations, writes, approvals, or UI actions.",
     "Current utterance overrides prior context. Use prior lastResults only for real follow-up references.",
     "For list or aggregate questions, query all matching events and do not ask the user to select one.",
     "Use detail clarification only when exactly one event is required and cannot be identified.",
-    "Arguments may include date=today|tomorrow, dateRange=this_week, venue, filters, aggregate, compareWithNext, incompleteOnly, scheduledOnOrBeforeToday.",
+    "Arguments may include date=today|tomorrow, dateRange=this_week|next_week, venue, filter, aggregate, compareWithNext, incompleteOnly, scheduledOnOrBeforeToday.",
     "Coffee preparation normally needs query_events then get_event_schedule and get_event_items.",
     "Remaining setup needs get_next_setup_tasks. Hall turnover needs query_events, resolve_next_event, and get_layout_info.",
     "Special notes need query_events then get_event_notes.",
     "For RE-INFORM or 재인폼 questions pass filter=reinform to get_event_notes.",
-    "responseMode must be list, detail, or aggregate.",
+    "responseMode must be count, list, grouped_list, detail, or aggregate. Use grouped_list with groupBy=venue for 행사장별/홀별/장소별 and groupBy=date for 날짜별/요일별. If the user asks 알려줘, 뭐가 있어, 목록, 전부, 어디, or 어떤 행사, never collapse available items to count only.",
   ].join("\n");
   const response = await fetch("https://api.openai.com/v1/responses", { method: "POST", headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: OPENAI_MODEL, input: [{ role: "system", content: systemPrompt }, { role: "user", content: JSON.stringify({ question, context, actions, maxSteps }) }] }) });
   const body = await response.json().catch(() => null);
@@ -1421,7 +1421,9 @@ async function planErpReadActions(question: string, context: Record<string, unkn
   if (!parsed || !Array.isArray(parsed.steps)) throw new Error("ERP planner JSON parsing failed.");
   const steps = parsed.steps.slice(0, maxSteps).map((item) => item && typeof item === "object" ? item as Record<string, unknown> : {}).map((item) => ({ action: String(item.action || ""), arguments: item.arguments && typeof item.arguments === "object" && !Array.isArray(item.arguments) ? item.arguments : {}, reason: String(item.reason || "") }));
   if (!steps.length || steps.some((step) => !ERP_PLANNER_ACTIONS.has(step.action) || !actions.some((action) => action.id === step.action))) throw new Error("ERP planner returned an unsupported action.");
-  return { goal: String(parsed.goal || question), steps, responseMode: ["list", "detail", "aggregate"].includes(String(parsed.responseMode)) ? String(parsed.responseMode) : "list" };
+  const responseMode = ["count", "list", "grouped_list", "detail", "aggregate"].includes(String(parsed.responseMode)) ? String(parsed.responseMode) : "list";
+  const groupBy = ["venue", "date"].includes(String(parsed.groupBy)) ? String(parsed.groupBy) : "";
+  return { goal: String(parsed.goal || question), steps, responseMode, groupBy, includeCount: Boolean(parsed.includeCount), includePeople: Boolean(parsed.includePeople) };
 }
 
 function normalizeVisualSummary(value: unknown) {

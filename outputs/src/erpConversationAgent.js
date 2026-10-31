@@ -62,7 +62,21 @@
     const registry = { ...tools };
     return Object.freeze({ has: (name) => typeof registry[name] === "function", run: (name, input) => { if (typeof registry[name] !== "function") throw new Error(`ERP tool not registered: ${name}`); return registry[name](input); }, names: () => Object.keys(registry) });
   }
-  const RESPONSE_MODES = new Set(["list", "detail", "aggregate"]);
+  const RESPONSE_MODES = new Set(["count", "list", "grouped_list", "detail", "aggregate"]);
+  const GROUP_BY = new Set(["venue", "date"]);
+  function inferPlannerResponseIntent(question, proposed = {}) {
+    const text = String(question || "").replace(/\s+/g, " ");
+    const currentGroupBy = /(?:행사장|홀|장소)\s*별/.test(text) ? "venue" : /(?:날짜|요일)\s*별/.test(text) ? "date" : ""; const groupBy = currentGroupBy || (GROUP_BY.has(proposed.groupBy) ? proposed.groupBy : "");
+    const asksList = /알려\s*줘|뭐가\s*있|목록|전부|어디|어떤\s*행사/.test(text);
+    const asksPeople = /몇\s*명|인원/.test(text);
+    const asksCount = /몇\s*(?:개|건)|건수/.test(text);
+    let responseMode = RESPONSE_MODES.has(proposed.responseMode) ? proposed.responseMode : "list";
+    if (currentGroupBy) responseMode = "grouped_list";
+    else if (asksPeople) responseMode = "aggregate";
+    else if (asksList) responseMode = "list";
+    else if (asksCount) responseMode = "count";
+    return { responseMode, groupBy, includeCount: Boolean(proposed.includeCount || asksCount || responseMode === "count" || responseMode === "grouped_list"), includePeople: Boolean(proposed.includePeople || asksPeople || /커피\s*브레이크|커피브레이크/.test(text)) };
+  }
   function plannerActionAllowed(action, registry) { const definition = registry?.getAction?.(action); return Boolean(definition && definition.type === "query" && definition.status === "active" && !definition.requiresApproval); }
   function validatePlannerPlan(rawPlan, registry, maxSteps = 4) {
     const source = rawPlan?.plan && typeof rawPlan.plan === "object" ? rawPlan.plan : rawPlan;
@@ -70,13 +84,13 @@
     const normalized = steps.map((step) => ({ action: String(step?.action || ""), arguments: step?.arguments && typeof step.arguments === "object" && !Array.isArray(step.arguments) ? step.arguments : {}, reason: String(step?.reason || "") })).filter((step) => plannerActionAllowed(step.action, registry));
     if (!normalized.length) throw new Error("안전하게 실행할 수 있는 조회 계획이 없습니다.");
     if (normalized.length !== steps.length) throw new Error("등록되지 않은 ERP 조회 action이 포함됐습니다.");
-    return { goal: String(source?.goal || "ERP 조회"), steps: normalized, responseMode: RESPONSE_MODES.has(source?.responseMode) ? source.responseMode : "list" };
+    return { goal: String(source?.goal || "ERP 조회"), steps: normalized, ...inferPlannerResponseIntent(source?.question || "", source || {}) };
   }
   async function requestPlanner({ question, context = {}, registry, request, maxSteps = 4 } = {}) {
     if (typeof request !== "function") throw new Error("ERP planner 요청 경로가 없습니다.");
     const actions = registry?.listPlannerActions?.() || [];
     const raw = await request({ mode: "erp_action_plan", question: String(question || ""), context, actions, maxSteps: Math.min(4, Math.max(1, Number(maxSteps) || 4)) });
-    return validatePlannerPlan(raw, registry, maxSteps);
+    const safe = validatePlannerPlan(raw, registry, maxSteps); return { ...safe, ...inferPlannerResponseIntent(question, safe) };
   }
   async function executePlannerPlan(plan, registry, context = {}) {
     const safePlan = validatePlannerPlan(plan, registry, 4); const results = []; const failures = [];
@@ -98,7 +112,7 @@
   function create(options = {}) {
     const storage = options.storage || global.sessionStorage; const key = options.storageKey || "banquetBoard.conversationContext.v1"; const maxSteps = Math.min(4, Math.max(1, Number(options.maxSteps) || 4));
     function load() { try { return { ...DEFAULT_CONTEXT, ...JSON.parse(storage?.getItem(key) || "{}") }; } catch { return { ...DEFAULT_CONTEXT }; } }
-    function save(context) { const next = { ...DEFAULT_CONTEXT, ...context, lastResults: Array.isArray(context?.lastResults) ? context.lastResults.slice(0, 20) : [] }; try { storage?.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ } return next; }
+    function save(context) { const next = { ...DEFAULT_CONTEXT, ...context, lastResults: Array.isArray(context?.lastResults) ? context.lastResults.slice(0, 100) : [] }; try { storage?.setItem(key, JSON.stringify(next)); } catch { /* storage unavailable */ } return next; }
     function plan(text, fastRoute = "") {
       const context = load(); const value = String(text || "").trim(); const results = context.lastResults || []; const ordinal = ordinalIndex(value, results.length); const venue = venueIn(value); const referencesRecent = hasRecentReference(value) || /(?:\d+(?:번째|번)|첫째|첫번째|둘째|두번째|셋째|세번째|넷째|네번째|마지막)/.test(value); const explicitRoute = fastRoute && fastRoute !== "conversation_agent";
       const contextVenue = venueIn(context.event?.venue || ""); const venueMatchesContext = global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(venue).size && global.BANQUET_ERP_VENUE_UTILS?.normalizeVenueSet(contextVenue).size ? global.BANQUET_ERP_VENUE_UTILS.spacesOverlap(venue, contextVenue) : compact(contextVenue).includes(compact(venue)) || compact(venue).includes(compact(contextVenue)); const eventReference = referencesRecent && context.event && (context.lastDomain === "event" || /행사|이벤\s*오더|이벤트\s*오더/.test(value)) && (!venue || !contextVenue || venueMatchesContext);
@@ -128,5 +142,5 @@
     return Object.freeze({ load, save, plan, submit, ordinalIndex: (text) => ordinalIndex(text, load().lastResults.length), maxSteps });
   }
 
-  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, validatePlannerPlan, requestPlanner, executePlannerPlan, shouldUsePlanner, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, normalizeSpeechTranscript, venueSimilarity, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
+  global.erpConversationAgent = Object.freeze({ create, createToolRegistry, validatePlannerPlan, requestPlanner, executePlannerPlan, shouldUsePlanner, inferPlannerResponseIntent, ordinalIndex, hasRecentReference, eventDocumentTool, normalizeTranscript, normalizeSpeechTranscript, venueSimilarity, seoulTodayKey, shiftDateKey, resolveDateReference, questionWithResolvedDate });
 })(window);

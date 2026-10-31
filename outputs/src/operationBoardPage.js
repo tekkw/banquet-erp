@@ -101,6 +101,7 @@
     const today = board.getActualTodaySeoul();
     if (value === "tomorrow") return { start: window.erpConversationAgent.shiftDateKey(today, 1), end: window.erpConversationAgent.shiftDateKey(today, 1) };
     if (value === "this_week") { const day = new Date(`${today}T00:00:00Z`).getUTCDay(); const start = window.erpConversationAgent.shiftDateKey(today, day === 0 ? -6 : 1 - day); return { start, end: window.erpConversationAgent.shiftDateKey(start, 6) }; }
+    if (value === "next_week") { const day = new Date(`${today}T00:00:00Z`).getUTCDay(); const thisMonday = window.erpConversationAgent.shiftDateKey(today, day === 0 ? -6 : 1 - day); const start = window.erpConversationAgent.shiftDateKey(thisMonday, 7); return { start, end: window.erpConversationAgent.shiftDateKey(start, 6) }; }
     if (/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return { start: value, end: value };
     return { start: today, end: today };
   }
@@ -115,7 +116,7 @@
     return { events: matched, range, venue };
   }
   function plannerEventDetail(args = {}) { const selected = plannerEventsFromArgs(args); return { events: selected.map((event) => ({ id: event.id, venue: eventVenue(event), organizer: event.companyName || event.eventName, eventName: event.eventName, guestCount: event.guestCount, dates: eventDateKeys(event), eventType: event.eventType })) }; }
-  function plannerEventSchedule(args = {}) { const selected = plannerEventsFromArgs(args); const pattern = args.filter === "coffee_break" ? /커피\s*브레이크|커피브레이크|coffee\s*break/i : args.filter === "meal" ? /중식|석식|식사|뷔페|lunch|dinner/i : null; return { events: selected, schedules: selected.flatMap((event) => (event.schedule || []).filter((row) => !pattern || pattern.test(row.content || "")).map((row) => ({ ...row, eventOrderId: event.id, venue: row.venue || eventVenue(event), organizer: event.companyName || event.eventName, guestCount: event.guestCount }))) }; }
+  function plannerEventSchedule(args = {}) { const selected = plannerEventsFromArgs(args); const pattern = args.filter === "coffee_break" ? /커피\s*브레이크|커피브레이크|coffee\s*break/i : args.filter === "meal" ? /중식|석식|식사|뷔페|lunch|dinner/i : null; const seen = new Set(); const items = selected.flatMap((event) => (event.schedule || []).filter((row) => !pattern || pattern.test([row.content, row.type, row.scheduleType].join(" "))).map((row) => { const date = String(row.date || row.scheduleDate || row.schedule_date || eventDateKeys(event)[0] || "").slice(0, 10); const time = String(row.time || row.startTime || row.start_time || "").slice(0, 5); const venue = row.venue || row.location || eventVenue(event); const explicitPeople = Number(row.people ?? row.pax ?? row.guestCount); return { ...row, eventOrderId: event.id, date, time, venue, venueLabel: window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(venue) || venue, organizer: event.companyName || event.organizer || event.eventName, people: Number.isFinite(explicitPeople) && explicitPeople > 0 ? explicitPeople : Number(event.guestCount) || null, peopleSource: Number.isFinite(explicitPeople) && explicitPeople > 0 ? "schedule" : Number(event.guestCount) > 0 ? "event" : "unknown", guestCount: event.guestCount }; })).filter((row) => { const key = `${row.eventOrderId}|${row.date}|${row.time}|${args.filter || row.content || "schedule"}`; if (seen.has(key)) return false; seen.add(key); return true; }); return { resultType: "schedule_occurrences", category: args.filter || "schedule", count: items.length, items, schedules: items, events: selected }; }
   function plannerEventItems(args = {}) { const selected = plannerEventsFromArgs(args); const pattern = args.filter === "coffee_break" ? /커피|coffee|다과|쿠키|차\b/i : null; return { events: selected, items: selected.flatMap((event) => (event.items || []).filter((row) => !pattern || pattern.test([row.item_name, row.name, row.description].join(" "))).map((row) => ({ ...row, eventOrderId: event.id, organizer: event.companyName || event.eventName }))) }; }
   function plannerEventNotes(args = {}) { const selected = plannerEventsFromArgs(args); const reinformOnly = args.filter === "reinform"; return { events: selected, notes: selected.map((event) => ({ eventOrderId: event.id, venue: eventVenue(event), organizer: event.companyName || event.eventName, layout: event.layoutText || "", others: event.othersText || event.internalMemo || "", notes: (event.notes || []).map((row) => row.content).filter(Boolean) })).map((row) => reinformOnly ? { ...row, layout: /re-?inform|재인폼/i.test(row.layout) ? row.layout : "", others: /re-?inform|재인폼/i.test(row.others) ? row.others : "", notes: row.notes.filter((value) => /re-?inform|재인폼/i.test(value)) } : row).filter((row) => row.layout || row.others || row.notes.length) }; }
   function plannerEventAttachments(args = {}) { const selected = plannerEventsFromArgs(args); return { events: selected, attachments: selected.flatMap((event) => (event.attachments || []).map((row) => ({ ...row, eventOrderId: event.id }))) }; }
@@ -126,14 +127,35 @@
   async function plannerAssetStatus(args = {}) { const term = encodeURIComponent(`*${String(args.asset || args.term || "").replace(/[,*()]/g, "") }*`); return { assets: await request(`banquet_assets?select=id,asset_name,quantity,location&asset_name=ilike.${term}&limit=100`) }; }
   function plannerResult(execution, action) { return execution.results.slice().reverse().find((row) => row.action === action)?.data || null; }
   function plannerNumber(row) { return Number(row?.quantity ?? row?.item_quantity ?? row?.qty ?? row?.metadata?.quantity); }
+  function plannerDateLabel(value) { const match = String(value || "").match(/\d{4}-(\d{2})-(\d{2})/); return match ? `${Number(match[1])}/${String(Number(match[2])).padStart(2, "0")}` : "날짜 미정"; }
+  function plannerOccurrenceLine(row) { return `${plannerDateLabel(row.date)} ${row.venueLabel || row.venue || "장소 미정"} · ${row.organizer || "주최 미정"}${row.time ? ` · ${row.time}` : ""} · ${Number(row.people) > 0 ? `${Number(row.people)}명` : "인원 미확인"}`; }
+  function renderScheduleOccurrences(data, plan) {
+    const items = Array.isArray(data?.items) ? data.items : []; const known = items.filter((row) => Number(row.people) > 0); const totalPeople = known.reduce((sum, row) => sum + Number(row.people), 0); const unknown = items.length - known.length;
+    if (plan.responseMode === "count") return { answer: `조건에 맞는 일정은 ${items.length}건입니다.`, ttsText: `조건에 맞는 일정은 ${items.length}건이에요.` };
+    const title = `커피브레이크는 총 ${items.length}건입니다.`; let body = "";
+    if (plan.responseMode === "grouped_list") { const groups = new Map(); items.forEach((row) => { const key = plan.groupBy === "date" ? plannerDateLabel(row.date) : row.venueLabel || row.venue || "장소 미정"; if (!groups.has(key)) groups.set(key, []); groups.get(key).push(row); }); body = [...groups].map(([label, rows]) => `${label}\n${rows.map((row) => `- ${plannerOccurrenceLine(row)}`).join("\n")}`).join("\n\n"); }
+    else body = items.map((row) => `- ${plannerOccurrenceLine(row)}`).join("\n");
+    const people = plan.includePeople ? `\n\n확인된 총 인원: ${totalPeople}명${unknown ? `\n${unknown}건은 이벤오더에 인원이 명시되어 있지 않습니다.` : ""}` : "";
+    return { answer: `${title}${body ? `\n\n${body}` : ""}${people}`, ttsText: `커피브레이크는 ${items.length}건${known.length ? `, 확인된 인원은 ${totalPeople}명` : ""}이에요.` };
+  }
+  function tryRenderPlannerFollowup(text) {
+    const prior = conversationContext.planner?.structuredResult; if (prior?.resultType !== "schedule_occurrences" || !Array.isArray(prior.items) || !prior.items.length) return false;
+    const isFollowup = /그중|그\s*중|몇\s*명|인원|(?:행사장|홀|장소|날짜|요일)\s*별|부라노|카프리|컨벤션|페스타|올리비아/.test(text); if (!isFollowup) return false;
+    const venueQuery = String(text).match(/부라노(?:\s*(?:전체|all|[123]))?|카프리(?:\s*(?:전체|all|[123]))?|컨벤션(?:\s*(?:ab|a|b))?|페스타|올리비아/i)?.[0] || "";
+    const items = venueQuery ? prior.items.filter((row) => window.BANQUET_ERP_VENUE_UTILS?.spacesOverlap?.(row.venue, venueQuery) || String(row.venueLabel || row.venue).includes(venueQuery)) : prior.items;
+    const intent = window.erpConversationAgent.inferPlannerResponseIntent(text, { responseMode: /몇\s*명|인원/.test(text) ? "aggregate" : conversationContext.planner.responseMode, groupBy: conversationContext.planner.groupBy, includePeople: true });
+    if (intent.responseMode === "aggregate") { const known = items.filter((row) => Number(row.people) > 0); const total = known.reduce((sum, row) => sum + Number(row.people), 0); const unknown = items.length - known.length; showMessage(`확인된 인원은 총 ${total}명입니다.${unknown ? `\n${unknown}건은 인원이 명시되어 있지 않습니다.` : ""}`, true, `확인된 인원은 총 ${total}명이에요.`); }
+    else { const rendered = renderScheduleOccurrences({ ...prior, items, count: items.length }, intent); showMessage(rendered.answer, true, rendered.ttsText); }
+    saveConversationContext({ ...conversationContext, lastDomain: "planner", lastResults: items.slice(0, 100), planner: { ...conversationContext.planner, responseMode: intent.responseMode, groupBy: intent.groupBy || "", structuredResult: { ...prior, items, count: items.length } } }); renderAiContext(); aiInput.value = ""; return true;
+  }
   function formatPlannerExecution(execution, question) {
     const actions = new Set(execution.results.map((row) => row.action)); const eventData = plannerResult(execution, "query_events") || {}; const matchedEvents = eventData.events || [];
     let answer = ""; let ttsText = "";
     if (actions.has("get_event_schedule") && /커피|coffee/i.test(question)) {
-      const schedules = plannerResult(execution, "get_event_schedule")?.schedules || []; const items = plannerResult(execution, "get_event_items")?.items || [];
+      const scheduleData = plannerResult(execution, "get_event_schedule") || {}; const schedules = scheduleData.schedules || []; const items = plannerResult(execution, "get_event_items")?.items || [];
       const explicit = items.map(plannerNumber).filter(Number.isFinite); const people = [...new Map(matchedEvents.map((event) => [String(event.id), Number(event.guestCount) || 0])).values()].reduce((sum, value) => sum + value, 0);
-      answer = explicit.length ? `커피브레이크 관련 ${schedules.length}건이며, 이벤오더에 명시된 수량은 총 ${explicit.reduce((sum, value) => sum + value, 0)}개입니다.` : `커피브레이크 행사는 ${schedules.length}건이고 총 ${people}명입니다.\n다만 이벤오더에 커피 수량은 별도로 적혀 있지 않습니다.`;
-      ttsText = explicit.length ? `커피브레이크 준비 수량은 총 ${explicit.reduce((sum, value) => sum + value, 0)}개예요.` : `커피브레이크는 ${schedules.length}건, 총 ${people}명이에요. 커피 수량은 따로 적혀 있지 않아요.`;
+      const rendered = renderScheduleOccurrences(scheduleData, execution.plan); answer = rendered.answer; ttsText = rendered.ttsText;
+      if (explicit.length && execution.plan.responseMode === "count") { answer += ` 이벤오더에 명시된 수량은 총 ${explicit.reduce((sum, value) => sum + value, 0)}개입니다.`; ttsText += ` 명시 수량은 ${explicit.reduce((sum, value) => sum + value, 0)}개예요.`; }
     } else if (actions.has("get_event_schedule") && /식사|중식|석식|몇\s*명/i.test(question)) {
       const schedules = plannerResult(execution, "get_event_schedule")?.schedules || []; const people = schedules.reduce((sum, row) => sum + (Number(row.people) || Number(row.guestCount) || 0), 0);
       answer = `${schedules.length}건의 식사 일정이 있으며 준비 인원은 총 ${people}명입니다.\n${schedules.map((row) => `${row.venue} · ${row.organizer} · ${row.time || "시간 미정"} · ${Number(row.people) || Number(row.guestCount) || 0}명`).join("\n")}`;
@@ -163,16 +185,17 @@
       ttsText = `조건에 맞는 행사는 ${matchedEvents.length}건이에요.`;
     } else answer = "조건에 맞는 저장 데이터를 찾지 못했습니다.";
     if (execution.failures.length) answer += `\n\n일부 조회 실패: ${execution.failures.map((failure) => `${failure.action} (${failure.message})`).join(", ")}`;
-    return { answer, ttsText: ttsText || answer.split("\n")[0] };
+    return { answer, ttsText: ttsText || answer.split("\n")[0], structuredResult: plannerResult(execution, "get_event_schedule")?.resultType ? plannerResult(execution, "get_event_schedule") : null };
   }
   async function tryRunReadPlanner(text, fastRoute) {
+    if (tryRenderPlannerFollowup(text)) return true;
     if (!window.erpConversationAgent.shouldUsePlanner(text, fastRoute, conversationContext)) return false;
     try {
       const plan = await window.erpConversationAgent.requestPlanner({ question: text, context: { actualToday: board.getActualTodaySeoul(), selectedDate: board.getSelectedBoardDate(), lastDomain: conversationContext.lastDomain, lastResults: conversationContext.lastResults || [] }, registry: actionRegistry, maxSteps: 4, request: async (payload) => { const response = await fetch(`${constants.supabaseConfig.url}/functions/v1/event-order-ai-chat`, { method: "POST", headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.message || "ERP 조회 계획을 만들지 못했습니다."); return body.plan || body; } });
       const execution = await window.erpConversationAgent.executePlannerPlan(plan, actionRegistry, { question: text, actualToday: board.getActualTodaySeoul(), selectedDate: board.getSelectedBoardDate() });
       if (!execution.ok) return false;
       const formatted = formatPlannerExecution(execution, text); showMessage(formatted.answer, true, formatted.ttsText);
-      const lastEvents = plannerResult(execution, "query_events")?.events || []; saveConversationContext({ ...conversationContext, lastDomain: "planner", lastResults: lastEvents.map(eventContext).slice(0, 20), planner: { goal: plan.goal, responseMode: plan.responseMode } }); renderAiContext(); aiInput.value = ""; return true;
+      const lastEvents = plannerResult(execution, "query_events")?.events || []; const rawResults = formatted.structuredResult?.items || lastEvents.map(eventContext); saveConversationContext({ ...conversationContext, lastDomain: "planner", lastResults: rawResults.slice(0, 100), planner: { goal: plan.goal, responseMode: plan.responseMode, groupBy: plan.groupBy || "", structuredResult: formatted.structuredResult || null } }); renderAiContext(); aiInput.value = ""; return true;
     } catch (error) { console.warn("ERP read planner fallback", error); return false; }
   }
   let settingAdvisorRows = [];
