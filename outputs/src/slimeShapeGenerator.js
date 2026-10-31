@@ -5,8 +5,8 @@ export const SLIME_SHAPES = Object.freeze({
   square2x2: Object.freeze([[1, 1], [1, 1]]),
   horizontal4: Object.freeze([[1, 1, 1, 1]]),
   vertical4: Object.freeze([[1], [1], [1], [1]]),
-  lShape: Object.freeze([[1, 0], [1, 1]]),
-  stepShape: Object.freeze([[1, 1, 0], [0, 1, 1]]),
+  lShape: Object.freeze([[1, 1, 1], [1, 0, 0]]),
+  stepShape: Object.freeze([[1, 1, 1], [0, 1, 1]]),
 });
 
 export function analyzeOccupancy(matrix) {
@@ -16,6 +16,20 @@ export function analyzeOccupancy(matrix) {
   const cells = [];
   matrix.forEach((row, y) => row.forEach((value, x) => { if (value) cells.push({ x, y }); }));
   if (!cells.length) throw new Error("occupancy must contain at least one active cell");
+  const active = new Set(cells.map((cell) => `${cell.x}:${cell.y}`));
+  const visited = new Set();
+  const queue = [cells[0]];
+  while (queue.length) {
+    const cell = queue.shift();
+    const key = `${cell.x}:${cell.y}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+      const neighborKey = `${cell.x + dx}:${cell.y + dy}`;
+      if (active.has(neighborKey) && !visited.has(neighborKey)) queue.push({ x: cell.x + dx, y: cell.y + dy });
+    });
+  }
+  if (visited.size !== cells.length) throw new Error("occupancy cells must form one connected shape");
   return { rows: matrix.length, columns, cells, activeCount: cells.length };
 }
 

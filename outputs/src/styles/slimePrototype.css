@@ -56,6 +56,8 @@ body { color: #eaf7fb; overflow-x: hidden; }
 .slime-canvas:active { cursor: grabbing; }
 .slime-fallback { position: absolute; inset: 48% 20px auto; color: #9bb3bd; text-align: center; }
 .slime-fps { position: absolute; z-index: 2; left: 18px; bottom: 16px; padding: 6px 9px; border: 1px solid rgba(138, 198, 216, .14); border-radius: 9px; color: #77a5b5; background: rgba(3, 14, 23, .58); font: 700 10px/1 ui-monospace, monospace; backdrop-filter: blur(8px); }
+.slime-labels { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
+.slime-labels span { position: absolute; top: 0; left: 0; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--slime-label-color), transparent 55%); border-radius: 999px; color: color-mix(in srgb, var(--slime-label-color), white 28%); background: rgba(3, 14, 23, .68); box-shadow: 0 4px 12px rgba(0, 5, 12, .24); font-size: 9px; font-weight: 850; white-space: nowrap; backdrop-filter: blur(7px); will-change: transform; }
 
 .slime-controls {
   position: absolute;

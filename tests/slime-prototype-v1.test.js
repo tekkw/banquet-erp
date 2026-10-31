@@ -8,14 +8,14 @@ const script = fs.readFileSync(path.join(root, "outputs/src/slimePrototype.js"),
 const generator = fs.readFileSync(path.join(root, "outputs/src/slimeShapeGenerator.js"), "utf8");
 const css = fs.readFileSync(path.join(root, "outputs/src/styles/slimePrototype.css"), "utf8");
 
-assert(html.includes("Slime Renderer Prototype V1"), "prototype must have an independent development entry");
+assert(html.includes("Slime Renderer Prototype V2"), "prototype must have an independent development entry");
 assert(html.includes("three@0.186.1") && html.includes('type="module"'), "prototype must pin Three.js as an ES module");
 assert(!html.includes("operationBoardPage") && !html.includes("eventBlockBoard"), "prototype must not load operation-board code");
 assert(!script.includes("eventOrder") && !script.includes("occupancy") && !script.includes("localStorage"), "prototype must not connect event data or completion state");
 assert(!script.includes("MarchingCubes"), "prototype must not use metaballs or MarchingCubes");
 
 assert(generator.includes("new THREE.Shape") && script.includes("new THREE.ExtrudeGeometry"), "one rounded contour must create one extruded mesh");
-assert.strictEqual((script.match(/new THREE\.Mesh\(geometry, material\)/g) || []).length, 1, "the 2x2 solid must be one mesh, not four cells");
+assert.strictEqual((script.match(/new THREE\.Mesh\(geometry, material\)/g) || []).length, 1, "each occupancy must use one mesh construction path, not cell meshes");
 assert(script.includes("depth: 1.45") && script.includes("bevelThickness: 0.38") && script.includes("bevelSegments: 12") && script.includes("curveSegments: 20"), "thick rounded candy geometry parameters are required");
 
 assert(script.includes("new THREE.MeshPhysicalMaterial"), "jelly must use MeshPhysicalMaterial");
@@ -28,7 +28,7 @@ assert(script.includes("PlaneGeometry(28, 18)") && script.includes("makeContactS
 
 assert(script.includes("velocityY += PHYSICS.gravity * delta") && script.includes("motion.y += motion.velocityY * delta"), "drop must use velocity and gravity integration");
 assert(script.includes("PHYSICS.spring") && script.includes("PHYSICS.damping") && script.includes("motion.deformationVelocity += acceleration * delta"), "landing and release must use a damped spring state");
-assert(script.includes("pointerdown") && script.includes("pointerup") && script.includes("motion.pressing"), "touch compression must distinguish pointer down and release");
+assert(script.includes("pointerdown") && script.includes("pointerup") && script.includes("slime.motion.pressing"), "touch compression must distinguish pointer down and release");
 assert(script.includes("material.onBeforeCompile") && script.includes("uImpact") && script.includes("jellyWeight"), "mesh vertices must receive subtle height-weighted impact deformation");
 
 for (const control of ["transmission", "roughness", "thickness", "ior", "clearcoat", "attenuationDistance", "bevelSize", "wobble"]) {
