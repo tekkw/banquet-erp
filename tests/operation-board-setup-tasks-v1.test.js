@@ -35,7 +35,7 @@ assert(source.includes("scheduledDate, scheduledTime") && source.includes("setup
 assert(source.includes("renderOriginalAction(item.eventOrderId)"), "원본 엑셀은 연결된 다음 행사 ID를 사용해야 한다");
 assert(source.includes("data-edit-item") && source.includes("data-delete-item") && source.includes("data-check-item"));
 assert(source.includes("data-restore-complete"), "완료된 setup task를 복원할 수 있어야 한다");
-assert(source.includes("syncItem(block); render();"), "완료 상태는 공용 record에 저장되어야 한다");
+assert(source.includes('await syncItem(block, { throwOnError: true })'), "완료 상태는 공용 record에 저장되고 오류가 handler까지 전파되어야 한다");
 assert(source.includes("renderSpaceGroups(spaceGroups)"), "기존 공간별 운영보드를 계속 렌더링해야 한다");
 assert(source.includes('const setupActions = `<div class="operation-block-actions">'), "모든 원본 카드에서 상단 고정이 가능해야 한다");
 const groups = Array.from(board.groupBlocksBySpace([

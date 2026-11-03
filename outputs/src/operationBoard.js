@@ -615,6 +615,12 @@
     if (!response.ok) throw new Error(`operation board storage ${response.status}: ${text}`);
     return text ? JSON.parse(text) : null;
   }
+  function showOperationToast(message) {
+    if (!document?.body?.appendChild || !document.createElement) return;
+    const toast = document.createElement("div"); toast.className = "toast-message"; toast.setAttribute("role", "alert"); toast.textContent = message;
+    document.body.appendChild(toast); requestAnimationFrame(() => toast.classList.add("visible"));
+    setTimeout(() => { toast.classList.remove("visible"); setTimeout(() => toast.remove(), 250); }, 3500);
+  }
   async function hydrateRemote(boardDate = selectedDate) {
     if (remoteStatus === "fallback" || remoteLoadedDates.has(boardDate) || remoteLoadingDates.has(boardDate)) return;
     remoteStatus = "loading";
@@ -749,7 +755,10 @@
     const actualToday = seoulDateKey();
     if (actualToday !== selectedDate) hydrateRemote(actualToday);
     const blocks = allBlocks(selectedDate);
-    const setupLists = classifySetupBoardItems(currentEvents, state.manual, actualToday);
+    // DB completion rows must be hydrated before raw event candidates are allowed
+    // into the active setup lists. This prevents a completed task flashing/reappearing
+    // while its persistent record is still loading on a fresh browser session.
+    const setupLists = persistentSetupLoaded || remoteStatus === "fallback" ? classifySetupBoardItems(currentEvents, state.manual, actualToday) : { pinned: [], candidates: [] };
     const selectedEvents = currentEvents.filter((event) => eventDates(event).includes(selectedDate));
     const counts = { lunch: 0, dinner: 0, coffee: 0, next_setup: 0 };
     blocks.forEach((b) => { if (counts[b.type] !== undefined) counts[b.type] += 1; });
@@ -1142,13 +1151,28 @@
   }
   function taskCompletionVerification(item) { const autopilot = window.BANQUET_ERP_OPERATIONS_AUTOPILOT; const assignments = item?.metadata?.checklistAssignees || {}; const checklist = state.checklist.filter((entry) => entry.parentKey === item?.key).map((entry) => ({ ...entry, ...(assignments[entry.id] || {}) })); const exceptions = [...buildProactiveAlerts(currentEvents, seoulDateKey()).alerts, ...(getTodayExecutionBoard().exceptions || [])]; return autopilot?.verifyTaskCompletion?.(item, checklist, exceptions) || { canComplete: true, blockers: [], completedCount: checklist.filter((entry) => entry.completed).length, totalCount: checklist.length, assigneesComplete: checklist.every((entry) => entry.assigneeUserId) }; }
   function openFinalVerificationDialog(item, verification, boardDate) { const dialog = root.querySelector("[data-operation-detail]"); const event = currentEvents.find((entry) => String(entry.id) === String(item.eventOrderId)); dialog.querySelector("[data-operation-detail-content]").innerHTML = `<div class="operation-detail-header"><h3>${verification.canComplete ? "완료 전 확인" : "완료할 수 없습니다"}</h3><button type="button" data-detail-close aria-label="닫기">×</button></div><div class="operation-final-verification"><strong>${escapeHtml(window.BANQUET_ERP_VENUE_UTILS?.formatVenueShort(item.venue) || item.venue)} · ${escapeHtml(eventDisplayTitle(event || item))}</strong><p>체크리스트 ${verification.completedCount}/${verification.totalCount} 완료</p><p>담당자 배정 ${verification.assigneesComplete ? "완료" : "미완료 항목 있음"}</p><p>BLOCKED ${verification.blockedCount ? "확인 필요" : "없음"}</p>${verification.blockers.length ? `<ul>${verification.blockers.map((blocker) => `<li>${escapeHtml(blocker)}</li>`).join("")}</ul>` : ""}</div><div class="operation-detail-actions"><button type="button" data-detail-close>닫기</button>${verification.canComplete ? '<button type="button" data-final-complete>최종 완료</button>' : ""}</div>`; dialog.querySelectorAll("[data-detail-close]").forEach((button) => button.onclick = () => { dialog.close(); render(); }); dialog.querySelector("[data-final-complete]")?.addEventListener("click", () => { dialog.close(); completeBoardItem(item.key, true, boardDate, true); }); dialog.showModal(); }
-  function completeBoardItem(key, completed, boardDate = selectedDate, verified = false) {
+  async function completeBoardItem(key, completed, boardDate = selectedDate, verified = false) {
     const persistent = state.manual.find((item) => item.key === key);
+    const hadCompletion = Object.prototype.hasOwnProperty.call(state.completions, key); const previousCompletion = state.completions[key];
+    const previousManual = persistent ? { completed: persistent.completed, metadata: { ...(persistent.metadata || {}) } } : null;
     if (completed && persistent?.metadata?.source === "autopilot") { const verification = taskCompletionVerification(persistent); if (!verified || !verification.canComplete) { openFinalVerificationDialog(persistent, verification, boardDate); return; } const user = currentUser(); persistent.metadata = { ...(persistent.metadata || {}), completedBy: user?.id || null, completedByName: user?.label || "", completedAt: new Date().toISOString() }; }
+    if (!completed && persistent?.metadata) { const { completedAt, completedBy, completedByName, ...activeMetadata } = persistent.metadata; persistent.metadata = activeMetadata; }
     state.completions[key] = completed;
     let block = allBlocks(boardDate, currentEvents).find((item) => item.key === key) || findSetupListItem(key); block = ensurePersistentSetupBlock(block); if (block) block.completed = completed;
     const manual = state.manual.find((item) => item.key === key); if (manual) manual.completed = completed;
-    saveState(); if (block) syncItem(block); render();
+    saveState(); render();
+    if (!block) return false;
+    try {
+      await syncItem(block, { throwOnError: true });
+      return true;
+    } catch (error) {
+      console.error("운영보드 완료 상태 저장 실패", { key, completed, boardDate, error });
+      if (hadCompletion) state.completions[key] = previousCompletion; else delete state.completions[key];
+      if (previousManual) { manual.completed = previousManual.completed; manual.metadata = previousManual.metadata; }
+      else state.manual = state.manual.filter((item) => item !== manual);
+      saveState(); render(); showOperationToast(completed ? "완료 상태를 저장하지 못했습니다. 작업을 원래 상태로 복원했습니다." : "복원 상태를 저장하지 못했습니다. 완료 상태를 유지합니다.");
+      return false;
+    }
   }
   function updateSetupTask(key, changes) {
     state.setupOverrides[key] = { ...(state.setupOverrides[key] || {}), ...changes };

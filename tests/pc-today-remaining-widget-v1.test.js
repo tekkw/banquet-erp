@@ -31,7 +31,7 @@ assert(widgets.includes('id: "today-remaining"') && widgets.includes('selector: 
 assert(source.includes('showStandaloneMobileAgenda = window.location?.pathname?.includes("/board/")'), "PC 본문에서는 중복 오늘 일정을 제거하고 모바일 /board/만 유지해야 한다");
 assert(source.includes('showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""'));
 assert(source.includes("const today = seoulDateKey()") && source.includes("active.slice(0, 8)"), "서울 실제 오늘 기준으로 최대 8건을 표시해야 한다");
-assert(source.includes("completeBoardItem") && source.includes("syncItem(block)"), "위젯과 운영보드가 같은 완료 저장 경로를 사용해야 한다");
+assert(source.includes("completeBoardItem") && source.includes('await syncItem(block, { throwOnError: true })'), "위젯과 운영보드가 같은 persistent 완료 저장 경로를 사용해야 한다");
 assert(source.includes("blockDisplayVenue(block)"), "G. 오늘 남은 일정은 운영보드와 같은 display venue helper를 사용해야 한다");
 
 console.log("PC today remaining widget V1 tests passed");

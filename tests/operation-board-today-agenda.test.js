@@ -37,6 +37,6 @@ assert.strictEqual(board.isOverdue({ time: "09:00", completed: false }, date, ne
 assert.strictEqual(board.isOverdue({ time: "09:00", completed: true }, date, new Date("2026-10-15T10:00:00")), false);
 assert(source.includes("data-restore-complete"));
 assert(source.includes("operationBlocks.filter((block) => !block.completed)"));
-assert(source.includes("syncItem(block); render();"));
+assert(source.includes('await syncItem(block, { throwOnError: true })'));
 
 console.log("operation-board today agenda tests passed");

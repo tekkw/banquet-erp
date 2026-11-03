@@ -15,7 +15,7 @@ assert(source.includes("data-setup-create"), "PC/모바일 공용 다음 세팅 
 assert(source.includes("data-setup-edit") && source.includes("data-setup-original") && source.includes("data-setup-pin"), "수정/원본/고정 액션을 유지해야 한다");
 assert(source.includes("data-add-item") && source.includes("data-check-item"), "하위 세팅 항목 기능을 유지해야 한다");
 assert(source.includes("data-restore-complete"), "완료된 세팅 복원을 유지해야 한다");
-assert(source.includes("completeBoardItem") && source.includes("syncItem(block)"), "양 탭은 기존 completion 저장 경로를 사용해야 한다");
+assert(source.includes("completeBoardItem") && source.includes('await syncItem(block, { throwOnError: true })'), "양 탭은 오류 전파가 가능한 공용 completion 저장 경로를 사용해야 한다");
 assert(styles.includes(".operation-board-tabs") && styles.includes('.operation-board-tab-panel[hidden]'), "dark theme 탭 스타일이 있어야 한다");
 
 console.log("operation board tabs V1 tests passed");
