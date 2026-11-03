@@ -32,25 +32,32 @@ function task(overrides = {}) {
 }
 
 (async () => {
-  const success = createBoard(async () => ({ ok: true, text: async () => "" }));
+  const success = createBoard(async () => ({ ok: true, text: async () => '[{"id":"row-1","is_completed":true}]' }));
   success.board._setStateForTest({ manual: [task()], pins: { "setup:event-1:burano-1": true } });
   assert.strictEqual(await success.board.completeBoardItem("setup:event-1:burano-1", true, "2026-11-03"), true);
   const completedPayload = JSON.parse(success.requests[0].options.body);
   assert.strictEqual(completedPayload.is_completed, true, "완료는 operation_board_items.is_completed에 저장해야 한다");
-  assert.strictEqual(completedPayload.item_key, "setup:event-1:burano-1", "화면 task key와 DB item_key가 같아야 한다");
+  assert.deepStrictEqual(Object.keys(completedPayload).sort(), ["is_completed", "metadata"], "기존 row 완료 PATCH는 FK 필드를 다시 쓰지 않아야 한다");
+  assert.strictEqual(completedPayload.metadata.source, "manual_board_task", "기존 metadata를 보존해야 한다");
+
+  const created = createBoard(async () => ({ ok: true, text: async () => '[{"id":"row-created","is_completed":true}]' }));
+  created.board._setStateForTest({ manual: [task({ recordId: undefined })] });
+  assert.strictEqual(await created.board.completeBoardItem("setup:event-1:burano-1", true, "2026-11-03"), true);
+  const createPayload = JSON.parse(created.requests[0].options.body);
+  assert.strictEqual(createPayload.item_key, "setup:event-1:burano-1", "row가 없는 raw 후보는 화면 task key를 DB item_key로 upsert해야 한다");
 
   const automatic = { key: "raw-candidate", kind: "next_setup", type: "next_setup", eventOrderId: "event-1", venue: "3F 부라노 I", completed: false };
   const persisted = task({ completed: true });
   assert.deepStrictEqual(Array.from(success.board.dedupeSetupCandidates([automatic, persisted]), (item) => item.key), [persisted.key], "완료된 persistent task가 동일 raw event candidate 재생성을 막아야 한다");
 
-  const restore = createBoard(async () => ({ ok: true, text: async () => "" }));
+  const restore = createBoard(async () => ({ ok: true, text: async () => '[{"id":"row-1","is_completed":false}]' }));
   restore.board._setStateForTest({ manual: [task({ completed: true, metadata: { source: "autopilot", completedAt: "2026-11-03T00:00:00.000Z", completedBy: "user-1" } })], completions: { "setup:event-1:burano-1": true } });
   assert.strictEqual(await restore.board.completeBoardItem("setup:event-1:burano-1", false, "2026-11-03"), true);
   const restorePayload = JSON.parse(restore.requests[0].options.body);
   assert.strictEqual(restorePayload.is_completed, false, "복원은 같은 DB record의 완료 상태를 해제해야 한다");
   assert.strictEqual(restorePayload.metadata.completedAt, undefined, "복원 시 완료 metadata를 해제해야 한다");
 
-  const failed = createBoard(async () => ({ ok: false, status: 500, text: async () => "database error" }));
+  const failed = createBoard(async () => ({ ok: false, status: 400, text: async () => JSON.stringify({ code: "23503", message: "foreign key violation", details: "Key is not present", hint: null }) }));
   failed.board._setStateForTest({ manual: [task()], pins: { "setup:event-1:burano-1": true } });
   assert.strictEqual(await failed.board.completeBoardItem("setup:event-1:burano-1", true, "2026-11-03"), false);
   const rolledBack = JSON.parse(failed.memory.get("banquet-erp-operation-board-v1"));

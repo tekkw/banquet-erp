@@ -612,7 +612,12 @@
     if (!config?.url || !config?.anonKey) throw new Error("Supabase 설정 없음");
     const response = await fetch(`${config.url}/rest/v1/${path}`, { ...options, headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) } });
     const text = await response.text();
-    if (!response.ok) throw new Error(`operation board storage ${response.status}: ${text}`);
+    if (!response.ok) {
+      let body = {}; try { body = text ? JSON.parse(text) : {}; } catch { body = { message: text }; }
+      const error = new Error(body.message || `operation board storage ${response.status}`);
+      Object.assign(error, { status: response.status, code: body.code, details: body.details, hint: body.hint, body });
+      throw error;
+    }
     return text ? JSON.parse(text) : null;
   }
   function showOperationToast(message) {
@@ -691,7 +696,9 @@
     const persistedTime = scheduledTime || (item.rawSetupCandidate || item.metadata?.candidateWithoutScheduledDate ? "" : item.time || "");
     const payload = { board_date: item.date || dateKey(), item_key: item.key, item_kind: item.kind === "manual" ? "manual" : item.type === "next_setup" || item.type === "weekly_setup" ? "next_setup" : "auto", event_order_id: item.eventOrderId || null, space_id: /^[0-9a-f-]{36}$/i.test(item.spaceId || "") ? item.spaceId : null, item_time: /^\d\d:\d\d$/.test(persistedTime) ? persistedTime : null, venue_name: item.venue || "", title: item.title || "", people: Number(item.people) || null, memo: item.memo || "", is_completed: !!item.completed, metadata: { source: item.kind === "manual" ? "manual_board_task" : item.metadataSource || "operation_board", ...(item.metadata || {}), boardDate: item.date || dateKey(), scheduledDate, scheduledTime, venue: item.venue || "", eventOrderId: item.eventOrderId || null, createdAt: item.createdAt || new Date().toISOString(), spaceKey: item.spaceId, plannedDate: item.plannedDate || null, taskType: item.type, pinned: !!state.pins[item.key], setupOverride, reminderOverride: override ?? "default", reminderEnabled: resolved !== "none" && !item.completed, reminderOffsetMinutes: resolved === "none" ? null : Number(resolved) } };
     const path = item.recordId ? `operation_board_items?id=eq.${encodeURIComponent(item.recordId)}` : "operation_board_items?on_conflict=board_date,item_key";
-    const requestOptions = item.recordId ? { method: "PATCH", body: JSON.stringify(payload) } : { method: "POST", headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(payload) };
+    const requestPayload = options.payload || payload;
+    const representation = options.returnRepresentation ? ",return=representation" : "";
+    const requestOptions = item.recordId ? { method: "PATCH", headers: representation ? { Prefer: "return=representation" } : {}, body: JSON.stringify(requestPayload) } : { method: "POST", headers: { Prefer: `resolution=merge-duplicates${representation}` }, body: JSON.stringify(requestPayload) };
     const pending = remoteRequest(path, requestOptions);
     return options.throwOnError ? pending : pending.catch((error) => console.error("운영보드 저장 실패", error));
   }
@@ -1162,11 +1169,18 @@
     const manual = state.manual.find((item) => item.key === key); if (manual) manual.completed = completed;
     saveState(); render();
     if (!block) return false;
+    const completionMetadata = { ...(block.metadata || {}) };
+    if (completed) completionMetadata.completedAt = completionMetadata.completedAt || new Date().toISOString();
+    else { delete completionMetadata.completedAt; delete completionMetadata.completedBy; delete completionMetadata.completedByName; }
+    block.metadata = completionMetadata; if (manual) manual.metadata = completionMetadata;
+    saveState();
+    const completionPayload = block.recordId ? { is_completed: completed, metadata: completionMetadata } : null;
     try {
-      await syncItem(block, { throwOnError: true });
+      const response = await syncItem(block, { throwOnError: true, returnRepresentation: true, ...(completionPayload ? { payload: completionPayload } : {}) });
+      if (!Array.isArray(response) || response.length !== 1) { const error = new Error("완료 상태를 저장할 operation_board_items row를 찾지 못했습니다."); error.code = "PGRST116"; error.details = `recordId=${block.recordId || "upsert"}, affectedRows=${Array.isArray(response) ? response.length : 0}`; throw error; }
       return true;
     } catch (error) {
-      console.error("운영보드 완료 상태 저장 실패", { key, completed, boardDate, error });
+      console.error("setup completion save failed", { taskId: block.recordId || null, key, payload: completionPayload || { item_key: block.key, is_completed: completed, metadata: completionMetadata }, code: error?.code, message: error?.message, details: error?.details, hint: error?.hint, error });
       if (hadCompletion) state.completions[key] = previousCompletion; else delete state.completions[key];
       if (previousManual) { manual.completed = previousManual.completed; manual.metadata = previousManual.metadata; }
       else state.manual = state.manual.filter((item) => item !== manual);
