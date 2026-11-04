@@ -82,6 +82,19 @@
     return { minX, minY, maxX, maxY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
   }
 
+  function calculateExportVisualBounds(boxes = [], { paddingPx = 64, maxPixelSize = 4800, fallback } = {}) {
+    const valid = (boxes || []).filter((box) => box && [box.x, box.y, box.width, box.height].every(Number.isFinite) && box.width >= 0 && box.height >= 0 && (box.width > 0 || box.height > 0));
+    const base = valid.length ? valid.reduce((bounds, box) => ({
+      minX: Math.min(bounds.minX, box.x), minY: Math.min(bounds.minY, box.y),
+      maxX: Math.max(bounds.maxX, box.x + box.width), maxY: Math.max(bounds.maxY, box.y + box.height),
+    }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }) : fallback;
+    if (!base) return { minX: 0, minY: 0, maxX: 1, maxY: 1, width: 1, height: 1, padding: 0 };
+    const width = Math.max(1, Number(base.width) || base.maxX - base.minX); const height = Math.max(1, Number(base.height) || base.maxY - base.minY);
+    const usablePixels = Math.max(1, maxPixelSize - paddingPx * 2); const scale = Math.min(usablePixels / width, usablePixels / height);
+    const padding = paddingPx / Math.max(scale, 0.000001);
+    return { minX: base.minX - padding, minY: base.minY - padding, maxX: base.maxX + padding, maxY: base.maxY + padding, width: width + padding * 2, height: height + padding * 2, padding };
+  }
+
   function transformBasePlanPoint(group, point) {
     const rotation = Number(group?.metadata?.rotation ?? group?.rotation ?? 0);
     const radians = (((rotation % 360) + 360) % 360) * Math.PI / 180;
@@ -2920,6 +2933,7 @@
       view.panY = 0;
       workspaceDimensionMode = includeDimensions ? "all" : "hidden";
       renderWorkspace();
+      const bounds = getWorkspaceExportVisualBounds({ includeDimensions });
       const clone = workspaceSvg.cloneNode(true);
       workspaceSelectedId = previousSelectedId;
       workspaceSelectedIds = previousSelectedIds;
@@ -2932,7 +2946,6 @@
       clone.removeAttribute("id");
       clone.classList.add("layout-workspace-preview-svg");
       clone.setAttribute("xmlns", svgNs);
-      const bounds = getWorkspaceExportBounds();
       const exportSize = getWorkspaceExportPixelSize(bounds);
       clone.setAttribute("viewBox", `${bounds.minX} ${bounds.minY} ${bounds.width} ${bounds.height}`);
       clone.setAttribute("width", String(exportSize.width));
@@ -2954,10 +2967,21 @@
       return clone;
     }
 
+    function getWorkspaceExportVisualBounds({ includeDimensions = workspaceIncludeDimensionsInExport, paddingPx = 64 } = {}) {
+      const exportNodes = [
+        ...(workspaceBackgroundLayer?.children || []),
+        ...(workspaceObjectLayer?.children || []),
+        ...(includeDimensions ? (workspaceGuideLayer?.querySelectorAll("[data-floorplan-dimensions], .layout-workspace-dimension") || []) : []),
+      ];
+      const boxes = exportNodes.map((node) => {
+        if (node.style?.display === "none") return null;
+        try { return node.getBBox(); } catch { return null; }
+      }).filter(Boolean);
+      return calculateExportVisualBounds(boxes, { paddingPx, maxPixelSize: 4800, fallback: getWorkspaceWorldBounds(false) });
+    }
+
     function getWorkspaceExportBounds() {
-      const bounds = getWorkspaceWorldBounds(false);
-      const padding = Math.max(500, Math.min(2000, Math.max(bounds.width, bounds.height) * 0.035));
-      return { minX: bounds.minX - padding, minY: bounds.minY - padding, maxX: bounds.maxX + padding, maxY: bounds.maxY + padding, width: bounds.width + padding * 2, height: bounds.height + padding * 2 };
+      return getWorkspaceExportVisualBounds({ includeDimensions: workspaceIncludeDimensionsInExport });
     }
 
     function applyFloorplanExportStyles(root) {
@@ -2981,7 +3005,7 @@
       const url = URL.createObjectURL(svgBlob);
       try {
         const image = await loadImageFromObjectUrl(url);
-        const exportSize = getWorkspaceExportPixelSize(getWorkspaceExportBounds());
+        const exportSize = { width: Number(clone.getAttribute("width")) || 1, height: Number(clone.getAttribute("height")) || 1 };
         const canvas = document.createElement("canvas");
         canvas.width = exportSize.width;
         canvas.height = exportSize.height;
@@ -6108,6 +6132,7 @@
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
     calculateWorkspaceWorldBounds,
+    calculateExportVisualBounds,
     transformBasePlanPoint,
     getFloorplanStrokeStyle,
     buildSinglePageFloorplanPdf,
