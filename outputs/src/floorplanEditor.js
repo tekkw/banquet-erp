@@ -573,14 +573,34 @@
     const measurements = [{ axis: "horizontal", valueMm: Number(horizontalGapMm), label: `${Number(horizontalGapMm) / 1000}m` }, { axis: "vertical", valueMm: Number(verticalGapMm), label: `${Number(verticalGapMm) / 1000}m` }, { axis: "width", valueMm: requiredWidthMm, label: `${requiredWidthMm / 1000}m` }, { axis: "depth", valueMm: requiredDepthMm, label: `${requiredDepthMm / 1000}m` }];
     if (!tableWidthMm || !tableDepthMm) return { valid: false, reason: "invalid_table_spec", objects: [], measurements };
     if (constraints) {
+      const boundaryFailures = []; const collisions = [];
       for (const object of objects) {
         const box = layoutConstraintBox(object); const corners = [{ x: box.left, y: box.top }, { x: box.right, y: box.top }, { x: box.right, y: box.bottom }, { x: box.left, y: box.bottom }, { x: object.x, y: object.y }];
-        if (!corners.every((point) => pointInLayoutPolygon(point, constraints.boundary))) return { valid: false, reason: box.left < constraints.bounds.left || box.right > constraints.bounds.right ? "insufficient_width" : "boundary_overflow", requiredWidthMm, requiredDepthMm, availableWidthMm: constraints.bounds.width, availableDepthMm: constraints.bounds.height, objects: [], measurements };
+        if (!corners.every((point) => pointInLayoutPolygon(point, constraints.boundary))) { boundaryFailures.push({ object, box }); continue; }
         const collision = constraints.obstacles.find((obstacle) => layoutBoxesOverlap(box, obstacle.box));
-        if (collision) return { valid: false, reason: `${collision.type}_collision`, obstacle: collision, requiredWidthMm, requiredDepthMm, objects: [], measurements };
+        if (collision) collisions.push({ ...collision, object });
       }
+      if (boundaryFailures.length) { const widthOverflow = boundaryFailures.some(({ box }) => box.left < constraints.bounds.left || box.right > constraints.bounds.right); return { valid: false, reason: widthOverflow ? "insufficient_width" : "boundary_overflow", requiredWidthMm, requiredDepthMm, availableWidthMm: constraints.bounds.width, availableDepthMm: constraints.bounds.height, objects: [], measurements, boundaryFailures }; }
+      if (collisions.length) return { valid: false, reason: `${collisions[0].type}_collision`, obstacle: collisions[0], collisions, requiredWidthMm, requiredDepthMm, objects: [], measurements };
     }
     return { valid: true, objects, measurements, horizontalPitchMm, verticalPitchMm, requiredWidthMm, requiredDepthMm };
+  }
+
+  function buildGridPreview(params = {}) {
+    const tableWidthMm = Number(params.tableWidthMm); const tableDepthMm = Number(params.tableDepthMm);
+    const columns = Math.floor(Number(params.columns)); const rows = Math.floor(Number(params.rows));
+    const horizontalGapMm = Number(params.horizontalGapMm); const verticalGapMm = Number(params.verticalGapMm);
+    const origin = params.origin || { xMm: Number(params.startXmm), yMm: Number(params.startYmm) };
+    const invalid = ![tableWidthMm, tableDepthMm, columns, rows, horizontalGapMm, verticalGapMm, Number(origin.xMm), Number(origin.yMm)].every(Number.isFinite)
+      || tableWidthMm <= 0 || tableDepthMm <= 0 || columns <= 0 || rows <= 0 || horizontalGapMm < 0 || verticalGapMm < 0;
+    if (invalid) return { valid: false, objects: [], measurements: [], collisions: [], requiredBounds: null, reason: "invalid_parameters", message: "폭·깊이·열·행·간격·시작 위치를 올바르게 입력해주세요." };
+    const result = generateSeminarGrid({ tableSpec: { widthMm: tableWidthMm, depthMm: tableDepthMm }, columns, rows, horizontalGapMm, verticalGapMm, origin, frontDirection: params.frontDirection, constraints: params.constraints, instancePrefix: params.instancePrefix });
+    const collisions = result.collisions || (result.obstacle ? [result.obstacle] : []);
+    const requiredBounds = { widthMm: result.requiredWidthMm || 0, depthMm: result.requiredDepthMm || 0 };
+    const message = result.valid
+      ? `미리보기: ${tableWidthMm}×${tableDepthMm} · ${columns}열 × ${rows}줄 · 총 ${result.objects.length}T`
+      : collisions.length ? `배치 불가: ${collisions[0].label || "고정 구조물"}과 ${collisions.length}개 테이블이 충돌합니다.` : formatAutoGridFailureMessage(result);
+    return { ...result, collisions, requiredBounds, message, parameters: { tableWidthMm, tableDepthMm, columns, rows, horizontalGapMm, verticalGapMm, origin, frontDirection: params.frontDirection || "north" } };
   }
 
   function createAutoLayoutPreview(result, existingObjects = []) {
@@ -850,7 +870,13 @@
     let layoutObjectTypes = [];
     let sourceRow = null;
     let sourceFile = null;
-    let objects = [];
+    let backgroundImage = null;
+    let floorplanRecord = null;
+    let savedLayouts = [];
+    let activeLayout = null;
+    let floorplanObjects = [];
+    let layoutObjects = [];
+    let selectedScope = "";
     let selectedObjectId = "";
     let dragState = null;
     let view = { x: 0, y: 0, panX: 0, panY: 0, scale: 1 };
@@ -934,7 +960,7 @@
       deleteObjectButton.addEventListener("click", deleteSelectedObject);
       saveFloorplanButton.addEventListener("click", saveFloorplanAndFixedObjects);
       saveLayoutButton.addEventListener("click", saveLayoutWithPreview);
-      generateSeminarGridButton.addEventListener("click", generateSeminarGrid);
+      generateSeminarGridButton.addEventListener("click", generateLegacySeminarGrid);
       savedLayoutsSelect.addEventListener("change", () => loadLayoutById(savedLayoutsSelect.value));
       canvas.addEventListener("mousedown", handleCanvasMouseDown);
       canvas.addEventListener("mousemove", handleCanvasMouseMove);
@@ -1637,8 +1663,8 @@
     function previewAutoGridLayout() {
       if (!autoGridUi) return null;
       if (autoGridPreview) workspaceObjects = cancelAutoLayoutPreview(autoGridPreview);
-      const result = generateSeminarGrid({
-        tableSpec: { widthMm: Number(autoGridUi.width.value), depthMm: Number(autoGridUi.depth.value) },
+      const result = buildGridPreview({
+        tableWidthMm: Number(autoGridUi.width.value), tableDepthMm: Number(autoGridUi.depth.value),
         columns: Number(autoGridUi.columns.value), rows: Number(autoGridUi.rows.value),
         horizontalGapMm: Number(autoGridUi.hgap.value), verticalGapMm: Number(autoGridUi.vgap.value),
         origin: { xMm: Number(autoGridUi.originX.value), yMm: Number(autoGridUi.originY.value) },
@@ -1648,14 +1674,14 @@
       });
       if (!result.valid) {
         autoGridPreview = null; autoGridUi.apply.disabled = true;
-        autoGridUi.status.textContent = `배치 불가: ${result.reason}${result.obstacle?.label ? ` (${result.obstacle.label})` : ""}`;
+        autoGridUi.status.textContent = result.message;
         renderWorkspace(); return result;
       }
       const baseObjects = workspaceObjects.slice();
       autoGridPreview = createAutoLayoutPreview(result, baseObjects);
       workspaceObjects = [...baseObjects, ...autoGridPreview.previewObjects];
       autoGridUi.apply.disabled = false;
-      autoGridUi.status.textContent = `${result.objects.length}개 · pitch ${result.horizontalPitchMm}mm × ${result.verticalPitchMm}mm`;
+      autoGridUi.status.textContent = result.message;
       renderWorkspace();
       return result;
     }
@@ -5483,7 +5509,7 @@
       return { width: 0.09, height: 0.035 };
     }
 
-    function generateSeminarGrid() {
+    function generateLegacySeminarGrid() {
       const columns = Math.max(1, toNumber(seminarColumnCountInput.value) || 1);
       const rows = Math.max(1, toNumber(seminarRowCountInput.value) || 1);
       const hGap = Math.max(0.002, Number(seminarHorizontalGapInput.value) || 0.015);
@@ -6168,6 +6194,7 @@
     layoutBoxesOverlap,
     deriveLayoutConstraints,
     generateSeminarGrid,
+    buildGridPreview,
     createAutoLayoutPreview,
     cancelAutoLayoutPreview,
     applyAutoLayoutPreview,

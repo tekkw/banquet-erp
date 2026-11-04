@@ -32,6 +32,12 @@ assert.strictEqual(result.objects.find((row) => row.metadata.row === 1 && row.me
 assert.strictEqual(result.objects.find((row) => row.metadata.row === 2 && row.metadata.column === 1).y - result.objects[0].y, 1750);
 assert.deepStrictEqual(result.measurements.slice(0, 2).map((row) => row.label), ["0.9m", "1.3m"]);
 
+const sharedPreview = api.buildGridPreview({ tableWidthMm: 1800, tableDepthMm: 450, columns: 3, rows: 7, horizontalGapMm: 900, verticalGapMm: 1300, origin: { xMm: 1500, yMm: 1000 }, frontDirection: "north", constraints: room, instancePrefix: "dom_preview" });
+assert.strictEqual(sharedPreview.valid, true);
+assert.strictEqual(sharedPreview.objects.length, 21, "공용 preview builder가 21개 table을 생성해야 한다");
+assert.strictEqual(sharedPreview.message, "미리보기: 1800×450 · 3열 × 7줄 · 총 21T");
+assert.deepStrictEqual(sharedPreview.requiredBounds, { widthMm: 7200, depthMm: 10950 });
+
 const blocked = api.deriveLayoutConstraints({ widthMm: 12000, heightMm: 15000, objects: [{ objectType: "blocked_area", label: "사용불가", x: 1500, y: 1000, widthM: 2, heightM: 2 }] });
 assert.strictEqual(api.generateSeminarGrid({ tableSpec: { widthMm: 1800, depthMm: 450 }, columns: 3, rows: 7, horizontalGapMm: 900, verticalGapMm: 1300, origin: { xMm: 1500, yMm: 1000 }, constraints: blocked }).reason, "blocked_area_collision", "사용불가 영역 충돌");
 const pillar = api.deriveLayoutConstraints({ widthMm: 12000, heightMm: 15000, objects: [{ objectType: "pillar", label: "기둥", x: 4200, y: 1000, widthM: .8, heightM: .8 }] });
@@ -50,6 +56,8 @@ assert.strictEqual(applied.length, 22);
 assert(applied.slice(1).every((object) => object.metadata.autoLayoutPreview === false));
 const reloaded = JSON.parse(JSON.stringify(applied));
 assert.deepStrictEqual(reloaded.slice(1).map((object) => [object.metadata.xMm, object.metadata.yMm]), applied.slice(1).map((object) => [object.metadata.xMm, object.metadata.yMm]), "저장/재로드 후 mm 좌표 동일");
+const regenerated = api.createAutoLayoutPreview(sharedPreview, api.cancelAutoLayoutPreview(preview));
+assert.strictEqual(regenerated.previewObjects.length, 21, "미리보기를 반복해도 preview object가 누적되지 않아야 한다");
 
 const source = fs.readFileSync("outputs/src/floorplanEditor.js", "utf8");
 assert(source.includes("scale: 1"), "composite reference scale은 1로 고정");
@@ -57,5 +65,8 @@ assert(source.includes("자동 Grid 미리보기를 적용하거나 취소한 �
 assert(source.includes("layout_origin") && source.includes("front_direction"), "origin/frontDirection metadata 저장");
 assert(source.includes("layout-auto-grid-measurements"), "대표 간격 치수 렌더");
 assert(source.includes('id = "layoutWorkspaceAutoGridButton"'), "새 레이아웃 toolbar 자동 Grid 버튼");
+assert.strictEqual((source.match(/function generateSeminarGrid\(/g) || []).length, 1, "deterministic generator를 shadow하는 동명 함수가 없어야 한다");
+assert(source.includes('function generateLegacySeminarGrid()') && source.includes('buildGridPreview({'), "레거시 canvas와 workspace preview 실행 경로를 분리해야 한다");
+assert(source.includes('let layoutObjects = []') && source.includes('let workspaceObjects = []'), "각 editor의 authoritative draft collection은 closure state로 선언되어야 한다");
 
 console.log("Floorplan actual-mm auto grid V1 tests passed");

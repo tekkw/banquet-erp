@@ -59,7 +59,7 @@ assert.match(api.formatAutoGridFailureMessage({ reason: "blocked_area_collision"
 const source = fs.readFileSync("outputs/src/floorplanEditor.js", "utf8");
 const css = fs.readFileSync("outputs/src/styles/assets.css", "utf8");
 assert(source.includes("parseAutoGridLayoutIntent") && source.includes("previewAutoGridLayout()"), "자연어 결과는 기존 Auto Grid preview 경로를 호출한다");
-assert(source.includes("generateSeminarGrid({") && source.includes("autoGridUi.width.value"), "좌표는 기존 deterministic generator가 생성한다");
+assert(source.includes("buildGridPreview({") && source.includes("autoGridUi.width.value"), "Auto Grid와 AI는 공용 preview builder로 deterministic generator를 호출한다");
 assert(source.includes("data-auto-grid-apply disabled"), "preview 적용 전 저장하지 않는다");
 assert(css.includes(".layout-auto-grid-fields label") && css.includes("#26384a") && css.includes(".layout-auto-grid-helper"), "Auto Grid panel 텍스트 contrast를 명시한다");
 
