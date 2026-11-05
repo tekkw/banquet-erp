@@ -27,6 +27,7 @@
   let pinnedSetupSectionOpen = true;
   let setupCandidateSectionOpen = true;
   let setupCandidateVisibleCount = 20;
+  let setupTimingRefreshTimer = null;
   const expandedPinnedSetupGroups = new Set();
   const expandedSetupContextKeys = new Set();
   function coreRules() { return window.BANQUET_ERP_CORE_RULES; }
@@ -726,7 +727,7 @@
     return block.time < currentTime;
   }
   function isSetupOverdue(item, referenceDate = selectedDate, now = new Date()) {
-    const scheduledDate = setupScheduledDate(item); if (coreRules().getSetupTimingStatus({ scheduledDate, completed: item.completed }, referenceDate) === "overdue") return true;
+    const scheduledDate = setupScheduledDate(item); if (coreRules().getSetupTaskTimingStatus({ scheduledDate, completed: item.completed }, referenceDate) === "overdue") return true;
     if (item.completed || !scheduledDate) return false;
     return scheduledDate === referenceDate && referenceDate === dateKey(now) && /^\d\d:\d\d$/.test(item.next?.time || item.time || "") && (item.next?.time || item.time) < `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   }
@@ -802,10 +803,11 @@
     if (weeklyRoot) weeklyRoot.innerHTML = renderWeeklySetupSection(buildWeeklySetupTasks(currentEvents));
     bindEvents();
     renderDashboardAgendaWidget();
+    scheduleSetupTimingRefresh();
     window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered"));
   }
   function getPinnedSetupStatus(task, today = seoulDateKey()) {
-    return coreRules().getSetupTimingStatus({ scheduledDate: setupScheduledDate(task) || task?.plannedDate || task?.date || "", completed: task?.completed === true || state.completions[task?.key] === true }, today);
+    return coreRules().getSetupTaskTimingStatus({ scheduledDate: setupScheduledDate(task) || task?.plannedDate || task?.date || "", completed: task?.completed === true || state.completions[task?.key] === true }, today);
   }
   function getSetupTaskScheduledDate(task) {
     const override = state.setupOverrides[task?.key] || {};
@@ -816,7 +818,7 @@
     if (completed) return "completed";
     const scheduledDate = getSetupTaskScheduledDate(task);
     if (!scheduledDate) return "undated";
-    const timing = coreRules().getSetupTimingStatus({ scheduledDate, completed: false }, actualToday);
+    const timing = coreRules().getSetupTaskTimingStatus({ scheduledDate, completed: false }, actualToday);
     return timing === "future" ? "upcoming" : timing;
   }
   function pinnedSetupMatchKey(item) {
@@ -1198,6 +1200,24 @@
   function seoulDateKey(now = new Date()) {
     return coreRules().getActualTodaySeoul(now);
   }
+  function nextDateKey(dateKeyValue) {
+    const date = new Date(`${dateKeyValue}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() + 1);
+    return date.toISOString().slice(0, 10);
+  }
+  function scheduleSetupTimingRefresh(now = new Date()) {
+    if (setupTimingRefreshTimer) clearTimeout(setupTimingRefreshTimer);
+    const nextSeoulMidnight = new Date(`${nextDateKey(seoulDateKey(now))}T00:00:01+09:00`);
+    const delay = Math.max(1000, nextSeoulMidnight.getTime() - now.getTime());
+    setupTimingRefreshTimer = setTimeout(() => {
+      setupTimingRefreshTimer = null;
+      if (root) render({ events: currentEvents });
+    }, delay);
+    return delay;
+  }
+  function refreshSetupTimingBuckets() {
+    if (root) render({ events: currentEvents });
+  }
   function setupCandidateDateRange(today = seoulDateKey()) {
     const start = new Date(`${today}T12:00:00+09:00`); const day = start.getUTCDay();
     const end = new Date(start); end.setUTCDate(end.getUTCDate() + ((7 - day) % 7) + 7);
@@ -1478,7 +1498,11 @@
     render(); return created;
   }
   window.addEventListener?.("banquet:beverage-inventory-updated", () => { if (root) render({ events: currentEvents }); else window.dispatchEvent(new CustomEvent("banquet:operation-board-rendered")); });
-  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, groupPinnedSetupTasks, pinnedSetupSummary, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, getActualTodaySeoul: seoulDateKey, getSelectedBoardDate: () => selectedDate, getSetupTimingStatus: (item, today) => coreRules().getSetupTimingStatus({ scheduledDate: getSetupTaskScheduledDate(item), completed: item?.completed }, today), getSetupTaskKey: pinnedSetupMatchKey, dedupeSetupCandidates: dedupePinnedSetupTasks, getSetupTaskStatus: (item, dates) => coreRules().getSetupTaskStatus({ scheduledDate: getSetupTaskScheduledDate(item), completed: item?.completed }, dates), isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => coreRules().normalizeVenue(value), normalizeVenueSet: (value) => coreRules().normalizeVenueSet(value), venueMatchRank: (left, right) => coreRules().venueMatchRank(left, right), getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
+  window.addEventListener?.("focus", refreshSetupTimingBuckets);
+  document.addEventListener?.("visibilitychange", () => { if (document.visibilityState === "visible") refreshSetupTimingBuckets(); });
+  window.BANQUET_ERP_OPERATION_BOARD = { render, renderDashboardAgendaWidget, completeBoardItem, classifySchedule, normalizedScheduleRows, colorForSpace, physicalSpaceKeys, physicalSpaceKeysOverlap, spacesOverlap, resolveNextEventForVenue, inferLayoutType, getVenueGroup, spaceGroupFromKeys, spaceGroupForBlock, groupBlocksBySpace, formatEventSpaceSummary, formatEventSpaceDetails, buildAutoBlocks, buildDailyBriefing, buildProactiveAlerts, dailyBriefingConversation, dailyBriefingAction, activeDailyBriefingItem, dailyBriefingAnswer, correctBriefingNextEvent, setupDocumentSummary, proactiveAlertSummary, registerProactiveAlert, acknowledgeProactiveAlert, registerEventOrderChange, eventOrderChanges, registerAttachmentScheduleCandidates, buildWeeklySetupTasks, recommendLayout, isAssetAuditRow, allBlocks, agendaBlocks, setupBoardTasks, groupPinnedSetupTasks, pinnedSetupSummary, sortSetupTasks, isSetupOverdue, setupCandidateDateRange, setupEventDetails, setupEventCandidates, formatSetupCandidateLabel, setupVenueCodes, renderSetupVenueOptions, findLocalSetupDuplicate, isOverdue, reminderTriggerAt, setSetupPin, updateSetupTask, getActualTodaySeoul: seoulDateKey, getSelectedBoardDate: () => selectedDate, getSetupTaskTimingStatus: (item, today) => coreRules().getSetupTaskTimingStatus({ scheduledDate: getSetupTaskScheduledDate(item), completed: item?.completed }, today), getSetupTimingStatus: (item, today) => coreRules().getSetupTaskTimingStatus({ scheduledDate: getSetupTaskScheduledDate(item), completed: item?.completed }, today), getSetupTaskKey: pinnedSetupMatchKey, dedupeSetupCandidates: dedupePinnedSetupTasks, getSetupTaskStatus: (item, dates) => coreRules().getSetupTaskStatus({ scheduledDate: getSetupTaskScheduledDate(item), completed: item?.completed }, dates), isDailyBriefingReady: () => persistentSetupLoaded, normalizeVenue: (value) => coreRules().normalizeVenue(value), normalizeVenueSet: (value) => coreRules().normalizeVenueSet(value), venueMatchRank: (left, right) => coreRules().venueMatchRank(left, right), getSelectedDate: () => selectedDate, setSelectedDate(value) { selectDate(value); }, addFieldNote(note) { state.fieldNotes = [...state.fieldNotes.filter((x) => x.key !== note.key), note]; saveState(); render(); }, async addManualTasks(tasks) { for (const task of tasks) { const next = { key: task.key || `manual:${crypto.randomUUID()}`, id: task.key || `manual:${crypto.randomUUID()}`, kind: "manual", type: "manual", date: task.date || selectedDate, time: task.time || "", venue: normalize(task.venue), spaceId: task.spaceId || `venue:${normalize(task.venue).toLowerCase().replace(/\s+/g, "")}`, eventOrderId: task.eventOrderId || null, title: normalize(task.title), memo: normalize(task.memo), completed: false, metadataSource: task.metadata?.source || "manual_board_task", metadata: task.metadata || {}, createdAt: new Date().toISOString() }; next.id = next.key; state.manual.push(next); await syncItem(next); } saveState(); render(); }, _setEventsForTest(value) { currentEvents = value || []; }, _setStateForTest(value) { state = { completions: {}, plans: {}, reminders: {}, manual: [], checklist: [], fieldNotes: [], pins: {}, setupOverrides: {}, alertAcknowledgements: {}, proactiveAlerts: [], ...value }; activeBriefingCandidateKey = ""; activeBriefingOverride = null; } };
+  window.BANQUET_ERP_OPERATION_BOARD.scheduleSetupTimingRefresh = scheduleSetupTimingRefresh;
+  window.BANQUET_ERP_OPERATION_BOARD.refreshSetupTimingBuckets = refreshSetupTimingBuckets;
   window.BANQUET_ERP_OPERATION_BOARD.getPinnedSetupStatus = getPinnedSetupStatus;
   window.BANQUET_ERP_OPERATION_BOARD.getSetupTaskTimingBucket = getSetupTaskTimingBucket;
   window.BANQUET_ERP_OPERATION_BOARD.getSetupTaskScheduledDate = getSetupTaskScheduledDate;

@@ -102,7 +102,7 @@
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   }
   function getSelectedBoardDate(value, fallback = getActualTodaySeoul()) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value) : fallback; }
-  function getSetupTimingStatus(task = {}, actualToday = getActualTodaySeoul()) {
+  function getSetupTaskTimingStatus(task = {}, actualToday = getActualTodaySeoul()) {
     if (task.completed === true) return "completed";
     const scheduledDate = String(task.scheduledDate || "");
     if (!scheduledDate) return "unscheduled";
@@ -110,8 +110,9 @@
     if (scheduledDate === actualToday) return "today";
     return "future";
   }
+  const getSetupTimingStatus = getSetupTaskTimingStatus;
   function getSetupTaskStatus(task = {}, { selectedDate = getActualTodaySeoul(), actualToday = getActualTodaySeoul() } = {}) {
-    const timing = getSetupTimingStatus(task, actualToday);
+    const timing = getSetupTaskTimingStatus(task, actualToday);
     const visible = timing !== "completed" && (task.scheduledDate === selectedDate || (selectedDate === actualToday && timing === "overdue"));
     return { timing, visible };
   }
@@ -159,5 +160,5 @@
   }
 
   global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, formatOperationalVenue, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
-  global.BANQUET_ERP_CORE_RULES = { normalizeVenue, normalizeVenueSet, spacesOverlap, venueMatchRank, getActualTodaySeoul, getSelectedBoardDate, getSetupTimingStatus, resolveNextEventForVenue, getSetupTaskKey, dedupeSetupCandidates, getSetupTaskStatus };
+  global.BANQUET_ERP_CORE_RULES = { normalizeVenue, normalizeVenueSet, spacesOverlap, venueMatchRank, getActualTodaySeoul, getSelectedBoardDate, getSetupTaskTimingStatus, getSetupTimingStatus, resolveNextEventForVenue, getSetupTaskKey, dedupeSetupCandidates, getSetupTaskStatus };
 })(typeof window !== "undefined" ? window : globalThis);

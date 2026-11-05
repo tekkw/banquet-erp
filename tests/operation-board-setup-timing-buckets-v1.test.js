@@ -80,5 +80,9 @@ assert(source.indexOf('panel("today", "오늘 세팅"') < source.indexOf('panel(
 assert(source.indexOf('panel("overdue", "지연된 세팅"') < source.indexOf('panel("upcoming", "세팅 예정"'));
 assert(source.includes('class="setup-today-badge">오늘 세팅'));
 assert(source.includes("actualToday}T12:00:00+09:00"), "지연 N일은 actualToday 기준을 유지해야 한다");
+assert(source.includes('window.addEventListener?.("focus", refreshSetupTimingBuckets)'), "focus 복귀 시 날짜 bucket을 다시 계산해야 한다");
+assert(source.includes('document.addEventListener?.("visibilitychange"'), "visibility 복귀 시 날짜 bucket을 다시 계산해야 한다");
+assert(source.includes("nextSeoulMidnight") && source.includes("scheduleSetupTimingRefresh();"), "서울 자정 timer로 열린 페이지도 자동 갱신해야 한다");
+assert(source.includes("getSetupTaskTimingStatus:"), "PC/mobile이 노출된 공용 timing helper를 공유해야 한다");
 
 console.log("operation board setup timing buckets V1 tests passed");

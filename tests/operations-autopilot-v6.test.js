@@ -48,5 +48,5 @@ assert(aiSource.includes("buildPostEventReviewCandidates") && !aiSource.includes
 assert(aiSource.includes('action === "promote_review"') && aiSource.includes("운영 지식으로 승격"), "3회 반복 지식 승격은 사용자 버튼 승인이 필요하다");
 assert(aiSource.includes("현재 이벤오더 지시 유지"), "과거 경험은 event order를 자동 변경하지 않는다");
 assert(aiSource.includes('action === "apply_review_suggestion"') && aiSource.includes("reviewOverrideApproved"), "과거 수량 반영은 별도 사용자 승인 액션으로만 수행한다");
-assert(html.includes("operationsAutopilot.js?v=operations-autopilot-v6"));
+assert(html.includes("operationsAutopilot.js?v=setup-timing-v1"));
 console.log("operations autopilot V6 tests passed");

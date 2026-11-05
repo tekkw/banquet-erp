@@ -17,6 +17,10 @@ assert(rules.spacesOverlap("컨벤션AB + 페스타", "컨벤션A"));
 assert(rules.spacesOverlap("컨벤션AB + 페스타", "페스타"));
 
 const scheduled = { eventOrderId: "wedding", venue: "부라노ALL", scheduledDate: "2026-10-23", eventDate: "2026-10-24", completed: false };
+assert.strictEqual(rules.getSetupTaskTimingStatus(scheduled, "2026-10-22"), "future");
+assert.strictEqual(rules.getSetupTaskTimingStatus(scheduled, "2026-10-23"), "today");
+assert.strictEqual(rules.getSetupTaskTimingStatus(scheduled, "2026-10-24"), "overdue");
+assert.strictEqual(rules.getSetupTaskTimingStatus({ ...scheduled, completed: true }, "2026-10-22"), "completed");
 assert.strictEqual(rules.getSetupTimingStatus(scheduled, "2026-10-22"), "future", "행사일이 아니라 scheduledDate로 상태를 계산해야 한다");
 assert.strictEqual(rules.getSetupTaskStatus(scheduled, { selectedDate: "2026-10-22", actualToday: "2026-10-22" }).visible, false);
 assert.strictEqual(rules.getSetupTaskStatus(scheduled, { selectedDate: "2026-10-23", actualToday: "2026-10-22" }).visible, true, "미래 선택일에는 예정 task를 표시해야 한다");
