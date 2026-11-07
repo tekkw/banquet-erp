@@ -25,7 +25,7 @@ assert(editor.includes('data-library-space='), "하위 공간 선택 단계가 �
 assert(editor.includes('data-layout-filter='), "레이아웃 유형 선택 단계가 필요하다");
 assert(editor.includes('data-action="preview"') && editor.includes('data-action="edit"') && editor.includes('data-action="delete"'), "카드는 미리보기/편집/삭제를 제공해야 한다");
 assert(editor.includes('venue_floorplan_objects?select=*'), "중요 구조물 라벨은 기존 기본 도면 객체를 재사용해야 한다");
-assert(editor.includes('const label = isFixed ?'), "테이블과 의자의 미세 라벨은 썸네일에서 숨겨야 한다");
+assert(editor.includes('renderSavedLayoutObjectSvg') && editor.includes('showNames: false'), "테이블과 의자의 미세 라벨은 공용 renderer에서 숨겨야 한다");
 assert(styles.includes('.layout-library-important-label'), "썸네일 전용 읽기 쉬운 라벨 스타일이 필요하다");
 assert(styles.includes('overflow-x: auto'), "모바일 선택 탭은 가로 스크롤을 지원해야 한다");
 

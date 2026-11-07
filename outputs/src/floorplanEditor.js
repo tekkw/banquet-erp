@@ -322,17 +322,25 @@
     return { x, y, width: objectWidth, height: objectHeight };
   }
 
+  function layoutLibraryObjectBounds(row, width, height) {
+    const geometry = layoutLibraryObjectGeometry(row, width, height);
+    const radians = (((Number(row?.rotation || 0) % 360) + 360) % 360) * Math.PI / 180;
+    const boxWidth = Math.abs(geometry.width * Math.cos(radians)) + Math.abs(geometry.height * Math.sin(radians));
+    const boxHeight = Math.abs(geometry.width * Math.sin(radians)) + Math.abs(geometry.height * Math.cos(radians));
+    return { ...geometry, left: geometry.x - boxWidth / 2, right: geometry.x + boxWidth / 2, top: geometry.y - boxHeight / 2, bottom: geometry.y + boxHeight / 2, boxWidth, boxHeight };
+  }
+
   function layoutLibraryViewBox(width, height, points = [], objects = []) {
     const bounds = [{ x: 0, y: 0 }, { x: width, y: height }];
     (points || []).forEach((point) => bounds.push({ x: Number(point.x) || 0, y: Number(point.y) || 0 }));
     (objects || []).forEach((row) => {
       if (row?.object_type === "hall_outline") return;
-      const box = layoutLibraryObjectGeometry(row, width, height);
-      bounds.push({ x: box.x - box.width / 2, y: box.y - box.height / 2 }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      const box = layoutLibraryObjectBounds(row, width, height);
+      bounds.push({ x: box.left, y: box.top }, { x: box.right, y: box.bottom });
     });
     const xs = bounds.map((point) => point.x); const ys = bounds.map((point) => point.y);
     const minX = Math.min(...xs); const maxX = Math.max(...xs); const minY = Math.min(...ys); const maxY = Math.max(...ys);
-    const padding = Math.max(250, Math.max(maxX - minX, maxY - minY) * 0.045);
+    const padding = Math.max(250, Math.max(maxX - minX, maxY - minY) * 0.08);
     return { x: minX - padding, y: minY - padding, width: maxX - minX + padding * 2, height: maxY - minY + padding * 2 };
   }
 
@@ -2236,10 +2244,25 @@
       showLayoutEditor(true);
     }
     function typeLabel(type) { return layoutTypeOptions.find(([value]) => value === type)?.[1] || "기타"; }
-    async function loadLibraryObjects(layouts = allLibraryLayouts) {
-      libraryObjectsByLayout = new Map(); const ids = layouts.map((row) => row.id).filter(Boolean); if (!ids.length) return;
-      const rows = await loggedSupabaseRequest("layout library objects", `venue_layout_objects?select=*&layout_id=in.(${ids.join(",")})&is_active=eq.true&order=sort_order.asc`).catch(() => []);
-      rows.forEach((row) => { const list = libraryObjectsByLayout.get(row.layout_id) || []; list.push(row); libraryObjectsByLayout.set(row.layout_id, list); });
+    async function loadLibraryObjects(layouts = allLibraryLayouts, { replace = true } = {}) {
+      const ids = layouts.map((row) => row.id).filter(Boolean); if (!ids.length) return;
+      const nextObjectsByLayout = replace ? new Map() : new Map(libraryObjectsByLayout);
+      if (!replace) ids.forEach((id) => nextObjectsByLayout.delete(String(id)));
+      const pageSize = 1000;
+      for (let batchStart = 0; batchStart < ids.length; batchStart += 40) {
+        const batch = ids.slice(batchStart, batchStart + 40);
+        let offset = 0;
+        while (true) {
+          const rows = await loggedSupabaseRequest(
+            "layout library objects page",
+            `venue_layout_objects?select=*&layout_id=in.(${batch.join(",")})&is_active=eq.true&order=layout_id.asc,sort_order.asc&limit=${pageSize}&offset=${offset}`
+          );
+          rows.forEach((row) => { const key = String(row.layout_id); const list = nextObjectsByLayout.get(key) || []; list.push(row); nextObjectsByLayout.set(key, list); });
+          if (!rows.length) break;
+          offset += rows.length;
+        }
+      }
+      libraryObjectsByLayout = nextObjectsByLayout;
     }
     async function loadAllLibraryLayouts() {
       if (libraryLoading) return;
@@ -2288,6 +2311,27 @@
       if (!file.bucket || !file.storage_path) return "";
       return `${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(file.bucket)}/${String(file.storage_path).split("/").map(encodeURIComponent).join("/")}`;
     }
+    function renderSavedLayoutObjectSvg(row, floorplanWidth, floorplanHeight, mode) {
+      const box = layoutLibraryObjectGeometry(row, floorplanWidth, floorplanHeight);
+      const object = {
+        objectType: row.object_type,
+        masterObjectId: row.object_type_id || row.metadata?.object_type_id || "",
+        displayShape: row.display_shape || row.metadata?.display_shape || (row.object_type === "round_table" ? "circle" : "rect"),
+        label: row.label || objectLabels[row.object_type] || row.object_type,
+        seatCount: Number(row.seat_count || 0),
+        metadata: row.metadata || {},
+      };
+      const symbol = createWorkspaceObjectShape(object, -box.width / 2, -box.height / 2, box.width, box.height, { mode: "editor", showNames: false });
+      symbol.setAttribute("transform", `translate(${box.x} ${box.y}) rotate(${Number(row.rotation) || 0})`);
+      const importantTypes = new Set(["door", "screen", "stage", "pillar", "blocked_area", "structure_area"]);
+      if (importantTypes.has(row.object_type)) {
+        const label = document.createElementNS(svgNs, "text");
+        label.classList.add("layout-library-important-label"); label.setAttribute("x", "0"); label.setAttribute("y", "0");
+        label.setAttribute("font-size", String(mode === "thumbnail" ? 620 : 480)); label.textContent = object.label;
+        symbol.append(label);
+      }
+      return new XMLSerializer().serializeToString(symbol);
+    }
     function libraryPreview(layout, mode = "thumbnail") {
       const floorplan = libraryFloorplan(layout); const metadata = floorplan?.metadata || {};
       const width = Math.max(1, Number(metadata.widthMm) || Number(floorplan?.actual_width) * 1000 || workspaceDrawingWidthMm);
@@ -2296,21 +2340,11 @@
       const outlineRow = baseObjects.find((row) => row.object_type === "hall_outline");
       const points = Array.isArray(outlineRow?.metadata?.points) ? outlineRow.metadata.points : (Array.isArray(metadata.points) ? metadata.points : []);
       const objects = [...baseObjects.filter((row) => row.object_type !== "hall_outline"), ...(libraryObjectsByLayout.get(layout.id) || [])];
-      const importantTypes = new Set(["door", "screen", "stage", "pillar", "blocked_area", "structure_area"]);
-      const shapes = objects.map((row) => {
-        const box = layoutLibraryObjectGeometry(row, width, height); const x = box.x; const y = box.y; const w = box.width; const h = box.height;
-        const isRound = row.object_type === "round_table"; const isChair = row.object_type === "chair"; const isFixed = importantTypes.has(row.object_type);
-        const fill = isChair ? "#94a3b844" : isFixed ? "#0f2a4324" : row.object_type === "round_table" ? "#d4af3755" : "#2563eb33";
-        const stroke = isFixed ? "#0f2a43" : row.object_type === "round_table" ? "#9a7b16" : "#2563eb";
-        const shape = isRound
-          ? `<ellipse cx="${x}" cy="${y}" rx="${w/2}" ry="${h/2}" fill="${fill}" stroke="${stroke}"/>`
-          : `<rect x="${x-w/2}" y="${y-h/2}" width="${w}" height="${h}" transform="rotate(${Number(row.rotation)||0} ${x} ${y})" rx="${Math.min(80, Math.max(12, Math.min(w,h)*.15))}" fill="${fill}" stroke="${stroke}"/>`;
-        const label = isFixed ? `<text class="layout-library-important-label" x="${x}" y="${y}" font-size="${mode === "thumbnail" ? 620 : 480}">${escapeHtml(row.label || objectLabels[row.object_type] || row.object_type)}</text>` : "";
-        return `<g>${shape}${label}</g>`;
-      }).join("");
+      const shapes = objects.map((row) => renderSavedLayoutObjectSvg(row, width, height, mode)).join("");
       const outline = points.length ? `<polygon points="${points.map((p)=>`${Number(p.x)},${Number(p.y)}`).join(" ")}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>` : `<rect x="20" y="20" width="${Math.max(1,width-40)}" height="${Math.max(1,height-40)}" fill="#f8fafc" stroke="#0f2a43" stroke-width="40"/>`;
       const view = layoutLibraryViewBox(width, height, points, objects);
-      return `<div class="layout-library-thumbnail layout-library-thumbnail-${mode}"><svg viewBox="${view.x} ${view.y} ${view.width} ${view.height}" preserveAspectRatio="xMidYMid meet" aria-label="${escapeAttribute(layout.layout_name)} 미리보기">${outline}${shapes}</svg></div>`;
+      const savedCount = libraryObjectsByLayout.get(String(layout.id))?.length || 0;
+      return `<div class="layout-library-thumbnail layout-library-thumbnail-${mode}" data-layout-object-count="${savedCount}" data-layout-revision="${escapeAttribute(layout.updated_at || layout.created_at || "")}"><svg viewBox="${view.x} ${view.y} ${view.width} ${view.height}" preserveAspectRatio="xMidYMid meet" aria-label="${escapeAttribute(layout.layout_name)} 미리보기">${outline}${shapes}</svg></div>`;
     }
     function objectSummary(layoutId) {
       const counts = new Map(); (libraryObjectsByLayout.get(layoutId) || []).forEach((row) => counts.set(row.label || objectLabels[row.object_type] || row.object_type, (counts.get(row.label || objectLabels[row.object_type] || row.object_type) || 0) + 1));
@@ -2353,14 +2387,21 @@
       const button = event.target.closest("button[data-action]"); const card = event.target.closest("[data-layout-id]"); if (!card) return;
       const layout = allLibraryLayouts.find((row) => String(row.id) === String(card.dataset.layoutId)); if (!layout) return;
       const action = button?.dataset.action || "preview";
-      if (action === "preview") { showLibraryPreview(layout); return; }
+      if (action === "preview") { await showLibraryPreview(layout); return; }
       if (["open","edit"].includes(action)) { await openLibraryLayout(layout); return; }
       if (action === "info") { workspaceActiveLayout = layout; openLayoutInfoModal("info", false); return; }
       if (action === "duplicate") { await duplicateLibraryLayout(layout); return; }
       if (action === "delete") await deleteLibraryLayout(layout);
     }
-    function showLibraryPreview(layout) {
+    async function showLibraryPreview(layout) {
       if (!workspacePreviewModal || !workspacePreviewBody) return;
+      try {
+        await loadLibraryObjects([layout], { replace: false });
+      } catch (error) {
+        console.error("layout library preview objects load failed:", error);
+        setStatus(error.message || "레이아웃 미리보기 데이터를 불러오지 못했습니다.", "error");
+        return;
+      }
       libraryPreviewLayout = layout;
       const previewTitle = workspacePreviewModal.querySelector("#layoutWorkspacePreviewTitle");
       if (previewTitle) previewTitle.textContent = layout.layout_name || "레이아웃 미리보기";
@@ -2801,6 +2842,7 @@
           setStatus("醫뚰몴 ?곗씠?곕뒗 ??λ릱吏留?PNG 誘몃━蹂닿린 ??μ? ?ㅽ뙣?덉뒿?덈떎.", "warn");
         }
         await loadWorkspaceSavedLayouts();
+        await loadAllLibraryLayouts();
         workspaceSavedLayoutSelect.value = workspaceActiveLayout.id;
         workspaceDirty = false;
         pendingLayoutInfo = null;
@@ -6428,7 +6470,7 @@
         if (!allLibraryLayouts.length || !allLibraryLayouts.some((row) => String(row.id) === String(layoutId))) await loadAllLibraryLayouts();
         const layout = allLibraryLayouts.find((row) => String(row.id) === String(layoutId));
         if (!layout) return false;
-        showLibraryPreview(layout);
+        await showLibraryPreview(layout);
         return true;
       },
     };
@@ -6465,6 +6507,7 @@
     layoutAiContextMatches,
     venueFamilyName,
     layoutLibraryObjectGeometry,
+    layoutLibraryObjectBounds,
     layoutLibraryViewBox,
     parseLayoutAiCommand,
     layoutAiUnitToMm,
