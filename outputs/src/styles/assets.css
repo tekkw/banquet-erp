@@ -1495,3 +1495,28 @@ polyline.floorplan-v2-outline { fill: none; stroke: #b7791f; stroke-dasharray: 8
   .layout-library-grid { grid-template-columns: minmax(0, 1fr); }
   .layout-library-panel { padding-bottom: calc(var(--mobile-bottom-nav-height, 72px) + 12px); }
 }
+.object-color-control {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.object-color-control input[type="color"],
+.object-master-color input[type="color"] {
+  min-width: 3.25rem;
+  height: 2.25rem;
+  padding: 0.15rem;
+  cursor: pointer;
+}
+
+.object-color-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  grid-column: 1 / -1;
+}
+
+.object-color-presets button {
+  min-height: 2rem;
+  padding: 0.3rem 0.55rem;
+}

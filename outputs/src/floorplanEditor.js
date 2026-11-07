@@ -201,6 +201,39 @@
     selected: { structure: "#2563eb", structureFill: "rgba(37,99,235,.12)", wallFill: "#2563eb", dimension: "#a16207", text: "#1f2937", selection: "#2563eb" },
   };
 
+  const OBJECT_COLOR_PRESETS = Object.freeze({
+    cold: { label: "콜드", color: "#93C5FD" },
+    hot: { label: "핫", color: "#FDBA74" },
+    dessert: { label: "디저트", color: "#F0ABFC" },
+  });
+  const MASTER_COLOR_MARKER = /(?:^|\n)\[defaultColor:(#[0-9a-f]{6})\](?=\n|$)/i;
+
+  function normalizeObjectColor(value) {
+    const color = String(value || "").trim().toUpperCase();
+    return /^#[0-9A-F]{6}$/.test(color) ? color : "";
+  }
+
+  function readMasterDefaultColor(master) {
+    return normalizeObjectColor(master?.metadata?.defaultColor || master?.defaultColor || String(master?.memo || "").match(MASTER_COLOR_MARKER)?.[1]);
+  }
+
+  function readMasterMemo(master) {
+    return String(master?.memo || "").replace(MASTER_COLOR_MARKER, "").trim();
+  }
+
+  function writeMasterMemo(memo, color) {
+    const text = String(memo || "").replace(MASTER_COLOR_MARKER, "").trim();
+    const normalized = normalizeObjectColor(color);
+    return [text, normalized ? `[defaultColor:${normalized}]` : ""].filter(Boolean).join("\n") || null;
+  }
+
+  function resolveObjectFillColor(object, master, fallback) {
+    return normalizeObjectColor(object?.metadata?.colorOverride || object?.colorOverride)
+      || readMasterDefaultColor(master)
+      || normalizeObjectColor(object?.metadata?.defaultColor)
+      || fallback;
+  }
+
   function getFloorplanStrokeStyle(objectType, mode = "editor") {
     const token = FLOORPLAN_STYLE_TOKENS[mode] || FLOORPLAN_STYLE_TOKENS.editor;
     const type = String(objectType || "object");
@@ -767,6 +800,10 @@
       workspaceSeatCountInput,
       workspaceZIndexInput,
       workspaceOpacityInput,
+      workspaceColorInput,
+      workspaceRoleInput,
+      workspaceColorResetButton,
+      workspaceColorPresetButtons,
       workspaceWallStartXInput,
       workspaceWallStartYInput,
       workspaceWallEndXInput,
@@ -853,6 +890,8 @@
       objectElevationInput,
       objectSeatCountInput,
       objectShapeInput,
+      objectColorInput,
+      objectColorTextInput,
       objectCanResizeInput,
       objectCanRotateInput,
       objectIsActiveInput,
@@ -1077,7 +1116,11 @@
         objectHeightInput,
         objectSeatCountInput,
         objectShapeInput,
+        objectColorInput,
+        objectColorTextInput,
       ].forEach((input) => input?.addEventListener("input", renderObjectTypeFormPreview));
+      objectColorInput?.addEventListener("input", () => { if (objectColorTextInput) objectColorTextInput.value = objectColorInput.value.toUpperCase(); renderObjectTypeFormPreview(); });
+      objectColorTextInput?.addEventListener("change", () => { const color = normalizeObjectColor(objectColorTextInput.value); if (color && objectColorInput) objectColorInput.value = color; renderObjectTypeFormPreview(); });
       objectShapeInput?.addEventListener("change", renderObjectTypeFormPreview);
       renderObjectTypeFormPreview();
       loadLayoutObjectTypes();
@@ -1564,7 +1607,14 @@
         workspaceSeatCountInput,
         workspaceZIndexInput,
         workspaceOpacityInput,
+        workspaceColorInput,
       ].forEach((input) => input?.addEventListener("input", updateSelectedWorkspaceObjectFromInputs));
+      workspaceRoleInput?.addEventListener("input", updateSelectedWorkspaceObjectFromInputs);
+      workspaceColorResetButton?.addEventListener("click", () => applyWorkspaceSelectionColor("", undefined));
+      (workspaceColorPresetButtons || []).forEach((button) => button.addEventListener("click", () => {
+        const preset = OBJECT_COLOR_PRESETS[button.dataset.objectColorPreset];
+        if (preset) applyWorkspaceSelectionColor(preset.color, button.dataset.objectColorPreset);
+      }));
       [
         workspaceWallStartXInput,
         workspaceWallStartYInput,
@@ -1772,6 +1822,12 @@
         autoGridUi.status.textContent = result.message;
         renderWorkspace(); return result;
       }
+      const seminarMaster = layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "seminar_table" && Math.abs(Number(item.default_width_m || 0) * 1000 - Number(autoGridUi.width.value)) <= 10 && Math.abs(Number(item.default_height_m || 0) * 1000 - Number(autoGridUi.depth.value)) <= 10)
+        || layoutObjectTypes.find((item) => item.is_active !== false && item.object_type === "seminar_table");
+      result.objects.forEach((object) => {
+        object.masterObjectId = seminarMaster?.id || "";
+        object.metadata = { ...(object.metadata || {}), ...(readMasterDefaultColor(seminarMaster) ? { defaultColor: readMasterDefaultColor(seminarMaster) } : {}) };
+      });
       const baseObjects = workspaceObjects.slice();
       autoGridPreview = createAutoLayoutPreview(result, baseObjects);
       workspaceObjects = [...baseObjects, ...autoGridPreview.previewObjects];
@@ -3122,7 +3178,7 @@
         else {
           node.setAttribute("stroke", style.stroke);
           node.setAttribute("stroke-width", String(style.strokeWidth));
-          if (node.getAttribute("fill") !== "none") node.setAttribute("fill", style.fill);
+          if (node.getAttribute("fill") !== "none") node.setAttribute("fill", node.dataset.objectFillColor || style.fill);
           node.setAttribute("opacity", String(style.opacity));
         }
       });
@@ -3393,7 +3449,10 @@
         seatCount: Number(master.default_seat_count || 0),
         zIndex: getWorkspaceMaxZIndex() + 1,
         locked: workspaceEditMode === "layout" ? false : true,
-        metadata: workspaceEditMode === "base" ? { baseFloorplanObject: true } : {},
+        metadata: {
+          ...(workspaceEditMode === "base" ? { baseFloorplanObject: true } : {}),
+          ...(readMasterDefaultColor(master) ? { defaultColor: readMasterDefaultColor(master) } : {}),
+        },
       };
       workspaceObjects.push(object);
       selectWorkspaceObject(object.instanceId);
@@ -4014,10 +4073,14 @@
       const group = document.createElementNS(svgNs, "g");
       const styleType = object.metadata?.compositeOutlineSource ? "outline" : object.objectType;
       const style = getFloorplanStrokeStyle(styleType, options.mode || "editor");
+      const master = findObjectType(object.masterObjectId || object.metadata?.object_type_id);
+      const explicitObjectFill = resolveObjectFillColor(object, master, "");
+      const objectFill = explicitObjectFill || style.fill;
       const shape = getObjectDisplayShape(object);
       const common = (node) => {
         node.dataset.floorplanStyleType = styleType;
-        node.setAttribute("fill", style.fill);
+        if (explicitObjectFill) node.dataset.objectFillColor = explicitObjectFill;
+        node.setAttribute("fill", objectFill);
         node.setAttribute("stroke", style.stroke);
         node.setAttribute("stroke-width", String(style.strokeWidth));
         node.setAttribute("opacity", String(style.opacity));
@@ -4555,8 +4618,8 @@
         workspaceDimensionPositionSelect,
         workspaceDimensionLabelInput,
       ];
-      const inputs = [workspaceLabelInput, workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput, workspaceSeatCountInput, workspaceZIndexInput, workspaceOpacityInput, ...wallInputs];
-      const buttons = [workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton, workspaceRotate90Button, workspaceDuplicateButton, workspaceDeleteButton];
+      const inputs = [workspaceLabelInput, workspaceXInput, workspaceYInput, workspaceWidthInput, workspaceHeightInput, workspaceRotationInput, workspaceSeatCountInput, workspaceZIndexInput, workspaceOpacityInput, workspaceColorInput, workspaceRoleInput, ...wallInputs];
+      const buttons = [workspaceBringFrontButton, workspaceForwardButton, workspaceBackwardButton, workspaceSendBackButton, workspaceRotate90Button, workspaceDuplicateButton, workspaceDeleteButton, workspaceColorResetButton, ...(workspaceColorPresetButtons || [])];
       const propertiesPanel = workspaceLabelInput?.closest?.(".layout-editor-properties");
       const panelHelp = propertiesPanel?.querySelector?.(".layout-panel-title p");
       propertiesPanel?.classList.toggle("multi-selection", selectionCount > 1);
@@ -4567,6 +4630,8 @@
       if (selectionCount > 1) {
         inputs.forEach((input) => { if (input) { input.value = ""; input.disabled = true; } });
         buttons.forEach((button) => { if (button) button.disabled = false; });
+        if (workspaceColorInput) { workspaceColorInput.disabled = false; workspaceColorInput.value = "#D9DEE6"; }
+        if (workspaceRoleInput) { workspaceRoleInput.disabled = false; workspaceRoleInput.value = ""; }
         if (workspaceRotate90Button) workspaceRotate90Button.disabled = true;
         return;
       }
@@ -4580,6 +4645,8 @@
         if (workspaceSeatCountInput) workspaceSeatCountInput.value = "";
         if (workspaceZIndexInput) workspaceZIndexInput.value = "";
         if (workspaceOpacityInput) workspaceOpacityInput.value = "";
+        if (workspaceColorInput) workspaceColorInput.value = "#D9DEE6";
+        if (workspaceRoleInput) workspaceRoleInput.value = "";
         if (workspaceWallStartXInput) workspaceWallStartXInput.value = "";
         if (workspaceWallStartYInput) workspaceWallStartYInput.value = "";
         if (workspaceWallEndXInput) workspaceWallEndXInput.value = "";
@@ -4612,6 +4679,8 @@
       workspaceSeatCountInput.value = object.seatCount || 0;
       workspaceZIndexInput.value = object.zIndex || 0;
       if (workspaceOpacityInput) workspaceOpacityInput.value = Math.round(getWorkspaceObjectOpacity(object) * 100);
+      if (workspaceColorInput) workspaceColorInput.value = normalizeObjectColor(object.metadata?.colorOverride) || readMasterDefaultColor(findObjectType(object.masterObjectId)) || normalizeObjectColor(object.metadata?.defaultColor) || "#D9DEE6";
+      if (workspaceRoleInput) workspaceRoleInput.value = object.metadata?.roleLabel || "";
       wallInputs.forEach((input) => {
         if (input) input.disabled = !isWallLike;
       });
@@ -4643,9 +4712,14 @@
       }
     }
 
-    function updateSelectedWorkspaceObjectFromInputs() {
+    function updateSelectedWorkspaceObjectFromInputs(event) {
       const object = findWorkspaceObject(workspaceSelectedId);
       if (!object || !canWorkspaceEditObject(object)) return;
+      if (workspaceSelectedIds.size > 1) {
+        if (event?.target === workspaceColorInput) applyWorkspaceSelectionColor(workspaceColorInput.value, undefined);
+        if (event?.target === workspaceRoleInput) applyWorkspaceSelectionColor(undefined, workspaceRoleInput.value);
+        return;
+      }
       pushWorkspaceHistory();
       object.label = workspaceLabelInput.value.trim() || object.label;
       if (isCompositeGroup(object)) {
@@ -4667,7 +4741,30 @@
         object.opacity = clampNumber(toWorkspaceNumber(workspaceOpacityInput.value, getWorkspaceObjectOpacity(object) * 100) / 100, 0, 1);
         object.metadata = { ...(object.metadata || {}), opacity: object.opacity };
       }
+      object.metadata = { ...(object.metadata || {}) };
+      if (event?.target === workspaceColorInput) object.metadata.colorOverride = normalizeObjectColor(workspaceColorInput.value);
+      if (event?.target === workspaceRoleInput) object.metadata.roleLabel = workspaceRoleInput.value.trim();
       if (isCompositeGroup(object)) syncCompositeGroupFromObject(object, true);
+      markWorkspaceDirty();
+      renderWorkspace();
+    }
+
+    function applyWorkspaceSelectionColor(color, roleLabel) {
+      const selected = [...workspaceSelectedIds].map(findWorkspaceObject).filter(canWorkspaceEditObject);
+      if (!selected.length) return;
+      pushWorkspaceHistory();
+      const normalized = color === undefined ? undefined : normalizeObjectColor(color);
+      selected.forEach((object) => {
+        object.metadata = { ...(object.metadata || {}) };
+        if (normalized !== undefined) {
+          if (normalized) object.metadata.colorOverride = normalized;
+          else delete object.metadata.colorOverride;
+        }
+        if (roleLabel !== undefined) {
+          if (roleLabel) object.metadata.roleLabel = String(roleLabel).trim();
+          else delete object.metadata.roleLabel;
+        }
+      });
       markWorkspaceDirty();
       renderWorkspace();
     }
@@ -5363,6 +5460,7 @@
         default_height_m: toNullableNumber(objectHeightInput?.value) || 1,
         default_seat_count: toNullableInteger(objectSeatCountInput?.value),
         display_shape: objectShapeInput?.value || "rect",
+        defaultColor: normalizeObjectColor(objectColorTextInput?.value),
       };
       objectTypeLivePreview.innerHTML = renderObjectPreviewSvg(previewItem)
         + '<span>' + escapeHtml(previewItem.object_name) + '</span>'
@@ -5387,7 +5485,7 @@
         can_resize: objectCanResizeInput.checked,
         can_rotate: objectCanRotateInput.checked,
         is_active: objectIsActiveInput.checked,
-        memo: objectMemoInput.value.trim() || null,
+        memo: writeMasterMemo(objectMemoInput.value, objectColorTextInput?.value),
       };
       if (!payload.object_name || !payload.object_type) {
         setStatus("\uC624\uBE0C\uC81D\uD2B8\uBA85\uACFC object_type\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.", "warn");
@@ -5431,7 +5529,9 @@
       objectCanResizeInput.checked = item.can_resize !== false;
       objectCanRotateInput.checked = item.can_rotate !== false;
       objectIsActiveInput.checked = item.is_active !== false;
-      objectMemoInput.value = item.memo || "";
+      if (objectColorInput) objectColorInput.value = readMasterDefaultColor(item) || "#D9DEE6";
+      if (objectColorTextInput) objectColorTextInput.value = readMasterDefaultColor(item);
+      objectMemoInput.value = readMasterMemo(item);
       objectTypeSaveButton.textContent = "\uB9C8\uC2A4\uD130 \uC218\uC815 \uC800\uC7A5";
       objectTypeResetButton.textContent = "\uCDE8\uC18C";
       renderObjectTypeFormPreview();
@@ -5445,6 +5545,8 @@
       if (objectCanRotateInput) objectCanRotateInput.checked = true;
       if (objectIsActiveInput) objectIsActiveInput.checked = true;
       if (objectShapeInput) objectShapeInput.value = "rect";
+      if (objectColorInput) objectColorInput.value = "#D9DEE6";
+      if (objectColorTextInput) objectColorTextInput.value = "";
       if (objectTypeSaveButton) objectTypeSaveButton.textContent = "\uB9C8\uC2A4\uD130 \uB4F1\uB85D";
       if (objectTypeResetButton) objectTypeResetButton.textContent = "\uCD08\uAE30\uD654";
       renderObjectTypeFormPreview();
@@ -5655,6 +5757,7 @@
           display_shape: master.display_shape || "rect",
           can_resize: master.can_resize !== false,
           can_rotate: master.can_rotate !== false,
+          ...(readMasterDefaultColor(master) ? { defaultColor: readMasterDefaultColor(master) } : {}),
         },
       };
       if (scope === "floorplan") floorplanObjects.push(object);
@@ -5870,7 +5973,8 @@
         } else {
           targetCtx.rect(-width / 2, -height / 2, width, height);
         }
-        targetCtx.fillStyle = style.fill;
+        const master = findObjectType(object.object_type_id || object.metadata?.object_type_id);
+        targetCtx.fillStyle = resolveObjectFillColor(object, master, style.fill);
         targetCtx.strokeStyle = object.id === selectedObjectId && scope === selectedScope ? "#d4af37" : style.stroke;
         targetCtx.lineWidth = object.id === selectedObjectId && scope === selectedScope ? 4 / view.scale : 2 / view.scale;
         if (object.is_locked) targetCtx.setLineDash([8 / view.scale, 5 / view.scale]);
@@ -5905,6 +6009,8 @@
           <label>李⑹꽍<input data-selected-prop="seat_count" type="number" min="0" step="1" value="${object.seat_count ?? ""}"></label>
         </div>
         <label>硫붾え<textarea data-selected-prop="memo" rows="2">${escapeHtml(object.memo || "")}</textarea></label>
+        <label>역할<input data-selected-prop="roleLabel" value="${escapeAttribute(object.metadata?.roleLabel || "")}" placeholder="예: cold, registration"></label>
+        <label>색상<span class="object-color-control"><input data-selected-prop="colorOverride" type="color" value="${normalizeObjectColor(object.metadata?.colorOverride) || readMasterDefaultColor(findObjectType(object.object_type_id)) || normalizeObjectColor(object.metadata?.defaultColor) || "#D9DEE6"}"><button type="button" data-selected-action="default-color">기본색으로</button></span></label>
         <label class="inline-check"><input data-selected-prop="is_locked" type="checkbox" ${object.is_locked ? "checked" : ""}> ?좉툑</label>
         <div class="floorplan-selected-actions">
           <button type="button" data-selected-action="copy">蹂듭궗</button>
@@ -5918,6 +6024,7 @@
       });
       selectedObjectPanel.querySelector('[data-selected-action="copy"]')?.addEventListener("click", copySelectedObject);
       selectedObjectPanel.querySelector('[data-selected-action="delete"]')?.addEventListener("click", deleteSelectedObject);
+      selectedObjectPanel.querySelector('[data-selected-action="default-color"]')?.addEventListener("click", () => { object.metadata = { ...(object.metadata || {}) }; delete object.metadata.colorOverride; renderSelectedObjectPanel(); render(); });
     }
 
     function updateSelectedObjectFromPanel(event) {
@@ -5929,6 +6036,8 @@
       else if (prop === "memo") object.memo = value;
       else if (prop === "is_locked") object.is_locked = Boolean(value);
       else if (prop === "seat_count") object.seat_count = toNullableInteger(value);
+      else if (prop === "colorOverride") object.metadata = { ...(object.metadata || {}), colorOverride: normalizeObjectColor(value) };
+      else if (prop === "roleLabel") object.metadata = { ...(object.metadata || {}), roleLabel: String(value || "").trim() };
       else object[prop] = prop === "rotation" ? Number(value) || 0 : clamp01(Number(value) || 0);
       if (prop === "width" || prop === "height") object[prop] = Math.max(0.001, object[prop]);
       render();
@@ -6250,6 +6359,7 @@
       return (rows || []).map((row, index) => ({
         ...row,
         id: row.id || `local_${row.object_type || "object"}_${index}`,
+        defaultColor: readMasterDefaultColor(row),
       }));
     }
 
@@ -6289,6 +6399,7 @@
         displayShape: item.display_shape || getObjectDisplayShape(item),
         label: item.object_name || objectLabels[type] || type,
         seatCount: Number(item.default_seat_count || 0),
+        metadata: { defaultColor: readMasterDefaultColor(item) },
       };
       const symbol = createWorkspaceObjectShape(previewObject, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight, { showNames: true });
       symbol.setAttribute("transform", "translate(40 28)");
@@ -6340,6 +6451,12 @@
     calculateExportVisualBounds,
     transformBasePlanPoint,
     getFloorplanStrokeStyle,
+    normalizeObjectColor,
+    readMasterDefaultColor,
+    readMasterMemo,
+    writeMasterMemo,
+    resolveObjectFillColor,
+    OBJECT_COLOR_PRESETS,
     buildSinglePageFloorplanPdf,
     isFloorplanStructuralObject,
     cloneFloorplanObjectsForLayout,

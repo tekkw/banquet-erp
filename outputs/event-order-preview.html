@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=floorplan-smart-guides-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=floorplan-object-colors-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -329,6 +329,7 @@
             <input id="layoutObjectHeightInput" type="number" min="0" step="0.01" placeholder="기본 세로(m)">
             <input id="layoutObjectElevationInput" type="number" min="0" step="0.01" placeholder="기본 높이(m)">
             <input id="layoutObjectSeatCountInput" type="number" min="0" step="1" placeholder="기본 착석">
+            <label class="object-master-color">기본 색상<span class="object-color-control"><input id="layoutObjectColorInput" type="color" value="#D9DEE6"><input id="layoutObjectColorTextInput" type="text" inputmode="text" placeholder="#D9DEE6" maxlength="7"></span></label>
             <select id="layoutObjectShapeInput" aria-label="표시 모양">
               <option value="rect">사각형</option>
               <option value="circle">원형</option>
@@ -623,6 +624,9 @@
                 <label>좌석 수<input id="layoutWorkspaceSeatCountInput" type="number" min="0" step="1" placeholder="0" disabled></label>
                 <label>레이어 순서<input id="layoutWorkspaceZIndexInput" type="number" placeholder="1" disabled></label>
                 <label>투명도(%)<input id="layoutWorkspaceOpacityInput" type="number" min="0" max="100" step="5" placeholder="100" disabled></label>
+                <label>역할<input id="layoutWorkspaceRoleInput" type="text" placeholder="예: cold, registration" disabled></label>
+                <label>색상<span class="object-color-control"><input id="layoutWorkspaceColorInput" type="color" value="#D9DEE6" disabled><button id="layoutWorkspaceColorResetButton" type="button" disabled>기본색으로</button></span></label>
+                <div class="object-color-presets" aria-label="색상 프리셋"><button type="button" data-object-color-preset="cold" disabled>콜드</button><button type="button" data-object-color-preset="hot" disabled>핫</button><button type="button" data-object-color-preset="dessert" disabled>디저트</button></div>
                 <label class="layout-wall-only">시작점 X(mm)<input id="layoutWorkspaceWallStartXInput" type="number" step="1" placeholder="-" disabled></label>
                 <label class="layout-wall-only">시작점 Y(mm)<input id="layoutWorkspaceWallStartYInput" type="number" step="1" placeholder="-" disabled></label>
                 <label class="layout-wall-only">끝점 X(mm)<input id="layoutWorkspaceWallEndXInput" type="number" step="1" placeholder="-" disabled></label>
@@ -1114,7 +1118,7 @@
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=floorplan-smart-guides-v1"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-object-colors-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=global-ai-drawer-v1"></script>
   <script src="./src/operationBoard.js?v=setup-timing-v1"></script>
@@ -1262,6 +1266,10 @@
     const layoutWorkspaceSeatCountInput = document.querySelector("#layoutWorkspaceSeatCountInput");
     const layoutWorkspaceZIndexInput = document.querySelector("#layoutWorkspaceZIndexInput");
     const layoutWorkspaceOpacityInput = document.querySelector("#layoutWorkspaceOpacityInput");
+    const layoutWorkspaceColorInput = document.querySelector("#layoutWorkspaceColorInput");
+    const layoutWorkspaceRoleInput = document.querySelector("#layoutWorkspaceRoleInput");
+    const layoutWorkspaceColorResetButton = document.querySelector("#layoutWorkspaceColorResetButton");
+    const layoutWorkspaceColorPresetButtons = [...document.querySelectorAll("[data-object-color-preset]")];
     const layoutWorkspaceWallStartXInput = document.querySelector("#layoutWorkspaceWallStartXInput");
     const layoutWorkspaceWallStartYInput = document.querySelector("#layoutWorkspaceWallStartYInput");
     const layoutWorkspaceWallEndXInput = document.querySelector("#layoutWorkspaceWallEndXInput");
@@ -1654,6 +1662,10 @@
         workspaceSeatCountInput: layoutWorkspaceSeatCountInput,
         workspaceZIndexInput: layoutWorkspaceZIndexInput,
         workspaceOpacityInput: layoutWorkspaceOpacityInput,
+        workspaceColorInput: layoutWorkspaceColorInput,
+        workspaceRoleInput: layoutWorkspaceRoleInput,
+        workspaceColorResetButton: layoutWorkspaceColorResetButton,
+        workspaceColorPresetButtons: layoutWorkspaceColorPresetButtons,
         workspaceWallStartXInput: layoutWorkspaceWallStartXInput,
         workspaceWallStartYInput: layoutWorkspaceWallStartYInput,
         workspaceWallEndXInput: layoutWorkspaceWallEndXInput,
@@ -1740,6 +1752,8 @@
         objectElevationInput: layoutObjectElevationInput,
         objectSeatCountInput: layoutObjectSeatCountInput,
         objectShapeInput: layoutObjectShapeInput,
+        objectColorInput: document.querySelector("#layoutObjectColorInput"),
+        objectColorTextInput: document.querySelector("#layoutObjectColorTextInput"),
         objectCanResizeInput: layoutObjectCanResizeInput,
         objectCanRotateInput: layoutObjectCanRotateInput,
         objectIsActiveInput: layoutObjectIsActiveInput,
