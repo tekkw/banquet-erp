@@ -2,6 +2,7 @@
   "use strict";
 
   const definitions = [
+    ["get_event_structured_data", "event", "query"],
     ["search_events", "event", "query"], ["query_events", "event", "query"], ["get_event_detail", "event", "query"], ["get_event_guest_count", "event", "query"], ["get_event_schedule", "event", "query"], ["get_event_items", "event", "query"], ["get_event_notes", "event", "query"], ["get_event_layout", "event", "query"], ["get_event_document_section", "event", "query"], ["get_event_requests", "event", "query"], ["get_event_attachments", "event", "query"], ["resolve_next_event", "event", "query"], ["open_event_original", "event", "query"], ["event.query", "eventAnalytics", "query"], ["event.items.query", "eventAnalytics", "query"], ["event.items.aggregate", "eventAnalytics", "query"],
     ["create_event", "event", "mutation", "not_implemented"], ["update_event", "event", "mutation", "not_implemented"],
     ["add_schedule", "schedule", "mutation"], ["update_schedule_time", "schedule", "mutation"], ["update_schedule_content", "schedule", "mutation", "not_implemented"], ["delete_schedule", "schedule", "mutation", "not_implemented"],
@@ -14,7 +15,7 @@
     ["get_widget_settings", "dashboard", "query", "read_only"], ["update_widget_visibility", "dashboard", "mutation", "read_only"], ["update_widget_size", "dashboard", "mutation", "read_only"], ["reset_widget_layout", "dashboard", "mutation", "read_only"],
   ];
   const catalog = Object.freeze(Object.fromEntries(definitions.map(([id, domain, type, status = "active"]) => [id, Object.freeze({ id, domain, type, requiresApproval: type === "mutation", status })])));
-  const plannerDescriptions = Object.freeze({ query_events: "날짜/기간/행사장으로 행사 목록 조회", get_event_detail: "선택된 행사의 기본 상세", get_event_schedule: "행사 일정과 식사/커피브레이크 조회", get_event_items: "행사 품목과 명시 수량 조회", get_event_notes: "OTHERS, LAY&OUT, event_notes 조회", get_event_attachments: "행사 첨부 목록 조회", get_next_setup_tasks: "persistent 다음 세팅 작업 조회", get_current_setup_state: "현재 홀 세팅 상태 조회", resolve_next_event: "같은 공간의 다음 행사 조회", get_beverage_inventory: "음주류 재고 조회", get_asset_status: "자산 상태 조회", get_layout_info: "행사/저장 레이아웃 정보 조회" });
+  const plannerDescriptions = Object.freeze({ query_events: "날짜/기간/행사장으로 행사 목록 조회", get_event_detail: "선택된 행사의 기본 상세", get_event_structured_data: "선택 행사의 일정·장소·품목·메모·첨부 구조화 조회", get_event_schedule: "행사 일정과 식사/커피브레이크 조회", get_event_items: "행사 품목과 명시 수량 조회", get_event_notes: "OTHERS, LAY&OUT, event_notes 조회", get_event_attachments: "행사 첨부 목록 조회", get_next_setup_tasks: "persistent 다음 세팅 작업 조회", get_current_setup_state: "현재 홀 세팅 상태 조회", resolve_next_event: "같은 공간의 다음 행사 조회", get_beverage_inventory: "음주류 재고 조회", get_asset_status: "자산 상태 조회", get_layout_info: "행사/저장 레이아웃 정보 조회" });
   function failure(actionId, errorCode, message) { return { ok: false, actionId, errorCode, message }; }
   function normalizeResult(action, value, args) {
     if (value?.ok === false) return { actionId: action.id, ...value };
