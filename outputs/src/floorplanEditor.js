@@ -16,6 +16,26 @@
  *   and creates PNG previews in files + venue_layout_images.
  */
 (function registerBanquetErpFloorplanEditor() {
+  const VISUAL_GRID_STEPS_MM = Object.freeze([100, 250, 500, 1000, 2500, 5000, 10000]);
+
+  function chooseVisualGridStep(zoomPxPerMm, minimumScreenSpacing = 24) {
+    const zoom = Math.max(0.000001, Number(zoomPxPerMm) || 0.000001);
+    return VISUAL_GRID_STEPS_MM.find((step) => step * zoom >= minimumScreenSpacing) || VISUAL_GRID_STEPS_MM.at(-1);
+  }
+
+  function calculateFitViewport(bounds, viewport, paddingRatio = 0.08) {
+    const padding = Math.max(0, Math.min(0.2, Number(paddingRatio) || 0));
+    const viewportWidth = Math.max(1, Number(viewport?.width || 0));
+    const viewportHeight = Math.max(1, Number(viewport?.height || 0));
+    const boundsWidth = Math.max(1, Number(bounds?.width || 0));
+    const boundsHeight = Math.max(1, Number(bounds?.height || 0));
+    const scale = Math.min(viewportWidth * (1 - padding * 2) / boundsWidth, viewportHeight * (1 - padding * 2) / boundsHeight);
+    return {
+      scale,
+      panX: (viewportWidth - boundsWidth * scale) / 2 - Number(bounds?.minX || 0) * scale,
+      panY: (viewportHeight - boundsHeight * scale) / 2 - Number(bounds?.minY || 0) * scale,
+    };
+  }
   function floorplanOutlineMetrics(points) {
     const validPoints = (Array.isArray(points) ? points : [])
       .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
@@ -903,6 +923,9 @@
     let workspaceGridSizeMm = 500;
     let workspaceMinorGridSizeMm = 100;
     let workspaceMajorGridSizeMm = 1000;
+    let workspaceVisualGridSizeMm = 1000;
+    let workspaceVisualMajorGridSizeMm = 5000;
+    let workspaceShowMinorVisualGrid = true;
     let workspaceMeterScale = 1000;
     let workspaceGrid = true;
     let workspaceSnap = true;
@@ -917,6 +940,7 @@
     let workspaceLastMoveLogAt = 0;
     let workspaceSpacePressed = false;
     let workspaceFitTimer = null;
+    let workspaceExportRendering = false;
     let workspaceUndoStack = [];
     let workspaceRedoStack = [];
     let layoutAiPanel = null;
@@ -2055,7 +2079,15 @@
       renderLayoutLibrary();
       await loadAllLibraryLayouts();
     }
-    function scheduleWorkspaceFit() { clearTimeout(workspaceFitTimer); workspaceFitTimer = setTimeout(() => { workspaceFitTimer = null; fitWorkspaceToScreen(); }, 0); }
+    function scheduleWorkspaceFit() {
+      clearTimeout(workspaceFitTimer);
+      workspaceFitTimer = setTimeout(() => {
+        workspaceFitTimer = null;
+        const run = () => fitWorkspaceToScreen({ paddingRatio: 0.08 });
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(run));
+        else run();
+      }, 0);
+    }
     function cancelWorkspaceFit() { clearTimeout(workspaceFitTimer); workspaceFitTimer = null; }
     function showLayoutEditor(preserveViewport = false) { floorplanV2EventPanel?.classList.remove("library-mode"); floorplanV2EventPanel?.classList.add("editor-mode"); if (preserveViewport) cancelWorkspaceFit(); else scheduleWorkspaceFit(); }
     async function selectWorkspaceContext(venueId, spaceId, floorplanId) {
@@ -2559,6 +2591,7 @@
         workspaceDirty = false;
         updateWorkspaceStatus("??λ릺吏 ?딆쓬");
         renderWorkspace();
+        scheduleWorkspaceFit();
         return;
       }
       const layoutRows = await loggedSupabaseRequest(
@@ -2574,6 +2607,7 @@
       workspaceDirty = false;
       updateWorkspaceStatus("??λ맖");
       renderWorkspace();
+      scheduleWorkspaceFit();
     }
 
     async function saveWorkspaceLayout(forceNew) {
@@ -2958,6 +2992,7 @@
       view.panX = 0;
       view.panY = 0;
       workspaceDimensionMode = includeDimensions ? "all" : "hidden";
+      workspaceExportRendering = true;
       renderWorkspace();
       const bounds = getWorkspaceExportVisualBounds({ includeDimensions });
       const clone = workspaceSvg.cloneNode(true);
@@ -2967,6 +3002,7 @@
       view.panX = previousViewX;
       view.panY = previousViewY;
       workspaceDimensionMode = previousDimensionMode;
+      workspaceExportRendering = false;
       renderWorkspace();
 
       clone.removeAttribute("id");
@@ -3449,7 +3485,7 @@
       const majorGridBg = document.querySelector("#layoutWorkspaceMajorGridBg");
       const worldBounds = getWorkspaceWorldBounds(true);
       [gridBg, majorGridBg].filter(Boolean).forEach((rect) => { rect.setAttribute("x", String(worldBounds.minX)); rect.setAttribute("y", String(worldBounds.minY)); rect.setAttribute("width", String(worldBounds.width)); rect.setAttribute("height", String(worldBounds.height)); });
-      if (gridBg) gridBg.style.display = workspaceGrid && view.scale > 0.75 ? "" : "none";
+      if (gridBg) gridBg.style.display = workspaceGrid && workspaceShowMinorVisualGrid ? "" : "none";
       if (majorGridBg) majorGridBg.style.display = workspaceGrid ? "" : "none";
       if (workspaceGridLayer) workspaceGridLayer.style.display = workspaceGrid ? "" : "none";
       if (workspaceBackgroundLayer) workspaceBackgroundLayer.style.display = workspaceShowFloorplan ? "" : "none";
@@ -3978,13 +4014,14 @@
         text.setAttribute("x", "0");
         text.setAttribute("y", String(Math.min(width, height) < 70 ? height / 2 + 22 : 5));
         text.setAttribute("text-anchor", "middle");
-        text.setAttribute("font-size",isWorkspaceBaseObject(object) ? "300" : "14");
+        const labelFontSize = workspaceExportRendering ? (isWorkspaceBaseObject(object) ? 300 : 14) : (isWorkspaceBaseObject(object) ? 13 : 11) / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
+        text.setAttribute("font-size", String(labelFontSize));
         text.setAttribute("font-weight", "800");
         text.setAttribute("fill", "#102B55");
         text.setAttribute("class", isWorkspaceBaseObject(object) ? "layout-workspace-base-label" : "layout-workspace-object-label");
         text.setAttribute("paint-order", "stroke");
         text.setAttribute("stroke", "rgba(255,255,255,.92)");
-        text.setAttribute("stroke-width", "4");
+        text.setAttribute("stroke-width", String(workspaceExportRendering ? 4 : 3 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
         text.setAttribute("stroke-linejoin", "round");
         text.setAttribute("pointer-events", "none");
         group.append(text);
@@ -4779,7 +4816,7 @@
       renderWorkspace();
     }
 
-    function fitWorkspaceToScreen() {
+    function fitWorkspaceToScreen({ paddingRatio = 0.08 } = {}) {
       updateWorkspaceSvgViewBox();
       const canvasWidth = workspaceViewportSize.width;
       const canvasHeight = workspaceViewportSize.height;
@@ -4788,9 +4825,8 @@
         return;
       }
       const bounds = getWorkspaceWorldBounds(true);
-      const scaleX = canvasWidth / bounds.width;
-      const scaleY = canvasHeight / bounds.height;
-      view.scale = clampNumber(Math.min(scaleX, scaleY) * 0.92, WORKSPACE_MIN_SCALE, WORKSPACE_MAX_SCALE);
+      const fitted = calculateFitViewport(bounds, { width: canvasWidth, height: canvasHeight }, paddingRatio);
+      view.scale = clampNumber(fitted.scale, WORKSPACE_MIN_SCALE, WORKSPACE_MAX_SCALE);
       view.panX = (canvasWidth - bounds.width * view.scale) / 2 - bounds.minX * view.scale;
       view.panY = (canvasHeight - bounds.height * view.scale) / 2 - bounds.minY * view.scale;
       renderWorkspace();
@@ -4830,8 +4866,8 @@
       const object = findWorkspaceObject(workspaceSelectedId);
       if (selected) selected.textContent = workspaceSelectedIds.size > 1 ? `선택: ${workspaceSelectedIds.size}개 객체` : `\uC120\uD0DD: ${object?.label || "\uC5C6\uC74C"}`;
       if (zoom) zoom.textContent = `\uBC30\uC728: ${Math.round(view.scale * 100)}%`;
-      if (grid) grid.textContent = `\uACA9\uC790: ${workspaceGrid ? String(workspaceGridSizeMm) + "mm" : "\uB044\uAE30"}`;
-      if (snap) snap.textContent = `\uC2A4\uB0C5: ${workspaceSnap ? "\uC0AC\uC6A9" : "\uB044\uAE30"}`;
+      if (grid) grid.textContent = `\uACA9\uC790: ${workspaceGrid ? formatGridStep(workspaceVisualGridSizeMm) : "\uB044\uAE30"}`;
+      if (snap) snap.textContent = `\uC2A4\uB0C5: ${workspaceSnap ? formatGridStep(workspaceGridSizeMm) : "\uB044\uAE30"}`;
       if (count) count.textContent = `\uC624\uBE0C\uC81D\uD2B8: ${workspaceObjects.length}\uAC1C`;
       updateWorkspaceHistoryButtons();
       if (!workspaceDirty) updateWorkspaceStatus(workspaceSaveStatus || "\uC800\uC7A5\uB418\uC9C0 \uC54A\uC74C");
@@ -5123,20 +5159,30 @@
       return Math.max(1, Number(workspaceGridSizeMm || 500));
     }
 
+    function formatGridStep(valueMm) {
+      const value = Number(valueMm || 0);
+      return value >= 1000 ? `${formatDecimal(value / 1000, 2)}m` : `${Math.round(value)}mm`;
+    }
+
     function updateWorkspaceGridPattern() {
       const pattern = workspaceSvg?.querySelector("#layoutEditorGridPattern");
       const majorPattern = workspaceSvg?.querySelector("#layoutEditorMajorGridPattern");
       const gridPath = pattern?.querySelector("path");
       const majorGridPath = majorPattern?.querySelector("path");
       if (!pattern || !gridPath || !majorPattern || !majorGridPath) return;
-      const unit = Math.max(1, workspaceMinorGridSizeMm || getWorkspaceGridDrawingUnit());
-      const majorUnit = Math.max(unit, workspaceMajorGridSizeMm || 1000);
+      const unit = chooseVisualGridStep(view.scale);
+      const majorUnit = unit * 5;
+      workspaceVisualGridSizeMm = unit;
+      workspaceVisualMajorGridSizeMm = majorUnit;
+      workspaceShowMinorVisualGrid = unit * view.scale >= 18;
       pattern.setAttribute("width", String(unit));
       pattern.setAttribute("height", String(unit));
       gridPath.setAttribute("d", `M ${unit} 0 L 0 0 0 ${unit}`);
       majorPattern.setAttribute("width", String(majorUnit));
       majorPattern.setAttribute("height", String(majorUnit));
       majorGridPath.setAttribute("d", `M ${majorUnit} 0 L 0 0 0 ${majorUnit}`);
+      gridPath.setAttribute("stroke-width", String(0.8 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
+      majorGridPath.setAttribute("stroke-width", String(1.25 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE)));
     }
 
     function getWorkspaceObjectOpacity(object) {
@@ -6154,6 +6200,8 @@
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {
     createFloorplanEditor,
     floorplanOutlineMetrics,
+    chooseVisualGridStep,
+    calculateFitViewport,
     floorplanObjectWorkspaceCenter,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,

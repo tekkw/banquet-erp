@@ -580,6 +580,17 @@ body,
 #layoutsPage .layout-editor-workbench .floorplan-library-item { border-color: var(--border); background: var(--surface-elevated); color: #C9D5DE; }
 #layoutsPage .layout-editor-workbench .floorplan-library-item span { color: #F4F7FA; }
 #layoutsPage .layout-editor-workbench .floorplan-library-item small { color: #96A9BA; }
+#layoutsPage :where(.layout-auto-grid-panel, .layout-ai-panel) {
+  border-color: var(--border-strong);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+#layoutsPage :where(.layout-auto-grid-header > strong, .layout-auto-grid-header > button, .layout-auto-grid-field-group > strong, .layout-auto-grid-fields label, .layout-ai-panel h3, .layout-ai-panel .layout-ai-result) { color: var(--text-primary) !important; }
+#layoutsPage :where(.layout-auto-grid-helper, .layout-auto-grid-status, .layout-ai-panel .layout-ai-result) { color: var(--text-secondary) !important; }
+#layoutsPage .layout-auto-grid-field-group { border-color: var(--border); background: var(--surface-primary); }
+#layoutsPage .layout-auto-grid-parsed { background: var(--surface-secondary); color: var(--text-primary) !important; }
+#layoutsPage .layout-auto-grid-actions button { border-color: var(--border-strong); background: var(--surface-secondary); color: var(--text-primary); }
+#layoutsPage .layout-ai-message.assistant, #layoutsPage .layout-ai-summary span { background: var(--surface-secondary); color: var(--text-primary); }
 
 /* Keep technical drawing surfaces light for precise geometry work. */
 #layoutsPage #floorplanV2Preview,

@@ -21,7 +21,7 @@ for (const file of htmlFiles) {
 }
 
 assert(css.includes('.layout-auto-grid-panel .layout-auto-grid-fields input[type="number"]'), "number input에 scoped selector를 적용해야 한다");
-assert(css.includes("background: #102a40 !important") && css.includes("color: #f4f7fa !important") && css.includes("-webkit-text-fill-color: #f4f7fa"), "Auto Grid 값은 dark input 위 밝은 글자로 보여야 한다");
+assert(css.includes("background: var(--surface-input, #102a40) !important") && css.includes("color: var(--text-primary, #f4f7fa) !important") && css.includes("-webkit-text-fill-color: var(--text-primary, #f4f7fa)"), "Auto Grid 값은 theme input 위 밝은 글자로 보여야 한다");
 assert(css.includes("input:disabled") && css.includes("input[readonly]") && css.includes("#96a9ba"), "disabled/readOnly/placeholder 상태를 구분해야 한다");
 assert(css.includes(".layout-toolbar-menu-content { position: absolute"), "닫힌 toolbar group은 기본 toolbar 높이를 늘리지 않아야 한다");
 assert(css.includes(".layout-toolbar-core") && css.includes(".layout-toolbar-menu > summary"), "핵심 toolbar와 접이식 summary 스타일이 있어야 한다");
