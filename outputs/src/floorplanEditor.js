@@ -1004,6 +1004,8 @@
       { object_name: "\uC758\uC790", category: "\uC88C\uC11D", object_type: "chair", default_width_m: 0.45, default_height_m: 0.45, default_seat_count: 1, display_shape: "rect", can_resize: true, can_rotate: true, is_active: true },
     ];
     let layoutObjectTypes = [];
+    let editingObjectTypeId = "";
+    let objectColorInputSource = "";
     let sourceRow = null;
     let sourceFile = null;
     let backgroundImage = null;
@@ -1127,8 +1129,8 @@
         objectColorInput,
         objectColorTextInput,
       ].forEach((input) => input?.addEventListener("input", renderObjectTypeFormPreview));
-      objectColorInput?.addEventListener("input", () => { if (objectColorTextInput) objectColorTextInput.value = objectColorInput.value.toUpperCase(); renderObjectTypeFormPreview(); });
-      objectColorTextInput?.addEventListener("change", () => { const color = normalizeObjectColor(objectColorTextInput.value); if (color && objectColorInput) objectColorInput.value = color; renderObjectTypeFormPreview(); });
+      objectColorInput?.addEventListener("input", () => { objectColorInputSource = "picker"; if (objectColorTextInput) objectColorTextInput.value = objectColorInput.value.toUpperCase(); renderObjectTypeFormPreview(); });
+      objectColorTextInput?.addEventListener("input", () => { objectColorInputSource = "text"; const color = normalizeObjectColor(objectColorTextInput.value); if (color && objectColorInput) objectColorInput.value = color; renderObjectTypeFormPreview(); });
       objectShapeInput?.addEventListener("change", renderObjectTypeFormPreview);
       renderObjectTypeFormPreview();
       loadLayoutObjectTypes();
@@ -5515,6 +5517,13 @@
         setStatus("\uC624\uBE0C\uC81D\uD2B8 \uB9C8\uC2A4\uD130 \uB4F1\uB85D\uACFC \uC218\uC815\uC740 \uAD00\uB9AC\uC790\uB9CC \uC0AC\uC6A9\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.", "warn");
         return;
       }
+      const colorText = String(objectColorTextInput?.value || "").trim();
+      const defaultColor = objectColorInputSource === "picker" ? normalizeObjectColor(objectColorInput?.value) : normalizeObjectColor(colorText);
+      if (colorText && !defaultColor) {
+        setStatus("기본 색상은 #005EF5 형식의 6자리 HEX 값으로 입력해주세요.", "warn");
+        objectColorTextInput?.focus();
+        return;
+      }
       const payload = {
         object_name: objectNameInput.value.trim(),
         category: objectCategoryInput.value.trim() || "\uAE30\uD0C0",
@@ -5527,7 +5536,7 @@
         can_resize: objectCanResizeInput.checked,
         can_rotate: objectCanRotateInput.checked,
         is_active: objectIsActiveInput.checked,
-        memo: writeMasterMemo(objectMemoInput.value, objectColorTextInput?.value),
+        memo: writeMasterMemo(objectMemoInput.value, defaultColor),
       };
       if (!payload.object_name || !payload.object_type) {
         setStatus("\uC624\uBE0C\uC81D\uD2B8\uBA85\uACFC object_type\uC744 \uC785\uB825\uD574\uC8FC\uC138\uC694.", "warn");
@@ -5547,11 +5556,25 @@
               body: JSON.stringify(payload),
             });
         if (!rows?.[0]?.id) throw new Error("\uC624\uBE0C\uC81D\uD2B8 \uB9C8\uC2A4\uD130 \uC800\uC7A5 \uACB0\uACFC\uB97C \uD655\uC778\uD558\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
+        const verifiedRows = await loggedSupabaseRequest("layout_object_types color verify", `layout_object_types?id=eq.${encodeURIComponent(rows[0].id)}&select=*&limit=1`);
+        const persistedColor = readMasterDefaultColor(verifiedRows?.[0]);
+        if (persistedColor !== defaultColor) {
+          const error = new Error(`기본 색상 저장 검증에 실패했습니다. expected=${defaultColor || "(empty)"}, actual=${persistedColor || "(empty)"}`);
+          error.code = "MASTER_COLOR_PERSISTENCE_MISMATCH";
+          throw error;
+        }
         resetObjectTypeForm();
         await loadLayoutObjectTypes();
         setStatus("\uC624\uBE0C\uC81D\uD2B8 \uB9C8\uC2A4\uD130\uB97C \uC800\uC7A5\uD588\uC2B5\uB2C8\uB2E4.");
       } catch (error) {
-        console.error("layout_object_types save failed:", error);
+        console.error("layout_object_types save failed", {
+          objectTypeId: editingObjectTypeId || null,
+          defaultColor,
+          code: error?.code,
+          message: error?.message,
+          details: error?.details,
+          hint: error?.hint,
+        });
         setStatus(error.message || "\uC624\uBE0C\uC81D\uD2B8 \uB9C8\uC2A4\uD130 \uC800\uC7A5\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.", "error");
       } finally {
         objectTypeSaveButton.disabled = false;
@@ -5573,6 +5596,7 @@
       objectIsActiveInput.checked = item.is_active !== false;
       if (objectColorInput) objectColorInput.value = readMasterDefaultColor(item) || "#D9DEE6";
       if (objectColorTextInput) objectColorTextInput.value = readMasterDefaultColor(item);
+      objectColorInputSource = "";
       objectMemoInput.value = readMasterMemo(item);
       objectTypeSaveButton.textContent = "\uB9C8\uC2A4\uD130 \uC218\uC815 \uC800\uC7A5";
       objectTypeResetButton.textContent = "\uCDE8\uC18C";
@@ -5589,6 +5613,7 @@
       if (objectShapeInput) objectShapeInput.value = "rect";
       if (objectColorInput) objectColorInput.value = "#D9DEE6";
       if (objectColorTextInput) objectColorTextInput.value = "";
+      objectColorInputSource = "";
       if (objectTypeSaveButton) objectTypeSaveButton.textContent = "\uB9C8\uC2A4\uD130 \uB4F1\uB85D";
       if (objectTypeResetButton) objectTypeResetButton.textContent = "\uCD08\uAE30\uD654";
       renderObjectTypeFormPreview();

@@ -32,6 +32,9 @@ assert(source.includes("resolveObjectFillColor(object, master") && source.includ
 assert(source.includes("node.dataset.objectFillColor || style.fill"), "PNG/PDF export에서 지정 fill 유지");
 assert(source.includes("targetCtx.fillStyle = resolveObjectFillColor"), "legacy canvas preview fill resolver");
 assert(source.includes("renderObjectPreviewSvg") && source.includes("defaultColor: readMasterDefaultColor(item)"), "library thumbnail 기본색");
+assert(source.includes('let editingObjectTypeId = ""') && source.includes('let objectColorInputSource = ""'), "master form persistence state는 명시적으로 초기화한다");
+assert(source.includes("layout_object_types color verify") && source.includes("MASTER_COLOR_PERSISTENCE_MISMATCH"), "Supabase 저장 후 실제 row 색상을 재검증한다");
+assert(source.includes('code: error?.code') && source.includes('details: error?.details') && source.includes('hint: error?.hint'), "Supabase error diagnostics를 보존한다");
 
 for (const html of [index, preview]) {
   for (const id of ["layoutObjectColorInput", "layoutObjectColorTextInput", "layoutWorkspaceColorInput", "layoutWorkspaceRoleInput", "layoutWorkspaceColorResetButton"]) {
