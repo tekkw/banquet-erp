@@ -34,7 +34,7 @@ assert.strictEqual(tables.filter((item) => api.floorplanObjectIntersectsBox(item
 assert(editor.includes('workspaceDragState.mode === "marquee"'));
 
 // D/E. base label은 유지하고 layout 모드에서는 구조물만 편집 대상에서 제외한다.
-assert(editor.includes("isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames)"));
+assert(editor.includes("shouldShowWorkspaceObjectLabel(object, options.showNames ?? workspaceShowNames)"));
 assert(editor.includes('return !object.locked && !isFloorplanStructuralObject(object);'));
 assert(assets.includes(".layout-workspace-base-label"));
 assert(editor.includes('marquee.setAttribute("fill", "none")'));

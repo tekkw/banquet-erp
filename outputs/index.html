@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=floorplan-viewport-grid-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=floorplan-object-labels-v1">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -499,7 +499,7 @@
                   <label class="layout-inline-control">도면 투명도<input id="layoutWorkspaceReferenceOpacityInput" type="range" min="10" max="100" value="40"></label>
                   <label class="layout-inline-control">격자<select id="layoutWorkspaceGridSizeSelect" aria-label="격자 간격"><option value="50">50mm</option><option value="100">100mm</option><option value="250">250mm</option><option value="500" selected>500mm</option><option value="1000">1000mm</option><option value="2000">2000mm</option><option value="5000">5000mm</option><option value="10000">10000mm</option><option value="custom">직접 입력</option></select></label>
                   <label id="layoutWorkspaceCustomGridControl" class="layout-inline-control" hidden>격자 간격<span class="layout-measure-row compact"><input id="layoutWorkspaceCustomGridInput" type="number" min="1" step="0.001" inputmode="decimal" value="1000"><select id="layoutWorkspaceCustomGridUnitSelect"><option value="m">m</option><option value="cm">cm</option><option value="mm" selected>mm</option></select></span></label>
-                  <div class="layout-toolbar-checks" aria-label="보기 항목"><label><input id="layoutWorkspaceViewGridInput" type="checkbox"> Grid</label><label><input id="layoutWorkspaceViewFloorplanInput" type="checkbox" checked> 기본 도면</label><label><input id="layoutWorkspaceViewDimensionsInput" type="checkbox" checked> 치수 표시</label><label><input id="layoutWorkspaceViewNamesInput" type="checkbox" checked> 오브젝트 이름</label><label><input id="layoutWorkspaceViewCoordsInput" type="checkbox"> 좌표 표시</label></div>
+                  <div class="layout-toolbar-checks" aria-label="보기 항목"><label><input id="layoutWorkspaceViewGridInput" type="checkbox"> Grid</label><label><input id="layoutWorkspaceViewFloorplanInput" type="checkbox" checked> 기본 도면</label><label><input id="layoutWorkspaceViewDimensionsInput" type="checkbox" checked> 치수 표시</label><label><input id="layoutWorkspaceViewNamesInput" type="checkbox"> 오브젝트 라벨</label><label><input id="layoutWorkspaceViewCoordsInput" type="checkbox"> 좌표 표시</label></div>
                 </div>
               </details>
               <details class="layout-toolbar-menu">
@@ -1123,7 +1123,7 @@
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
-<script src="./src/floorplanEditor.js?v=floorplan-viewport-grid-v1"></script>
+<script src="./src/floorplanEditor.js?v=floorplan-object-labels-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=operations-autopilot-v6"></script>
   <script src="./src/operationBoard.js?v=setup-timing-v1"></script>

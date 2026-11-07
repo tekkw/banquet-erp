@@ -16,7 +16,14 @@
  *   and creates PNG previews in files + venue_layout_images.
  */
 (function registerBanquetErpFloorplanEditor() {
+  const WORKSPACE_LABEL_PREFERENCE_KEY = "banquet-erp-floorplan-object-labels-v1";
+  const STRUCTURAL_LABEL_TYPES = new Set(["door", "screen", "pillar", "blocked_area"]);
   const VISUAL_GRID_STEPS_MM = Object.freeze([100, 250, 500, 1000, 2500, 5000, 10000]);
+
+  function shouldShowWorkspaceObjectLabel(object, showObjectLabels = false) {
+    if (!object || object.metadata?.compositeOutlineSource) return false;
+    return Boolean(showObjectLabels) || STRUCTURAL_LABEL_TYPES.has(object.objectType || object.object_type);
+  }
 
   function chooseVisualGridStep(zoomPxPerMm, minimumScreenSpacing = 24) {
     const zoom = Math.max(0.000001, Number(zoomPxPerMm) || 0.000001);
@@ -930,7 +937,7 @@
     let workspaceGrid = true;
     let workspaceSnap = true;
     let workspaceShowFloorplan = true;
-    let workspaceShowNames = true;
+    let workspaceShowNames = loadWorkspaceLabelPreference();
     let workspaceShowCoords = false;
     let workspaceEditMode = "layout";
     let workspaceTool = "select";
@@ -1478,6 +1485,7 @@
       });
       workspaceViewNamesInput?.addEventListener("change", () => {
         workspaceShowNames = workspaceViewNamesInput.checked;
+        saveWorkspaceLabelPreference(workspaceShowNames);
         renderWorkspace();
       });
       workspaceViewCoordsInput?.addEventListener("change", () => {
@@ -1577,6 +1585,7 @@
       });
       if (workspaceReferenceOpacityInput) workspaceReferenceOpacityInput.value = String(Math.round(workspaceReferenceOpacity * 100));
       if (workspaceGridSizeSelect) workspaceGridSizeSelect.value = String(workspaceGridSizeMm);
+      if (workspaceViewNamesInput) workspaceViewNamesInput.checked = workspaceShowNames;
       syncWorkspaceDimensionControls();
       syncWorkspaceDrawingInputs();
       syncWorkspaceGridInputs();
@@ -4007,7 +4016,7 @@
       const label = ["buffet_table", "av_table", "podium"].includes(object.objectType)
         ? ({ buffet_table: "BUFFET", av_table: "AV", podium: "P" }[object.objectType])
         : (object.label || object.metadata?.label || objectLabels[object.objectType] || "고정 구조물");
-      const showNames = !object.metadata?.compositeOutlineSource && (isWorkspaceBaseObject(object) || (options.showNames ?? workspaceShowNames));
+      const showNames = shouldShowWorkspaceObjectLabel(object, options.showNames ?? workspaceShowNames);
       if (showNames) {
         const text = document.createElementNS(svgNs, "text");
         text.textContent = label || "";
@@ -5164,6 +5173,16 @@
       return value >= 1000 ? `${formatDecimal(value / 1000, 2)}m` : `${Math.round(value)}mm`;
     }
 
+    function loadWorkspaceLabelPreference() {
+      try { return localStorage.getItem(WORKSPACE_LABEL_PREFERENCE_KEY) === "true"; }
+      catch { return false; }
+    }
+
+    function saveWorkspaceLabelPreference(visible) {
+      try { localStorage.setItem(WORKSPACE_LABEL_PREFERENCE_KEY, visible ? "true" : "false"); }
+      catch { /* preference storage unavailable */ }
+    }
+
     function updateWorkspaceGridPattern() {
       const pattern = workspaceSvg?.querySelector("#layoutEditorGridPattern");
       const majorPattern = workspaceSvg?.querySelector("#layoutEditorMajorGridPattern");
@@ -6200,6 +6219,7 @@
   window.BANQUET_ERP_FLOORPLAN_EDITOR = {
     createFloorplanEditor,
     floorplanOutlineMetrics,
+    shouldShowWorkspaceObjectLabel,
     chooseVisualGridStep,
     calculateFitViewport,
     floorplanObjectWorkspaceCenter,
