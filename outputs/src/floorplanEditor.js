@@ -92,6 +92,68 @@
     }));
   }
 
+  function smartGuideObjectBounds(object, center = object) {
+    const width = Math.max(1, Number(object?.widthMm ?? Number(object?.widthM || 0) * 1000));
+    const height = Math.max(1, Number(object?.heightMm ?? Number(object?.heightM || 0) * 1000));
+    const rotation = (((Number(object?.rotation || 0) % 360) + 360) % 360) * Math.PI / 180;
+    const boxWidth = Math.abs(width * Math.cos(rotation)) + Math.abs(height * Math.sin(rotation));
+    const boxHeight = Math.abs(width * Math.sin(rotation)) + Math.abs(height * Math.cos(rotation));
+    const x = Number(center?.x ?? object?.x ?? 0); const y = Number(center?.y ?? object?.y ?? 0);
+    return { left: x - boxWidth / 2, centerX: x, right: x + boxWidth / 2, top: y - boxHeight / 2, centerY: y, bottom: y + boxHeight / 2, width: boxWidth, height: boxHeight };
+  }
+
+  function smartGuideAxisGroups(references, crossAxis, toleranceMm) {
+    const sorted = [...references].sort((a, b) => a.bounds[crossAxis] - b.bounds[crossAxis]); const groups = [];
+    sorted.forEach((item) => { const group = groups.at(-1); if (group && Math.abs(group.center - item.bounds[crossAxis]) <= toleranceMm) { group.items.push(item); group.center = group.items.reduce((sum, row) => sum + row.bounds[crossAxis], 0) / group.items.length; } else groups.push({ center: item.bounds[crossAxis], items: [item] }); });
+    return groups;
+  }
+
+  function resolveSmartGuideSnap({ movingObject, proposedCenter, references = [], zoom = 1, thresholdPx = 8, gridEnabled = false, gridSizeMm = 100 } = {}) {
+    const thresholdMm = thresholdPx / Math.max(Number(zoom) || 1, 0.000001);
+    const moving = smartGuideObjectBounds(movingObject, proposedCenter);
+    const rows = references.map((object) => ({ object, bounds: smartGuideObjectBounds(object) }));
+    const result = { point: { x: moving.centerX, y: moving.centerY }, guides: [], thresholdMm, snappedBy: { x: "none", y: "none" } };
+    const align = (axis, anchors, crossStart, crossEnd) => {
+      let best = null;
+      rows.forEach((row) => anchors.forEach((anchor) => {
+        const delta = row.bounds[anchor] - moving[anchor];
+        if (Math.abs(delta) > thresholdMm || (best && Math.abs(delta) >= Math.abs(best.delta))) return;
+        best = { delta, value: row.bounds[anchor], row, anchor };
+      }));
+      if (!best) return false;
+      result.point[axis] += best.delta; result.snappedBy[axis] = "alignment";
+      result.guides.push({ type: "alignment", axis, value: best.value, start: Math.min(moving[crossStart], best.row.bounds[crossStart]), end: Math.max(moving[crossEnd], best.row.bounds[crossEnd]) });
+      return true;
+    };
+    const alignedX = align("x", ["centerX", "left", "right"], "top", "bottom");
+    const alignedY = align("y", ["centerY", "top", "bottom"], "left", "right");
+    const spacing = (axis) => {
+      const horizontal = axis === "x"; const start = horizontal ? "left" : "top"; const end = horizontal ? "right" : "bottom"; const cross = horizontal ? "centerY" : "centerX";
+      let best = null;
+      smartGuideAxisGroups(rows, cross, Math.max(100, thresholdMm)).forEach((group) => {
+        const ordered = [...group.items].sort((a, b) => a.bounds[start] - b.bounds[start]);
+        ordered.slice(1).forEach((right, index) => {
+          const left = ordered[index]; const gap = right.bounds[start] - left.bounds[end]; if (gap < 0) return;
+          const afterDelta = right.bounds[end] + gap - moving[start]; const beforeDelta = left.bounds[start] - gap - moving[end];
+          [{ delta: afterDelta, anchor: right.bounds[end], target: right.bounds[end] + gap, gap, pair: [left, right] }, { delta: beforeDelta, anchor: left.bounds[start], target: left.bounds[start] - gap, gap, pair: [left, right] }].forEach((candidate) => {
+            if (Math.abs(candidate.delta) > thresholdMm || (best && Math.abs(candidate.delta) >= Math.abs(best.delta))) return;
+            best = candidate;
+          });
+        });
+      });
+      if (!best) return false;
+      result.point[axis] += best.delta; result.snappedBy[axis] = "spacing";
+      result.guides.push({ type: "spacing", axis, start: Math.min(best.anchor, best.target), end: Math.max(best.anchor, best.target), cross: horizontal ? moving.centerY : moving.centerX, referenceStart: best.pair[0].bounds[end], referenceEnd: best.pair[1].bounds[start], referenceCross: (best.pair[0].bounds[cross] + best.pair[1].bounds[cross]) / 2, gapMm: best.gap, repeatedGaps: [best.gap, best.gap] });
+      return true;
+    };
+    if (!alignedX) spacing("x");
+    if (!alignedY) spacing("y");
+    if (gridEnabled) {
+      ["x", "y"].forEach((axis) => { if (result.snappedBy[axis] !== "none") return; result.point[axis] = Math.round(result.point[axis] / gridSizeMm) * gridSizeMm; result.snappedBy[axis] = "grid"; });
+    }
+    return result;
+  }
+
   function calculateWorkspaceWorldBounds(frameWidth, frameHeight, objects = [], margin = 0, scale = 1000) {
     const boxes = [{ left: 0, top: 0, right: Number(frameWidth || 0), bottom: Number(frameHeight || 0) }];
     objects.filter((object) => !object?.metadata?.compositeBaseChild).forEach((object) => {
@@ -934,7 +996,7 @@
     let workspaceVisualMajorGridSizeMm = 5000;
     let workspaceShowMinorVisualGrid = true;
     let workspaceMeterScale = 1000;
-    let workspaceGrid = true;
+    let workspaceGrid = false;
     let workspaceSnap = true;
     let workspaceShowFloorplan = true;
     let workspaceShowNames = loadWorkspaceLabelPreference();
@@ -2322,17 +2384,15 @@
       workspaceOutlinePoints = [];
       workspaceGeometryOffset = { x: 0, y: 0 };
       if (row?._workspaceSourceKind === "geometry") {
-        workspaceGrid = true;
         workspaceShowFloorplan = true;
-        if (workspaceViewGridInput) workspaceViewGridInput.checked = true;
+        if (workspaceViewGridInput) workspaceViewGridInput.checked = workspaceGrid;
         if (workspaceViewFloorplanInput) workspaceViewFloorplanInput.checked = true;
         renderWorkspace();
         return;
       }
       const file = Array.isArray(row?.files) ? row.files[0] : row?.files;
       if (!file?.public_url) {
-        workspaceGrid = true;
-        if (workspaceViewGridInput) workspaceViewGridInput.checked = true;
+        if (workspaceViewGridInput) workspaceViewGridInput.checked = workspaceGrid;
         renderWorkspace();
         return;
       }
@@ -3548,6 +3608,7 @@
 
     function renderWorkspaceGuide() {
       renderAutoGridPreviewMeasurements();
+      renderSmartGuides();
       if (workspaceGuideLayer && workspaceDragState?.mode === "marquee" && workspaceDragState.start && workspaceDragState.end) {
         const box = getDraftBox(workspaceDragState.start, workspaceDragState.end);
         const marquee = document.createElementNS(svgNs, "rect");
@@ -3592,6 +3653,32 @@
       line.setAttribute("stroke-linecap", "round");
       line.setAttribute("pointer-events", "none");
       workspaceGuideLayer.append(line);
+    }
+
+    function renderSmartGuides() {
+      const guides = workspaceDragState?.mode === "move" ? workspaceDragState.smartGuides || [] : [];
+      if (!workspaceGuideLayer || !guides.length) return;
+      const scale = Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
+      const group = document.createElementNS(svgNs, "g"); group.classList.add("layout-smart-guides"); group.dataset.editorOnly = "smart-guides"; group.setAttribute("pointer-events", "none");
+      guides.forEach((guide) => {
+        const line = document.createElementNS(svgNs, "line"); const alignment = guide.type === "alignment";
+        if (guide.axis === "x") { line.setAttribute("x1", String(guide.value ?? guide.start)); line.setAttribute("x2", String(guide.value ?? guide.end)); line.setAttribute("y1", String(alignment ? guide.start : guide.cross)); line.setAttribute("y2", String(alignment ? guide.end : guide.cross)); }
+        else { line.setAttribute("y1", String(guide.value ?? guide.start)); line.setAttribute("y2", String(guide.value ?? guide.end)); line.setAttribute("x1", String(alignment ? guide.start : guide.cross)); line.setAttribute("x2", String(alignment ? guide.end : guide.cross)); }
+        line.setAttribute("stroke", alignment ? "#2563eb" : "#d97706"); line.setAttribute("stroke-width", String((alignment ? 1.5 : 1.25) / scale)); line.setAttribute("stroke-dasharray", alignment ? "none" : `${5 / scale} ${3 / scale}`); group.append(line);
+        if (!alignment) {
+          const referenceLine = line.cloneNode(false);
+          if (guide.axis === "x") { referenceLine.setAttribute("x1", String(guide.referenceStart)); referenceLine.setAttribute("x2", String(guide.referenceEnd)); referenceLine.setAttribute("y1", String(guide.referenceCross)); referenceLine.setAttribute("y2", String(guide.referenceCross)); }
+          else { referenceLine.setAttribute("y1", String(guide.referenceStart)); referenceLine.setAttribute("y2", String(guide.referenceEnd)); referenceLine.setAttribute("x1", String(guide.referenceCross)); referenceLine.setAttribute("x2", String(guide.referenceCross)); }
+          group.append(referenceLine);
+          const label = document.createElementNS(svgNs, "text"); label.textContent = formatSmartGuideDistance(guide.gapMm); label.setAttribute("x", String(guide.axis === "x" ? (guide.start + guide.end) / 2 : guide.cross + 8 / scale)); label.setAttribute("y", String(guide.axis === "x" ? guide.cross - 8 / scale : (guide.start + guide.end) / 2)); label.setAttribute("text-anchor", "middle"); label.setAttribute("dominant-baseline", "central"); label.setAttribute("font-size", String(12 / scale)); label.setAttribute("font-weight", "800"); label.setAttribute("fill", "#92400e"); label.setAttribute("paint-order", "stroke"); label.setAttribute("stroke", "#fff"); label.setAttribute("stroke-width", String(3 / scale)); group.append(label);
+        }
+      });
+      workspaceGuideLayer.append(group);
+    }
+
+    function formatSmartGuideDistance(valueMm) {
+      const value = Math.round(Number(valueMm || 0));
+      return value >= 1000 && value % 100 === 0 ? `${formatDecimal(value / 1000, 2)}m` : `${value}mm`;
     }
 
     function renderAutoGridPreviewMeasurements() {
@@ -4230,10 +4317,17 @@
         const deltaX = dxPx / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
         const deltaY = dyPx / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE);
         const freeMove = hasCompositeWorkspace();
-        const nextCenter = applyWorkspaceSnapPoint({
+        let rawCenter = {
           x: freeMove ? workspaceDragState.startObjectX + deltaX : clampNumber(workspaceDragState.startObjectX + deltaX, 0, workspaceSize.width),
           y: freeMove ? workspaceDragState.startObjectY + deltaY : clampNumber(workspaceDragState.startObjectY + deltaY, 0, workspaceSize.height),
-        });
+        };
+        if (event.shiftKey) {
+          if (Math.abs(deltaX) >= Math.abs(deltaY)) rawCenter.y = workspaceDragState.startObjectY;
+          else rawCenter.x = workspaceDragState.startObjectX;
+        }
+        const smartSnap = resolveWorkspaceSmartSnap(object, rawCenter);
+        const nextCenter = smartSnap.point;
+        workspaceDragState.smartGuides = smartSnap.guides;
         logWorkspacePointerMove(event, { dxWorld: deltaX, dyWorld: deltaY, nextCenter });
         const snappedDelta = { x: nextCenter.x - workspaceDragState.startObjectX, y: nextCenter.y - workspaceDragState.startObjectY };
         const starts = workspaceDragState.selectedStarts || [{ id: object.instanceId, x: workspaceDragState.startObjectX, y: workspaceDragState.startObjectY, metadata: workspaceDragState.startMetadata }];
@@ -4780,7 +4874,7 @@
         ? cloneFloorplanObjectsForLayout(workspaceBaseObjects.length ? workspaceBaseObjects : workspaceObjects.filter(isWorkspaceBaseObject))
         : [];
       workspaceShowFloorplan = useCurrentFloorplan;
-      workspaceGrid = !useCurrentFloorplan;
+      workspaceGrid = false;
       if (workspaceViewFloorplanInput) workspaceViewFloorplanInput.checked = workspaceShowFloorplan;
       if (workspaceViewGridInput) workspaceViewGridInput.checked = workspaceGrid;
       workspaceSelectedId = "";
@@ -4997,11 +5091,11 @@
 
     function applyWorkspaceSnap(value) {
       const unit = getWorkspaceGridDrawingUnit();
-      return workspaceSnap && workspaceGrid ? Math.round(value / unit) * unit : value;
+      return workspaceSnap ? Math.round(value / unit) * unit : value;
     }
 
     function applyWorkspaceSnapPoint(point) {
-      if (!workspaceSnap || !workspaceGrid) return point;
+      if (!workspaceSnap) return point;
       const millimeters = workspacePointToMillimeters(point);
       return workspaceMillimetersToPoint({
         x: snapToGrid(millimeters.x, workspaceGridSizeMm),
@@ -5011,13 +5105,28 @@
 
     function getWorkspaceSnappedPoint(event) {
       const point = getWorkspaceSvgPoint(event);
-      if (!workspaceSnap || !workspaceGrid) return point;
+      if (!workspaceSnap) return point;
       const mm = workspacePointToMillimeters(point);
       const snappedMm = {
         x: snapToGrid(mm.x, workspaceGridSizeMm),
         y: snapToGrid(mm.y, workspaceGridSizeMm),
       };
       return workspaceMillimetersToPoint(snappedMm);
+    }
+
+    function resolveWorkspaceSmartSnap(object, rawCenter) {
+      const starts = workspaceDragState?.selectedStarts || [];
+      const selectedIds = new Set(starts.map((item) => item.id));
+      const startBounds = starts.map((start) => smartGuideObjectBounds(findWorkspaceObject(start.id) || object, { x: start.x, y: start.y }));
+      const groupBounds = startBounds.length ? { left: Math.min(...startBounds.map((box) => box.left)), right: Math.max(...startBounds.map((box) => box.right)), top: Math.min(...startBounds.map((box) => box.top)), bottom: Math.max(...startBounds.map((box) => box.bottom)) } : smartGuideObjectBounds(object, { x: workspaceDragState.startObjectX, y: workspaceDragState.startObjectY });
+      const startGroupCenter = { x: (groupBounds.left + groupBounds.right) / 2, y: (groupBounds.top + groupBounds.bottom) / 2 };
+      const delta = { x: rawCenter.x - workspaceDragState.startObjectX, y: rawCenter.y - workspaceDragState.startObjectY };
+      const movingProxy = { objectType: "selection_group", widthMm: groupBounds.right - groupBounds.left, heightMm: groupBounds.bottom - groupBounds.top, rotation: 0 };
+      const proposedGroupCenter = { x: startGroupCenter.x + delta.x, y: startGroupCenter.y + delta.y };
+      const searchRadius = Math.max(6000, 80 / Math.max(view.scale || 1, WORKSPACE_MIN_SCALE));
+      const references = workspaceObjects.filter((candidate) => !selectedIds.has(candidate.instanceId) && !candidate.metadata?.compositeBaseChild && candidate.objectType !== "chair" && !isFloorplanStructuralObject(candidate) && Math.abs(Number(candidate.x || 0) - proposedGroupCenter.x) <= searchRadius && Math.abs(Number(candidate.y || 0) - proposedGroupCenter.y) <= searchRadius).slice(0, 160);
+      const snap = resolveSmartGuideSnap({ movingObject: movingProxy, proposedCenter: proposedGroupCenter, references, zoom: view.scale, thresholdPx: 8, gridEnabled: workspaceSnap, gridSizeMm: workspaceGridSizeMm });
+      return { ...snap, point: { x: rawCenter.x + snap.point.x - proposedGroupCenter.x, y: rawCenter.y + snap.point.y - proposedGroupCenter.y } };
     }
 
     function constrainWorkspacePoint(start, point, shiftKey) {
@@ -6225,6 +6334,8 @@
     floorplanObjectWorkspaceCenter,
     floorplanObjectIntersectsBox,
     duplicateFloorplanObjects,
+    smartGuideObjectBounds,
+    resolveSmartGuideSnap,
     calculateWorkspaceWorldBounds,
     calculateExportVisualBounds,
     transformBasePlanPoint,
