@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=dashboard-postit-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-figma-v1">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -88,10 +88,22 @@
         <p class="dashboard-data-sync-status" data-events-sync-status hidden></p>
 
         <section class="mobile-erp-home" aria-label="모바일 오늘 현황">
-          <section class="mobile-home-section"><header><h2>오늘 행사</h2><strong data-mobile-today-count>0건</strong></header><div data-mobile-today-events></div></section>
-          <section class="mobile-home-section"><header><h2>오늘 남은 일정</h2><strong data-mobile-remaining-count>0건</strong></header><div data-mobile-remaining-schedules></div></section>
-          <section class="mobile-home-ai"><button type="button" data-mobile-ai-open>AI 비서에게 물어보기</button><div class="mobile-home-question-list"><button type="button" data-mobile-ai-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-mobile-ai-question="오늘 남은 일정 알려줘">오늘 남은 일정 알려줘</button><button type="button" data-mobile-ai-question="다음 세팅 뭐야?">다음 세팅 뭐야?</button><button type="button" data-mobile-ai-question="자산 찾아줘">자산 찾아줘</button></div></section>
-          <section class="mobile-home-shortcuts"><button type="button" data-mobile-asset-open>자산 찾기</button><a href="./board/">운영보드 열기</a></section>
+          <header class="mobile-home-header">
+            <div><span class="eyebrow">Banquet operation</span><h1>오늘의 연회</h1><p data-mobile-home-date></p></div>
+            <button type="button" data-mobile-widget-edit aria-expanded="false"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>편집</span></button>
+          </header>
+          <section class="mobile-widget-editor" data-mobile-widget-editor hidden aria-label="홈 위젯 편집">
+            <header><div><strong>홈 위젯</strong><small>표시 여부와 순서를 정할 수 있습니다.</small></div><button type="button" data-mobile-widget-close aria-label="위젯 편집 닫기">×</button></header>
+            <div data-mobile-widget-options></div>
+            <button type="button" data-mobile-widget-reset>기본값 복원</button>
+          </section>
+          <div class="mobile-widget-stack" data-mobile-widget-stack>
+            <section class="mobile-home-section" data-mobile-widget="today-events"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span><h2>오늘 행사</h2></div><strong data-mobile-today-count>0건</strong></header><div data-mobile-today-events></div></section>
+            <section class="mobile-home-section" data-mobile-widget="remaining-schedules"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h2>오늘 남은 일정</h2></div><strong data-mobile-remaining-count>0건</strong></header><div data-mobile-remaining-schedules></div></section>
+            <section class="mobile-home-ai" data-mobile-widget="ai-questions"><header><span>AI</span><div><strong>AI 비서</strong><small>저장된 운영 데이터에서 바로 찾아드려요.</small></div></header><button type="button" data-mobile-ai-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>AI 비서에게 물어보기</button><div class="mobile-home-question-list"><button type="button" data-mobile-ai-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-mobile-ai-question="오늘 남은 일정 알려줘">오늘 남은 일정</button><button type="button" data-mobile-ai-question="다음 세팅 뭐야?">다음 세팅</button><button type="button" data-mobile-ai-question="자산 찾아줘">자산 찾기</button></div></section>
+            <section class="mobile-home-shortcuts" data-mobile-widget="asset-search"><button type="button" data-mobile-asset-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg><span><strong>자산 찾기</strong><small>수량과 보관 위치를 확인하세요.</small></span></button><a href="./board/"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8M12 8v8"/></svg><span><strong>운영보드</strong><small>별도 작업 화면 열기</small></span></a></section>
+            <section class="mobile-home-section mobile-current-setup" data-mobile-widget="current-setup" hidden><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3v18"/><circle cx="12" cy="12" r="9"/></svg></span><h2>현재 세팅 상태</h2></div></header><p>운영 작업과 완료 처리는 독립 운영보드에서 확인합니다.</p><a href="./board/">운영보드에서 확인</a></section>
+          </div>
         </section>
 
         <section class="dashboard-operations-row" aria-label="운영 일정과 월간 캘린더">
@@ -875,12 +887,14 @@
                     </div>
                   </div>
                   <div id="aiPageAttachmentPreview" class="ai-attachment-preview" hidden></div>
+                  <div class="ai-quick-question-row" aria-label="추천 질문"><button type="button" data-ai-quick-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-ai-quick-question="오늘 남은 일정 알려줘">남은 일정</button><button type="button" data-ai-quick-question="다음 세팅 뭐야?">다음 세팅</button><button type="button" data-ai-quick-question="자산 찾아줘">자산 찾기</button></div>
                   <form id="aiPageChatForm" class="ai-page-chat-form">
-                    <button id="aiPageAttachButton" class="ai-tool-button" type="button" aria-label="파일 첨부" title="파일 첨부">＋</button>
-                    <button id="aiPageAttachmentListButton" class="ai-tool-button" type="button" aria-label="첨부 자료 보기" title="첨부 자료 보기">자료</button>
+                    <button id="aiPageAttachButton" class="ai-tool-button" type="button" aria-label="파일 첨부" title="파일 첨부"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+                    <button id="aiPageVoiceButton" class="ai-tool-button" type="button" aria-label="음성 입력" aria-pressed="false" title="음성 입력"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="12" x="8" y="2" rx="4"/><path d="M4 10a8 8 0 0 0 16 0M12 18v4M8 22h8"/></svg></button>
+                    <button id="aiPageAttachmentListButton" class="ai-tool-button ai-attachment-list-button" type="button" aria-label="첨부 자료 보기" title="첨부 자료 보기">자료</button>
                     <input id="aiPageAttachmentInput" class="visually-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple>
-                    <textarea id="aiPageChatInput" rows="3" placeholder="궁금한 내용을 입력하세요..."></textarea>
-                    <button id="aiPageChatSendButton" class="primary-button" type="submit">전송</button>
+                    <textarea id="aiPageChatInput" rows="1" placeholder="AI 비서에게 물어보세요" aria-label="AI 질문 입력"></textarea>
+                    <button id="aiPageChatSendButton" class="primary-button" type="submit" aria-label="메시지 전송"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>전송</span></button>
                   </form>
                 </div>
 
@@ -1117,7 +1131,7 @@
     <button class="active" type="button" data-mobile-target="home"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span><strong>캘린더</strong></button>
     <button type="button" data-mobile-target="upload"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg></span><strong>이벤오더</strong></button>
-    <button type="button" data-mobile-target="ai"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><strong>AI</strong></button>
+    <button type="button" data-mobile-target="ai"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><strong>AI 비서</strong></button>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -1378,6 +1392,7 @@
     const aiPageChatForm = document.querySelector("#aiPageChatForm");
     const aiPageChatInput = document.querySelector("#aiPageChatInput");
     const aiPageChatSendButton = document.querySelector("#aiPageChatSendButton");
+    const aiPageVoiceButton = document.querySelector("#aiPageVoiceButton");
     const aiPageAttachButton = document.querySelector("#aiPageAttachButton");
     const aiPageAttachmentListButton = document.querySelector("#aiPageAttachmentListButton");
     const aiPageAttachmentInput = document.querySelector("#aiPageAttachmentInput");
@@ -1901,6 +1916,13 @@
     window.addEventListener("banquet:operation-board-rendered", handleDailyBriefingUpdated);
     aiPageChatForm.addEventListener("submit", handleAiPageChatSubmit);
     aiPageChatInput.addEventListener("keydown", handleAiPageInputKeydown);
+    aiPageChatInput.addEventListener("input", resizeAiPageComposer);
+    aiPageVoiceButton?.addEventListener("click", toggleAiPageVoiceInput);
+    document.querySelectorAll("[data-ai-quick-question]").forEach((button) => button.addEventListener("click", () => {
+      aiPageChatInput.value = button.dataset.aiQuickQuestion || "";
+      resizeAiPageComposer();
+      aiPageChatInput.focus();
+    }));
     aiPageAttachmentInput.addEventListener("change", handleAiAttachmentSelect);
     aiPageAttachButton.addEventListener("click", openAiAttachmentPicker);
     aiPageAttachmentListButton.addEventListener("click", showAiAttachmentList);
@@ -3852,6 +3874,8 @@
 
     let globalAiSpeechRecognition = null;
     let globalAiListening = false;
+    let aiPageSpeechRecognition = null;
+    let aiPageListening = false;
     let globalAiBriefingPendingOpen = false;
 
     function openGlobalAiDrawer(showBriefing = true) {
@@ -3911,6 +3935,35 @@
       }
       if (globalAiListening) globalAiSpeechRecognition.stop();
       else globalAiSpeechRecognition.start();
+    }
+
+    function resizeAiPageComposer() {
+      if (!aiPageChatInput) return;
+      aiPageChatInput.style.height = "auto";
+      aiPageChatInput.style.height = `${Math.min(aiPageChatInput.scrollHeight, 128)}px`;
+    }
+
+    function toggleAiPageVoiceInput() {
+      const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognitionApi) {
+        aiPageVoiceButton.disabled = true;
+        aiPageVoiceButton.title = "이 브라우저에서는 음성 입력을 지원하지 않습니다.";
+        return;
+      }
+      if (!aiPageSpeechRecognition) {
+        aiPageSpeechRecognition = new SpeechRecognitionApi();
+        aiPageSpeechRecognition.lang = "ko-KR";
+        aiPageSpeechRecognition.interimResults = false;
+        aiPageSpeechRecognition.continuous = false;
+        aiPageSpeechRecognition.onstart = () => { aiPageListening = true; aiPageVoiceButton.setAttribute("aria-pressed", "true"); aiPageVoiceButton.classList.add("listening"); };
+        aiPageSpeechRecognition.onresult = (event) => {
+          const transcript = Array.from(event.results).map((result) => result[0]?.transcript || "").join(" ").trim();
+          if (transcript) aiPageChatInput.value = [aiPageChatInput.value.trim(), transcript].filter(Boolean).join(" ");
+          resizeAiPageComposer();
+        };
+        aiPageSpeechRecognition.onend = () => { aiPageListening = false; aiPageVoiceButton.setAttribute("aria-pressed", "false"); aiPageVoiceButton.classList.remove("listening"); aiPageChatInput.focus(); };
+      }
+      if (aiPageListening) aiPageSpeechRecognition.stop(); else aiPageSpeechRecognition.start();
     }
 
     function handleMobileNavigation(target) {
@@ -4090,10 +4143,77 @@
     function scheduleStartTime(value) { return cleanValue(value).match(/^(\d{1,2}:\d{2})/)?.[1]?.padStart(5, "0") || ""; }
     function eventTimeForDate(eventItem, dateKey) { return (eventItem.schedule || []).filter((row) => !row.date || row.date === dateKey).map((row) => scheduleStartTime(row.time)).find(Boolean) || getDashboardEventTime(eventItem); }
 
+    const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v1";
+    const MOBILE_HOME_WIDGET_DEFAULTS = [
+      { id: "today-events", label: "오늘 행사", visible: true },
+      { id: "remaining-schedules", label: "오늘 남은 일정", visible: true },
+      { id: "ai-questions", label: "AI 빠른질문", visible: true },
+      { id: "asset-search", label: "자산 찾기", visible: true },
+      { id: "current-setup", label: "현재 세팅 상태", visible: false },
+    ];
+
+    function loadMobileHomeWidgets() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(MOBILE_HOME_WIDGETS_KEY) || "[]");
+        const savedItems = Array.isArray(saved) ? saved : [];
+        const savedById = new Map(savedItems.map((item) => [item.id, item]));
+        const ordered = [...savedItems, ...MOBILE_HOME_WIDGET_DEFAULTS].filter((item, index, list) => item?.id && list.findIndex((entry) => entry.id === item.id) === index);
+        return ordered.map((item) => {
+          const fallback = MOBILE_HOME_WIDGET_DEFAULTS.find((entry) => entry.id === item.id);
+          return { id: item.id, label: fallback?.label || item.label || item.id, visible: savedById.has(item.id) ? savedById.get(item.id).visible !== false : fallback?.visible !== false };
+        }).filter((item) => MOBILE_HOME_WIDGET_DEFAULTS.some((entry) => entry.id === item.id));
+      } catch (error) {
+        console.warn("mobile home widget preferences reset:", error);
+        return MOBILE_HOME_WIDGET_DEFAULTS.map((item) => ({ ...item }));
+      }
+    }
+
+    function saveMobileHomeWidgets(items) {
+      localStorage.setItem(MOBILE_HOME_WIDGETS_KEY, JSON.stringify(items.map(({ id, visible }) => ({ id, visible }))));
+      applyMobileHomeWidgets(items);
+      renderMobileWidgetEditor(items);
+    }
+
+    function applyMobileHomeWidgets(items = loadMobileHomeWidgets()) {
+      const stack = document.querySelector("[data-mobile-widget-stack]");
+      if (!stack) return;
+      items.forEach((item) => {
+        const widget = stack.querySelector(`[data-mobile-widget="${item.id}"]`);
+        if (!widget) return;
+        widget.hidden = !item.visible;
+        stack.append(widget);
+      });
+    }
+
+    function renderMobileWidgetEditor(items = loadMobileHomeWidgets()) {
+      const root = document.querySelector("[data-mobile-widget-options]");
+      if (!root) return;
+      root.innerHTML = items.map((item, index) => `<div class="mobile-widget-option" data-mobile-widget-option="${escapeHtml(item.id)}"><label><input type="checkbox" ${item.visible ? "checked" : ""}><span>${escapeHtml(item.label)}</span></label><div><button type="button" data-mobile-widget-move="up" aria-label="${escapeHtml(item.label)} 위로" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-mobile-widget-move="down" aria-label="${escapeHtml(item.label)} 아래로" ${index === items.length - 1 ? "disabled" : ""}>↓</button></div></div>`).join("");
+      root.querySelectorAll("[data-mobile-widget-option]").forEach((row) => {
+        row.querySelector("input").onchange = (event) => saveMobileHomeWidgets(items.map((item) => item.id === row.dataset.mobileWidgetOption ? { ...item, visible: event.target.checked } : item));
+        row.querySelectorAll("[data-mobile-widget-move]").forEach((button) => button.onclick = () => {
+          const from = items.findIndex((item) => item.id === row.dataset.mobileWidgetOption); const to = button.dataset.mobileWidgetMove === "up" ? from - 1 : from + 1;
+          if (from < 0 || to < 0 || to >= items.length) return;
+          const next = [...items]; [next[from], next[to]] = [next[to], next[from]]; saveMobileHomeWidgets(next);
+        });
+      });
+    }
+
+    function bindMobileWidgetEditor() {
+      const editor = document.querySelector("[data-mobile-widget-editor]"); const editButton = document.querySelector("[data-mobile-widget-edit]");
+      if (!editor || editButton.dataset.bound === "true") return;
+      editButton.dataset.bound = "true";
+      const setOpen = (open) => { editor.hidden = !open; editButton.setAttribute("aria-expanded", String(open)); if (open) renderMobileWidgetEditor(); };
+      editButton.onclick = () => setOpen(editor.hidden);
+      document.querySelector("[data-mobile-widget-close]").onclick = () => setOpen(false);
+      document.querySelector("[data-mobile-widget-reset]").onclick = () => saveMobileHomeWidgets(MOBILE_HOME_WIDGET_DEFAULTS.map((item) => ({ ...item })));
+    }
+
     function renderMobileErpHome() {
       const eventRoot = document.querySelector("[data-mobile-today-events]"); const scheduleRoot = document.querySelector("[data-mobile-remaining-schedules]");
       if (!eventRoot || !scheduleRoot) return;
       const now = seoulNowParts(); const todayEvents = getEventsForDate(now.date);
+      const today = dateKeyToLocalDate(now.date); document.querySelector("[data-mobile-home-date]").textContent = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(today);
       document.querySelector("[data-mobile-today-count]").textContent = `${todayEvents.length}건`;
       eventRoot.innerHTML = todayEvents.length ? todayEvents.map((eventItem) => `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(getDashboardEventVenue(eventItem, true))}${eventItem.guestCount !== "" && eventItem.guestCount != null ? ` · ${escapeHtml(eventItem.guestCount)}명` : ""}</small></span></button>`).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>';
       const remaining = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => !row.date || row.date === now.date).map((row) => ({ eventItem, row, time: scheduleStartTime(row.time) }))).filter((item) => item.time && item.time >= now.time).sort((a, b) => a.time.localeCompare(b.time));
@@ -4102,8 +4222,10 @@
       scheduleRoot.innerHTML = `${remaining.map(({ eventItem, row, time }) => `<button type="button" class="mobile-home-schedule" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(time)}</time><span><strong>${escapeHtml(row.content || getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}${row.people !== "" && row.people != null ? ` · ${escapeHtml(row.people)}명` : ""}</small></span></button>`).join("") || '<p class="mobile-home-empty">오늘 남은 일정이 없습니다.</p>'}${uncertain.length ? `<details class="mobile-home-uncertain"><summary>시간 미정 ${uncertain.length}건</summary>${uncertain.map(({ eventItem, row }) => `<button type="button" data-mobile-event-id="${escapeHtml(eventItem.id)}">${escapeHtml(row.content || getDashboardEventTitle(eventItem))} · ${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}</button>`).join("")}</details>` : ""}`;
       document.querySelectorAll(".mobile-erp-home [data-mobile-event-id]").forEach((button) => button.onclick = () => { const eventItem = savedEvents.find((item) => String(item.id) === String(button.dataset.mobileEventId)); if (eventItem) openEventModal(eventItem, now.date); });
       document.querySelector("[data-mobile-ai-open]").onclick = () => { showErpPage("ai"); requestAnimationFrame(() => aiPageChatInput.focus()); };
-      document.querySelectorAll("[data-mobile-ai-question]").forEach((button) => button.onclick = () => { showErpPage("ai"); aiPageChatInput.value = button.dataset.mobileAiQuestion; requestAnimationFrame(() => aiPageChatInput.focus()); });
+      document.querySelectorAll("[data-mobile-ai-question]").forEach((button) => button.onclick = () => { showErpPage("ai"); aiPageChatInput.value = button.dataset.mobileAiQuestion; resizeAiPageComposer(); requestAnimationFrame(() => aiPageChatInput.focus()); });
       document.querySelector("[data-mobile-asset-open]").onclick = () => { showErpPage("assets"); requestAnimationFrame(() => assetSearchInput.focus()); };
+      applyMobileHomeWidgets();
+      bindMobileWidgetEditor();
     }
 
     function renderMobileEventOrderDirectory() {

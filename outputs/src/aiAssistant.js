@@ -390,6 +390,7 @@
     function createAiPageMessage(type, text, meta = {}) {
       const row = document.createElement("div");
       row.className = `ai-page-message ${type}`;
+      if (type === "assistant" && text === "답변을 생성하는 중입니다...") row.classList.add("loading");
       if (type === "assistant") {
         const avatar = document.createElement("span");
         avatar.className = "ai-message-avatar";
@@ -808,6 +809,7 @@
       conversation.updatedAt = new Date().toISOString();
       localStorage.setItem(ACTIVE_CONVERSATION_KEY, conversation.id);
       aiPageChatInput.value = "";
+      aiPageChatInput.dispatchEvent(new Event("input"));
       aiPendingAttachments = [];
       renderAiAttachmentPreview();
       aiPageChatSendButton.disabled = true;

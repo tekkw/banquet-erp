@@ -5,7 +5,7 @@ const css = fs.readFileSync("outputs/src/styles/mobile.css", "utf8");
 
 const nav = html.match(/<nav class="mobile-bottom-nav"[\s\S]*?<\/nav>/)?.[0] || "";
 assert.deepEqual([...nav.matchAll(/data-mobile-target="([^"]+)"/g)].map((match) => match[1]), ["home", "calendar", "upload", "ai"]);
-assert.deepEqual([...nav.matchAll(/<strong>([^<]+)<\/strong>/g)].map((match) => match[1]), ["홈", "캘린더", "이벤오더", "AI"]);
+assert.deepEqual([...nav.matchAll(/<strong>([^<]+)<\/strong>/g)].map((match) => match[1]), ["홈", "캘린더", "이벤오더", "AI 비서"]);
 assert(!nav.includes('data-mobile-target="operations"'));
 assert(!nav.includes('data-mobile-target="layouts"'));
 for (const label of ["오늘 행사", "오늘 남은 일정", "AI 비서에게 물어보기", "자산 찾기"]) assert(html.includes(label));
