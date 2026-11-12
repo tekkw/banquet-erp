@@ -1,0 +1,25 @@
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const html = fs.readFileSync("outputs/index.html", "utf8");
+const css = fs.readFileSync("outputs/src/styles/mobile.css", "utf8");
+
+const nav = html.match(/<nav class="mobile-bottom-nav"[\s\S]*?<\/nav>/)?.[0] || "";
+assert.deepEqual([...nav.matchAll(/data-mobile-target="([^"]+)"/g)].map((match) => match[1]), ["home", "calendar", "upload", "ai"]);
+assert.deepEqual([...nav.matchAll(/<strong>([^<]+)<\/strong>/g)].map((match) => match[1]), ["홈", "캘린더", "이벤오더", "AI"]);
+assert(!nav.includes('data-mobile-target="operations"'));
+assert(!nav.includes('data-mobile-target="layouts"'));
+for (const label of ["오늘 행사", "오늘 남은 일정", "AI 비서에게 물어보기", "자산 찾기"]) assert(html.includes(label));
+assert(html.indexOf("data-mobile-today-events") < html.indexOf("data-mobile-remaining-schedules"));
+assert(html.indexOf("data-mobile-remaining-schedules") < html.indexOf("data-mobile-ai-open"));
+assert(html.includes("getEventsForDate(now.date)"), "오늘 행사는 calendar dates와 date range를 공유해야 한다");
+assert(html.includes("time >= now.time"), "남은 일정은 Asia/Seoul 현재 시각 이후만 남겨야 한다");
+assert(html.includes('timeZone: "Asia/Seoul"'));
+assert(html.includes("data-mobile-event-search"));
+assert(html.includes("renderEventAttachments"));
+assert(html.includes("openStoredExcel"));
+assert(html.includes('href="./board/"'));
+assert(css.includes("grid-template-columns: repeat(4, minmax(0, 1fr))"));
+assert(css.includes('#todayOperationBoard'));
+assert(css.includes("min-width: 0"));
+assert(fs.existsSync("outputs/board/index.html"));
+console.log("mobile ERP role separation V1 tests passed");

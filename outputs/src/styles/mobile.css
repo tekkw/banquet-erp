@@ -13,6 +13,12 @@
   display: none;
 }
 
+.mobile-erp-home,
+.mobile-event-orders,
+.mobile-event-source {
+  display: none;
+}
+
 /* Mobile app shell: keep desktop dashboard untouched and expose only operational essentials. */
 .ai-mobile-back-button,
 .ai-mobile-reference-button {
@@ -25,7 +31,7 @@
   }
 
   .mobile-bottom-nav {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     padding-inline: 4px;
   }
 
@@ -34,6 +40,61 @@
     padding-inline: 2px;
     font-size: 10px;
   }
+
+  .mobile-erp-home,
+  .mobile-event-orders,
+  .mobile-event-source {
+    display: grid;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-grid,
+  .erp-shell[data-active-page="home"] .dashboard-operations-row,
+  .erp-shell[data-active-page="home"] .operations-status-grid,
+  .erp-shell[data-active-page="home"] #beverageInventoryWidget,
+  .erp-shell[data-active-page="home"] #todayOperationBoard,
+  .erp-shell[data-active-page="home"] #todayRemainingScheduleWidget,
+  .erp-shell[data-active-page="home"] #weeklySetupWidget {
+    display: none !important;
+  }
+
+  .mobile-erp-home { gap: 14px; width: 100%; min-width: 0; }
+  .mobile-home-section { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--theme-border); border-radius: 16px; background: #fff; }
+  .mobile-home-section > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .mobile-home-section h2 { margin: 0; color: var(--theme-navy); font-size: 19px; }
+  .mobile-home-section > header > strong { color: var(--theme-gold); font-size: 13px; }
+  .mobile-home-section > div { display: grid; gap: 6px; }
+  .mobile-home-event, .mobile-home-schedule { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 10px; width: 100%; min-width: 0; min-height: 58px; padding: 9px 4px; border: 0; border-top: 1px solid var(--theme-border); background: transparent; color: var(--theme-text); text-align: left; }
+  .mobile-home-event time, .mobile-home-schedule time { color: var(--theme-gold); font-weight: 900; }
+  .mobile-home-event span, .mobile-home-schedule span { display: grid; gap: 3px; min-width: 0; }
+  .mobile-home-event strong, .mobile-home-schedule strong { overflow: hidden; color: var(--theme-navy); font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-home-event small, .mobile-home-schedule small, .mobile-home-empty { margin: 0; color: var(--theme-muted); font-size: 13px; }
+  .mobile-home-uncertain { color: var(--theme-muted); font-size: 13px; }
+  .mobile-home-uncertain button { display: block; width: 100%; min-height: 44px; border: 0; background: transparent; color: inherit; text-align: left; }
+  .mobile-home-ai { display: grid; gap: 8px; }
+  .mobile-home-ai > button { min-height: 52px; border: 0; border-radius: 14px; background: var(--theme-navy); color: #fff; font: inherit; font-weight: 900; }
+  .mobile-home-question-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  .mobile-home-question-list button, .mobile-home-shortcuts :is(button,a) { min-width: 0; min-height: 44px; padding: 8px; border: 1px solid var(--theme-border); border-radius: 12px; background: #fff; color: var(--theme-navy); font: inherit; font-size: 13px; text-align: center; text-decoration: none; }
+  .mobile-home-shortcuts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .mobile-home-shortcuts a { display: grid; place-items: center; }
+
+  .erp-shell[data-active-page="upload"] #uploadSection,
+  .erp-shell[data-active-page="upload"] #status,
+  .erp-shell[data-active-page="upload"] #resultWrap { display: none !important; }
+  .mobile-event-orders { gap: 14px; min-width: 0; }
+  .mobile-event-orders h2 { margin: 2px 0 0; color: var(--theme-navy); }
+  .mobile-event-order-search { display: grid; gap: 6px; color: var(--theme-muted); font-size: 13px; }
+  .mobile-event-order-search input { width: 100%; min-width: 0; min-height: 46px; padding: 0 13px; border: 1px solid var(--theme-border); border-radius: 12px; background: #fff; font: inherit; }
+  [data-mobile-event-orders] { display: grid; gap: 16px; }
+  .mobile-event-order-group { display: grid; gap: 7px; min-width: 0; }
+  .mobile-event-order-group h3 { display: flex; justify-content: space-between; margin: 0; color: var(--theme-navy); font-size: 17px; }
+  .mobile-event-order-group h3 small { color: var(--theme-muted); font-size: 12px; }
+  .mobile-event-order-group > button { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; width: 100%; min-width: 0; min-height: 62px; padding: 11px 12px; border: 1px solid var(--theme-border); border-radius: 14px; background: #fff; color: var(--theme-text); text-align: left; }
+  .mobile-event-order-group > button span { display: grid; gap: 3px; min-width: 0; }
+  .mobile-event-order-group > button strong { overflow: hidden; color: var(--theme-navy); text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-event-order-group > button small { overflow: hidden; color: var(--theme-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-event-order-group > button b { color: var(--theme-gold); font-size: 12px; }
+  #eventModal .event-admin-field, #eventModal .event-admin-actions { display: none; }
+  #eventModal .mobile-event-source .info-value { white-space: pre-wrap; }
 
   .mobile-bottom-nav .mobile-nav-icon {
     display: grid;

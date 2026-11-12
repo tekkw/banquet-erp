@@ -87,6 +87,13 @@
         </div>
         <p class="dashboard-data-sync-status" data-events-sync-status hidden></p>
 
+        <section class="mobile-erp-home" aria-label="모바일 오늘 현황">
+          <section class="mobile-home-section"><header><h2>오늘 행사</h2><strong data-mobile-today-count>0건</strong></header><div data-mobile-today-events></div></section>
+          <section class="mobile-home-section"><header><h2>오늘 남은 일정</h2><strong data-mobile-remaining-count>0건</strong></header><div data-mobile-remaining-schedules></div></section>
+          <section class="mobile-home-ai"><button type="button" data-mobile-ai-open>AI 비서에게 물어보기</button><div class="mobile-home-question-list"><button type="button" data-mobile-ai-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-mobile-ai-question="오늘 남은 일정 알려줘">오늘 남은 일정 알려줘</button><button type="button" data-mobile-ai-question="다음 세팅 뭐야?">다음 세팅 뭐야?</button><button type="button" data-mobile-ai-question="자산 찾아줘">자산 찾아줘</button></div></section>
+          <section class="mobile-home-shortcuts"><button type="button" data-mobile-asset-open>자산 찾기</button><a href="./board/">운영보드 열기</a></section>
+        </section>
+
         <section class="dashboard-operations-row" aria-label="운영 일정과 월간 캘린더">
           <article class="today-operations-card" aria-label="오늘 운영 일정">
             <div class="section-heading">
@@ -182,6 +189,11 @@
       </section>
 
       <section id="uploadPage" class="erp-page" data-erp-page="upload" aria-label="이벤트오더 업로드 페이지" hidden>
+      <section class="mobile-event-orders" aria-label="모바일 이벤오더 조회">
+        <header><div><span class="eyebrow">Event Orders</span><h2>이벤오더</h2></div></header>
+        <label class="mobile-event-order-search"><span>행사 검색</span><input type="search" data-mobile-event-search placeholder="행사명, 주최, 날짜 검색"></label>
+        <div data-mobile-event-orders></div>
+      </section>
       <section class="upload-panel upload-dropzone" id="uploadSection" aria-label="엑셀 업로드">
         <div class="upload-symbol" aria-hidden="true">↑</div>
         <div class="upload-copy">
@@ -1105,9 +1117,7 @@
     <button class="active" type="button" data-mobile-target="home"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg></span><strong>홈</strong></button>
     <button type="button" data-mobile-target="calendar"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg></span><strong>캘린더</strong></button>
     <button type="button" data-mobile-target="upload"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg></span><strong>이벤오더</strong></button>
-    <button type="button" data-mobile-target="operations"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="14" height="18" x="5" y="4" rx="2"/><path d="M9 2h6v4H9z"/><path d="m9 14 2 2 4-4"/></svg></span><strong>운영보드</strong></button>
-    <button type="button" data-mobile-target="ai"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><strong>AI 비서</strong></button>
-    <button type="button" data-mobile-target="layouts"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span><strong>공간</strong></button>
+    <button type="button" data-mobile-target="ai"><span class="mobile-nav-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg></span><strong>AI</strong></button>
   </nav>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -3982,6 +3992,11 @@
         return;
       }
 
+      if (pageName === "upload") {
+        renderMobileEventOrderDirectory();
+        return;
+      }
+
       if (target === "ai") {
         initializeAiAssistantPage("chat");
         createPostEventReviewQuestions().finally(() => {
@@ -4008,6 +4023,8 @@
 
     function renderDashboardOverview() {
       renderTodayOperations();
+      renderMobileErpHome();
+      renderMobileEventOrderDirectory();
       renderOperationStatusCards();
       renderDashboardMonthWidget();
       window.BANQUET_ERP_OPERATION_BOARD?.render({ events: savedEvents });
@@ -4062,6 +4079,41 @@
         list.append(row);
       });
       summary.textContent = `오늘 행사 ${todayEvents.length}건`;
+    }
+
+    function seoulNowParts(now = new Date()) {
+      const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
+      const value = (type) => parts.find((part) => part.type === type)?.value || "";
+      return { date: `${value("year")}-${value("month")}-${value("day")}`, time: `${value("hour")}:${value("minute")}` };
+    }
+
+    function scheduleStartTime(value) { return cleanValue(value).match(/^(\d{1,2}:\d{2})/)?.[1]?.padStart(5, "0") || ""; }
+    function eventTimeForDate(eventItem, dateKey) { return (eventItem.schedule || []).filter((row) => !row.date || row.date === dateKey).map((row) => scheduleStartTime(row.time)).find(Boolean) || getDashboardEventTime(eventItem); }
+
+    function renderMobileErpHome() {
+      const eventRoot = document.querySelector("[data-mobile-today-events]"); const scheduleRoot = document.querySelector("[data-mobile-remaining-schedules]");
+      if (!eventRoot || !scheduleRoot) return;
+      const now = seoulNowParts(); const todayEvents = getEventsForDate(now.date);
+      document.querySelector("[data-mobile-today-count]").textContent = `${todayEvents.length}건`;
+      eventRoot.innerHTML = todayEvents.length ? todayEvents.map((eventItem) => `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(getDashboardEventVenue(eventItem, true))}${eventItem.guestCount !== "" && eventItem.guestCount != null ? ` · ${escapeHtml(eventItem.guestCount)}명` : ""}</small></span></button>`).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>';
+      const remaining = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => !row.date || row.date === now.date).map((row) => ({ eventItem, row, time: scheduleStartTime(row.time) }))).filter((item) => item.time && item.time >= now.time).sort((a, b) => a.time.localeCompare(b.time));
+      const uncertain = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => (!row.date || row.date === now.date) && !scheduleStartTime(row.time)).map((row) => ({ eventItem, row })));
+      document.querySelector("[data-mobile-remaining-count]").textContent = `${remaining.length}건`;
+      scheduleRoot.innerHTML = `${remaining.map(({ eventItem, row, time }) => `<button type="button" class="mobile-home-schedule" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(time)}</time><span><strong>${escapeHtml(row.content || getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}${row.people !== "" && row.people != null ? ` · ${escapeHtml(row.people)}명` : ""}</small></span></button>`).join("") || '<p class="mobile-home-empty">오늘 남은 일정이 없습니다.</p>'}${uncertain.length ? `<details class="mobile-home-uncertain"><summary>시간 미정 ${uncertain.length}건</summary>${uncertain.map(({ eventItem, row }) => `<button type="button" data-mobile-event-id="${escapeHtml(eventItem.id)}">${escapeHtml(row.content || getDashboardEventTitle(eventItem))} · ${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}</button>`).join("")}</details>` : ""}`;
+      document.querySelectorAll(".mobile-erp-home [data-mobile-event-id]").forEach((button) => button.onclick = () => { const eventItem = savedEvents.find((item) => String(item.id) === String(button.dataset.mobileEventId)); if (eventItem) openEventModal(eventItem, now.date); });
+      document.querySelector("[data-mobile-ai-open]").onclick = () => { showErpPage("ai"); requestAnimationFrame(() => aiPageChatInput.focus()); };
+      document.querySelectorAll("[data-mobile-ai-question]").forEach((button) => button.onclick = () => { showErpPage("ai"); aiPageChatInput.value = button.dataset.mobileAiQuestion; requestAnimationFrame(() => aiPageChatInput.focus()); });
+      document.querySelector("[data-mobile-asset-open]").onclick = () => { showErpPage("assets"); requestAnimationFrame(() => assetSearchInput.focus()); };
+    }
+
+    function renderMobileEventOrderDirectory() {
+      const root = document.querySelector("[data-mobile-event-orders]"); const search = document.querySelector("[data-mobile-event-search]"); if (!root || !search) return;
+      const today = window.BANQUET_ERP_CORE_RULES?.getActualTodaySeoul?.() || seoulNowParts().date; const tomorrow = window.erpConversationAgent?.shiftDateKey?.(today, 1) || today; const query = cleanValue(search.value).toLocaleLowerCase();
+      const matches = (savedEvents || []).filter((eventItem) => !query || [eventItem.eventName, eventItem.companyName, eventItem.eventDateTime, ...getEventDateKeys(eventItem)].some((value) => String(value || "").toLocaleLowerCase().includes(query)));
+      const groups = query ? [["검색 결과", matches]] : [["오늘", matches.filter((eventItem) => getEventDateKeys(eventItem).includes(today))], ["내일", matches.filter((eventItem) => !getEventDateKeys(eventItem).includes(today) && getEventDateKeys(eventItem).includes(tomorrow))], ["다가오는 행사", matches.filter((eventItem) => getEventDateKeys(eventItem).some((date) => date > tomorrow)).sort((a, b) => getEventDateKeys(a)[0]?.localeCompare(getEventDateKeys(b)[0] || "") || 0).slice(0, 50)]];
+      root.innerHTML = groups.map(([label, events]) => `<section class="mobile-event-order-group"><h3>${label}<small>${events.length}건</small></h3>${events.map((eventItem) => { const dates = getEventDateKeys(eventItem); return `<button type="button" data-mobile-order-id="${escapeHtml(eventItem.id)}"><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(eventItem.companyName || "주최 미등록")} · ${escapeHtml(dates[0] || "날짜 미등록")}</small></span><b>${escapeHtml(getDashboardEventVenue(eventItem, true))}</b></button>`; }).join("") || '<p>등록된 행사가 없습니다.</p>'}</section>`).join("");
+      root.querySelectorAll("[data-mobile-order-id]").forEach((button) => button.onclick = () => { const eventItem = savedEvents.find((item) => String(item.id) === String(button.dataset.mobileOrderId)); if (eventItem) openEventModal(eventItem, getEventDateKeys(eventItem)[0] || null); });
+      search.oninput = renderMobileEventOrderDirectory;
     }
 
     function getOperationVenueCode(eventItem) {
@@ -4674,7 +4726,12 @@
       scheduleLabel.textContent = "스케줄";
       scheduleCard.append(scheduleLabel, createScheduleTable(eventItem.schedule));
 
+      const sourceTextCard = (labelText, values) => { const card = document.createElement("article"); card.className = `info-card wide-card mobile-event-source${values.length ? "" : " missing"}`; const label = document.createElement("div"); label.className = "info-label"; label.textContent = labelText; const value = document.createElement("div"); value.className = "info-value"; value.textContent = values.join("\n") || "기재된 내용이 없습니다."; card.append(label, value); return card; };
+      const layoutCard = sourceTextCard("LAY & OUT", (eventItem.layoutEqp || []).map(cleanValue).filter(Boolean));
+      const othersCard = sourceTextCard("OTHERS", (eventItem.others || []).map(cleanValue).filter(Boolean));
+
       const memoField = createFormField("내부 메모", "internalMemo", eventItem.internalMemo || "", true);
+      memoField.classList.add("event-admin-field");
       const memoSaveButton = document.createElement("button");
       memoSaveButton.type = "button";
       memoSaveButton.className = "secondary-button";
@@ -4685,7 +4742,7 @@
       const reviewNotesCard = createPostEventReviewNotesCard(eventItem);
 
       const actions = document.createElement("div");
-      actions.className = "modal-actions";
+      actions.className = "modal-actions event-admin-actions";
       const editButton = document.createElement("button");
       editButton.type = "button";
       editButton.className = "secondary-button";
@@ -4698,7 +4755,7 @@
       deleteButton.addEventListener("click", () => requestDelete(eventItem));
       actions.append(editButton, deleteButton);
 
-      modalBody.append(detailGrid, fileCard, attachmentsCard, fieldNotesCard, scheduleCard, memoField, reviewNotesCard, actions);
+      modalBody.append(detailGrid, scheduleCard, layoutCard, othersCard, attachmentsCard, fileCard, fieldNotesCard, memoField, reviewNotesCard, actions);
       eventModal.classList.add("visible");
     }
 
