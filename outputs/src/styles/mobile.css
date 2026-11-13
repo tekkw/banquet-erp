@@ -2057,3 +2057,244 @@
   .mobile-home-event,
   .mobile-home-schedule { grid-template-columns: 86px minmax(0, 1fr); }
 }
+
+/* Mobile AI full-screen conversation surface and venue-first event rows. */
+@media (max-width: 768px) {
+  main.erp-shell[data-active-page="ai"] {
+    position: fixed;
+    inset: 0 0 calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom)) 0;
+    z-index: 900;
+    width: 100%;
+    height: auto !important;
+    min-height: 0;
+    padding: 0 !important;
+    overflow: hidden;
+    background: var(--mobile-bg);
+  }
+
+  main.erp-shell[data-active-page="ai"].mobile-keyboard-open {
+    right: 0;
+    bottom: auto;
+    height: var(--mobile-ai-viewport-height, 100dvh) !important;
+  }
+
+  main.erp-shell[data-active-page="ai"] .erp-workspace,
+  main.erp-shell[data-active-page="ai"] #aiPage,
+  main.erp-shell[data-active-page="ai"] .ai-assistant-page,
+  main.erp-shell[data-active-page="ai"] .ai-page-layout,
+  main.erp-shell[data-active-page="ai"] .ai-main-panel,
+  main.erp-shell[data-active-page="ai"] .ai-main-scroll,
+  main.erp-shell[data-active-page="ai"] #aiChatModePanel.active {
+    width: 100%;
+    height: 100% !important;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+    background: var(--mobile-bg);
+    box-shadow: none;
+  }
+
+  main.erp-shell[data-active-page="ai"] .ai-assistant-page {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-header {
+    position: relative;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
+    min-height: 54px;
+    padding: max(6px, env(safe-area-inset-top)) 10px 6px;
+    margin: 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--mobile-border);
+    border-radius: 0;
+    background: var(--mobile-bg);
+    box-shadow: none;
+  }
+
+  main.erp-shell[data-active-page="ai"] .ai-mobile-back-button {
+    width: 38px;
+    min-height: 38px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--mobile-text-primary);
+  }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-title { display: block; }
+  main.erp-shell[data-active-page="ai"] .ai-page-title .ai-page-bot-icon,
+  main.erp-shell[data-active-page="ai"] .ai-page-title .eyebrow,
+  main.erp-shell[data-active-page="ai"] .ai-page-title p { display: none !important; }
+  main.erp-shell[data-active-page="ai"] .ai-page-title h2 { margin: 0; color: var(--mobile-text-primary); font-size: 17px; line-height: 1.2; }
+  main.erp-shell[data-active-page="ai"] .ai-mobile-reference-button { min-height: 36px; padding: 0 8px; border: 0; background: transparent; color: var(--mobile-text-secondary); font-size: 12px; }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-layout { flex: 1 1 auto; display: block; }
+  main.erp-shell[data-active-page="ai"] .ai-main-panel,
+  main.erp-shell[data-active-page="ai"] .ai-main-scroll,
+  main.erp-shell[data-active-page="ai"] #aiChatModePanel.active { display: flex !important; flex: 1 1 auto; flex-direction: column; }
+  main.erp-shell[data-active-page="ai"] .ai-main-panel { border: 0 !important; }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-messages {
+    flex: 1 1 auto;
+    gap: 18px;
+    min-height: 0;
+    padding: 18px 14px 24px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-bottom: 180px;
+    background: var(--mobile-bg);
+  }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-message { width: 100%; gap: 9px; }
+  main.erp-shell[data-active-page="ai"] .ai-message-avatar { width: 28px; height: 28px; border-radius: 9px; font-size: 9px; }
+  main.erp-shell[data-active-page="ai"] .ai-page-message.assistant .ai-page-bubble {
+    width: calc(100% - 38px);
+    max-width: none;
+    padding: 3px 2px 5px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--mobile-text-primary);
+    box-shadow: none;
+  }
+  main.erp-shell[data-active-page="ai"] .ai-page-message.user .ai-page-bubble {
+    width: auto;
+    max-width: 88%;
+    padding: 11px 14px;
+    border: 1px solid rgba(76,141,255,.2);
+    border-radius: 18px 18px 5px 18px;
+    background: #173B59;
+    color: var(--mobile-text-primary);
+    box-shadow: none;
+  }
+  main.erp-shell[data-active-page="ai"] .ai-answer-content { gap: 10px; }
+  main.erp-shell[data-active-page="ai"] .ai-answer-content p { color: inherit; font-size: 15px; line-height: 1.68; }
+  main.erp-shell[data-active-page="ai"] .ai-answer-list-item { background: var(--mobile-surface); color: var(--mobile-text-primary); }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 72px;
+    color: var(--mobile-text-secondary);
+  }
+  main.erp-shell[data-active-page="ai"] .ai-page-loading span { width: 8px; height: 8px; border-radius: 999px; background: var(--mobile-gold); animation: ai-mobile-pulse 1.1s ease-in-out infinite; }
+  main.erp-shell[data-active-page="ai"] .ai-page-loading span:nth-child(2) { animation-delay: .14s; }
+  main.erp-shell[data-active-page="ai"] .ai-page-loading span:nth-child(3) { animation-delay: .28s; }
+  main.erp-shell[data-active-page="ai"] .ai-page-loading small { margin-left: 5px; font-size: 12px; }
+
+  main.erp-shell[data-active-page="ai"] .ai-quick-question-row {
+    flex: 0 0 auto;
+    gap: 7px;
+    padding: 6px 12px 8px;
+    overflow-x: auto;
+    border: 0;
+    background: var(--mobile-bg);
+    scrollbar-width: none;
+  }
+  main.erp-shell[data-active-page="ai"] .ai-quick-question-row[hidden] { display: none !important; }
+  main.erp-shell[data-active-page="ai"] .ai-quick-question-row button { min-height: 34px; padding: 0 12px; border-color: var(--mobile-border); background: var(--mobile-surface); color: var(--mobile-text-primary); font-size: 12px; white-space: nowrap; }
+
+  main.erp-shell[data-active-page="ai"] .ai-page-chat-form {
+    position: static !important;
+    inset: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    z-index: 4;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 42px 44px !important;
+    grid-template-areas:
+      "preview preview preview preview"
+      "attach input input input"
+      "tools tools voice send";
+    align-items: center;
+    gap: 7px;
+    margin: 0 10px max(8px, env(safe-area-inset-bottom));
+    padding: 10px;
+    border: 1px solid var(--mobile-border);
+    border-radius: 24px;
+    background: var(--mobile-surface);
+    box-shadow: 0 10px 30px rgba(0,0,0,.3);
+  }
+  main.erp-shell[data-active-page="ai"] #aiPageAttachmentPreview { grid-area: preview; }
+  main.erp-shell[data-active-page="ai"] #aiPageAttachButton { grid-area: attach; }
+  main.erp-shell[data-active-page="ai"] #aiPageChatInput { grid-area: input; }
+  main.erp-shell[data-active-page="ai"] #aiPageAttachmentListButton { grid-area: tools; justify-self: start; width: auto; padding: 0 12px; }
+  main.erp-shell[data-active-page="ai"] .ai-tool-label-desktop { display: none; }
+  main.erp-shell[data-active-page="ai"] .ai-tool-label-mobile { display: inline; }
+  main.erp-shell[data-active-page="ai"] #aiPageVoiceButton { grid-area: voice; }
+  main.erp-shell[data-active-page="ai"] #aiPageChatSendButton { grid-area: send; }
+  main.erp-shell[data-active-page="ai"] .ai-page-chat-form .ai-tool-button,
+  main.erp-shell[data-active-page="ai"] .ai-page-chat-form .ai-attachment-list-button { display: grid !important; min-width: 42px; min-height: 42px; place-items: center; border: 0; border-radius: 13px; background: var(--mobile-surface-raised); color: var(--mobile-text-primary); }
+  main.erp-shell[data-active-page="ai"] #aiPageChatInput {
+    width: 100%;
+    height: auto;
+    min-height: 68px;
+    max-height: 144px;
+    padding: 10px 4px;
+    resize: none;
+    overflow-y: auto;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--mobile-text-primary);
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  main.erp-shell[data-active-page="ai"] #aiPageChatInput::placeholder { color: var(--mobile-text-secondary); }
+  main.erp-shell[data-active-page="ai"] #aiPageChatSendButton { display: grid; min-width: 44px; min-height: 42px; padding: 0; place-items: center; border-radius: 13px; background: var(--mobile-gold); color: var(--mobile-nav); }
+  main.erp-shell[data-active-page="ai"] #aiPageChatSendButton span { display: none; }
+
+  main.erp-shell[data-active-page="ai"] .ai-attachment-preview {
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 0 0 5px;
+    overflow-x: auto;
+    border: 0;
+    background: transparent;
+  }
+  main.erp-shell[data-active-page="ai"] .ai-attachment-preview[hidden] { display: none !important; }
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip { position: relative; display: block; width: 66px; min-width: 66px; height: 66px; padding: 0; overflow: visible; border-color: var(--mobile-border); background: var(--mobile-surface-raised); }
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip img,
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip .ai-attachment-file-icon { width: 64px; height: 64px; border-radius: 11px; }
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip .ai-attachment-name,
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip small { display: none; }
+  main.erp-shell[data-active-page="ai"] .ai-attachment-chip button { position: absolute; top: -7px; right: -7px; width: 24px; height: 24px; background: #263B4D; color: #fff; }
+
+  main.erp-shell.mobile-keyboard-open ~ .mobile-bottom-nav { display: none !important; }
+}
+
+@media (max-width: 359px) {
+  main.erp-shell[data-active-page="ai"] .ai-page-chat-form { margin-inline: 7px; padding: 8px; }
+  main.erp-shell[data-active-page="ai"] .ai-page-messages { padding-inline: 11px; }
+  .mobile-home-event { grid-template-columns: 78px minmax(0, 1fr) !important; }
+}
+
+@media (max-width: 768px) {
+  .mobile-home-event {
+    grid-template-columns: minmax(82px, 94px) minmax(0, 1fr);
+    gap: 10px;
+    min-height: 56px;
+    padding: 9px 2px;
+  }
+  .mobile-home-event .mobile-event-venue { display: grid; align-content: start; justify-items: start; gap: 3px; min-width: 0; }
+  .mobile-home-event .mobile-event-venue b { display: inline-block; max-width: 100%; padding: 4px 7px; overflow: hidden; border-radius: 8px; background: rgba(214,179,90,.14); color: var(--mobile-gold); font-size: 12px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-home-event .mobile-event-venue small { padding-left: 7px; color: var(--mobile-text-secondary); font-size: 11px; }
+  .mobile-home-event .mobile-event-info { display: grid; align-content: start; gap: 5px; min-width: 0; overflow: hidden; }
+  .mobile-home-event .mobile-event-info strong { color: var(--mobile-text-primary); font-size: 15px; font-weight: 850; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+  .mobile-home-event .mobile-event-info small { display: flex; align-items: center; gap: 5px; color: var(--mobile-text-secondary); font-size: 12px; line-height: 1.3; white-space: nowrap; }
+  .mobile-home-event .mobile-event-info time { flex: 0 0 auto; padding: 0; color: var(--mobile-text-secondary); font-weight: 750; white-space: nowrap; overflow-wrap: normal; }
+  .mobile-home-event .mobile-event-info i { color: var(--mobile-border); font-style: normal; }
+}

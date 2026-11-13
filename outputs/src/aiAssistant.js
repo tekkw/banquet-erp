@@ -37,6 +37,7 @@
       aiPageChatSendButton,
       aiPageAttachmentInput,
       aiPageAttachmentPreview,
+      aiQuickQuestionRow,
       aiConversationList,
       aiConversationMoreButton,
       aiChatModePanel,
@@ -377,13 +378,16 @@
       if (aiMessagesLoading) {
         const loading = document.createElement("div");
         loading.className = "ai-page-loading";
-        loading.textContent = "이전 대화를 불러오는 중...";
+        loading.innerHTML = '<span></span><span></span><span></span><small>대화를 불러오는 중</small>';
         aiPageMessages.append(loading);
+        if (aiQuickQuestionRow) aiQuickQuestionRow.hidden = true;
         return;
       }
-      (conversation?.messages || []).forEach((message) => {
+      const messages = conversation?.messages || [];
+      messages.forEach((message) => {
         aiPageMessages.append(createAiPageMessage(message.type, message.text, message.meta));
       });
+      if (aiQuickQuestionRow) aiQuickQuestionRow.hidden = messages.some((message) => message.type === "user");
       aiPageMessages.scrollTop = aiPageMessages.scrollHeight;
     }
 

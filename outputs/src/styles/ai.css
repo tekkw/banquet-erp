@@ -1929,6 +1929,14 @@ select {
   background: #fff;
 }
 
+.ai-page-chat-form > .ai-attachment-preview {
+  grid-column: 1 / -1;
+}
+
+.ai-tool-label-mobile {
+  display: none;
+}
+
 .ai-tool-button {
   min-width: 44px;
   min-height: 48px;

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-v2-state-fix">
+  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-ai-chat-v1">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -886,14 +886,14 @@
                       </div>
                     </div>
                   </div>
-                  <div id="aiPageAttachmentPreview" class="ai-attachment-preview" hidden></div>
-                  <div class="ai-quick-question-row" aria-label="추천 질문"><button type="button" data-ai-quick-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-ai-quick-question="오늘 남은 일정 알려줘">남은 일정</button><button type="button" data-ai-quick-question="다음 세팅 뭐야?">다음 세팅</button><button type="button" data-ai-quick-question="자산 찾아줘">자산 찾기</button></div>
+                  <div class="ai-quick-question-row" aria-label="추천 질문"><button type="button" data-ai-quick-question="오늘 행사 뭐 있어?">오늘 행사 뭐 있어?</button><button type="button" data-ai-quick-question="오늘 남은 일정 알려줘">오늘 남은 일정 알려줘</button><button type="button" data-ai-quick-question="부라노1 다음 행사 뭐야?">부라노1 다음 행사 뭐야?</button><button type="button" data-ai-quick-question="자산 찾아줘">자산 찾아줘</button></div>
                   <form id="aiPageChatForm" class="ai-page-chat-form">
+                    <div id="aiPageAttachmentPreview" class="ai-attachment-preview" hidden></div>
                     <button id="aiPageAttachButton" class="ai-tool-button" type="button" aria-label="파일 첨부" title="파일 첨부"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.4 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
                     <button id="aiPageVoiceButton" class="ai-tool-button" type="button" aria-label="음성 입력" aria-pressed="false" title="음성 입력"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="12" x="8" y="2" rx="4"/><path d="M4 10a8 8 0 0 0 16 0M12 18v4M8 22h8"/></svg></button>
-                    <button id="aiPageAttachmentListButton" class="ai-tool-button ai-attachment-list-button" type="button" aria-label="첨부 자료 보기" title="첨부 자료 보기">자료</button>
+                    <button id="aiPageAttachmentListButton" class="ai-tool-button ai-attachment-list-button" type="button" aria-label="첨부 자료 보기" title="첨부 자료 보기"><span class="ai-tool-label-desktop">자료</span><span class="ai-tool-label-mobile">도구</span></button>
                     <input id="aiPageAttachmentInput" class="visually-hidden" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.txt,image/jpeg,image/png,image/webp,application/pdf,text/plain" multiple>
-                    <textarea id="aiPageChatInput" rows="1" placeholder="AI 비서에게 물어보세요" aria-label="AI 질문 입력"></textarea>
+                    <textarea id="aiPageChatInput" rows="2" placeholder="AI 비서에게 물어보세요" aria-label="AI 질문 입력"></textarea>
                     <button id="aiPageChatSendButton" class="primary-button" type="submit" aria-label="메시지 전송"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg><span>전송</span></button>
                   </form>
                 </div>
@@ -1156,7 +1156,7 @@
   <script src="./src/venueLayoutManager.js"></script>
 <script src="./src/floorplanEditor.js?v=object-master-color-persistence-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
-  <script src="./src/aiAssistant.js?v=operations-autopilot-v6"></script>
+  <script src="./src/aiAssistant.js?v=mobile-ai-chat-v1"></script>
   <script src="./src/operationBoard.js?v=setup-timing-v1"></script>
   <script src="./src/operationsAutopilot.js?v=setup-timing-v1"></script>
   <script src="./src/pushNotifications.js?v=mobile-preview-reminder-v2"></script>
@@ -1397,6 +1397,7 @@
     const aiPageAttachmentListButton = document.querySelector("#aiPageAttachmentListButton");
     const aiPageAttachmentInput = document.querySelector("#aiPageAttachmentInput");
     const aiPageAttachmentPreview = document.querySelector("#aiPageAttachmentPreview");
+    const aiQuickQuestionRow = document.querySelector(".ai-quick-question-row");
     const aiMobileMenuButton = document.querySelector("#aiMobileMenuButton");
     const aiMobileBackButton = document.querySelector("[data-ai-mobile-back]");
     const aiMobileReferenceButton = document.querySelector("[data-ai-mobile-reference]");
@@ -1831,6 +1832,7 @@
         aiPageChatSendButton,
         aiPageAttachmentInput,
         aiPageAttachmentPreview,
+        aiQuickQuestionRow,
         aiNewConversationButton,
         aiSideNewConversationButton,
         aiConversationList,
@@ -1917,6 +1919,8 @@
     aiPageChatForm.addEventListener("submit", handleAiPageChatSubmit);
     aiPageChatInput.addEventListener("keydown", handleAiPageInputKeydown);
     aiPageChatInput.addEventListener("input", resizeAiPageComposer);
+    aiPageChatInput.addEventListener("focus", () => requestAnimationFrame(syncMobileAiViewport));
+    aiPageChatInput.addEventListener("blur", () => window.setTimeout(syncMobileAiViewport, 80));
     aiPageVoiceButton?.addEventListener("click", toggleAiPageVoiceInput);
     document.querySelectorAll("[data-ai-quick-question]").forEach((button) => button.addEventListener("click", () => {
       aiPageChatInput.value = button.dataset.aiQuickQuestion || "";
@@ -3876,6 +3880,7 @@
     let globalAiListening = false;
     let aiPageSpeechRecognition = null;
     let aiPageListening = false;
+    let mobileAiViewportBaseline = 0;
     let globalAiBriefingPendingOpen = false;
 
     function openGlobalAiDrawer(showBriefing = true) {
@@ -3940,8 +3945,24 @@
     function resizeAiPageComposer() {
       if (!aiPageChatInput) return;
       aiPageChatInput.style.height = "auto";
-      aiPageChatInput.style.height = `${Math.min(aiPageChatInput.scrollHeight, 128)}px`;
+      aiPageChatInput.style.height = `${Math.min(aiPageChatInput.scrollHeight, 144)}px`;
     }
+
+    function syncMobileAiViewport() {
+      const viewport = window.visualViewport;
+      const viewportHeight = Math.round(viewport?.height || window.innerHeight);
+      mobileAiViewportBaseline = Math.max(mobileAiViewportBaseline, viewportHeight);
+      const inputFocused = document.activeElement === aiPageChatInput;
+      const keyboardOpen = appMain.dataset.activePage === "ai" && inputFocused && mobileAiViewportBaseline - viewportHeight > 120;
+      document.documentElement.style.setProperty("--mobile-ai-viewport-height", `${viewportHeight}px`);
+      appMain.classList.toggle("mobile-keyboard-open", keyboardOpen);
+      if (appMain.dataset.activePage !== "ai") appMain.classList.remove("mobile-keyboard-open");
+      requestAnimationFrame(() => { if (keyboardOpen && aiPageMessages) aiPageMessages.scrollTop = aiPageMessages.scrollHeight; });
+    }
+
+    window.visualViewport?.addEventListener("resize", syncMobileAiViewport);
+    window.visualViewport?.addEventListener("scroll", syncMobileAiViewport);
+    window.addEventListener("orientationchange", () => { mobileAiViewportBaseline = 0; window.setTimeout(syncMobileAiViewport, 120); });
 
     function toggleAiPageVoiceInput() {
       const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4027,6 +4048,7 @@
       mobileNavButtons.forEach((button) => {
         button.classList.toggle("active", button.dataset.mobileTarget === activeTarget);
       });
+      syncMobileAiViewport();
 
       if (pageName === "calendar") {
         activateWorkspaceTab("calendar");
@@ -4142,6 +4164,11 @@
 
     function scheduleStartTime(value) { return cleanValue(value).match(/^(\d{1,2}:\d{2})/)?.[1]?.padStart(5, "0") || ""; }
     function eventTimeForDate(eventItem, dateKey) { return (eventItem.schedule || []).filter((row) => !row.date || row.date === dateKey).map((row) => scheduleStartTime(row.time)).find(Boolean) || getDashboardEventTime(eventItem); }
+    function splitMobileVenueSummary(value) {
+      const text = cleanValue(value) || "장소 미입력";
+      const match = text.match(/^(.*?)\s+외\s+(\d+)곳$/);
+      return match ? { primary: match[1], secondary: `외 ${match[2]}곳` } : { primary: text, secondary: "" };
+    }
 
     const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v2";
     const MOBILE_HOME_WIDGETS_LEGACY_KEY = "banquet-erp-mobile-home-widgets-v1";
@@ -4238,7 +4265,11 @@
       const now = seoulNowParts(); const todayEvents = getEventsForDate(now.date);
       const today = dateKeyToLocalDate(now.date); document.querySelector("[data-mobile-home-date]").textContent = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(today);
       document.querySelector("[data-mobile-today-count]").textContent = `${todayEvents.length}건`;
-      eventRoot.innerHTML = widgetEnabled("today_events") ? (todayEvents.length ? todayEvents.map((eventItem) => `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(getDashboardEventVenue(eventItem, true))}${eventItem.guestCount !== "" && eventItem.guestCount != null ? ` · ${escapeHtml(eventItem.guestCount)}명` : ""}</small></span></button>`).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>') : "";
+      eventRoot.innerHTML = widgetEnabled("today_events") ? (todayEvents.length ? todayEvents.map((eventItem) => {
+        const venue = splitMobileVenueSummary(getDashboardEventVenue(eventItem, true));
+        const people = eventItem.guestCount !== "" && eventItem.guestCount != null ? `${eventItem.guestCount}명` : "인원 미정";
+        return `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><span class="mobile-event-venue"><b>${escapeHtml(venue.primary)}</b>${venue.secondary ? `<small>${escapeHtml(venue.secondary)}</small>` : ""}</span><span class="mobile-event-info"><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><i aria-hidden="true">·</i>${escapeHtml(people)}</small></span></button>`;
+      }).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>') : "";
       const remaining = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => !row.date || row.date === now.date).map((row) => ({ eventItem, row, time: scheduleStartTime(row.time) }))).filter((item) => item.time && item.time >= now.time).sort((a, b) => a.time.localeCompare(b.time));
       const uncertain = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => (!row.date || row.date === now.date) && !scheduleStartTime(row.time)).map((row) => ({ eventItem, row })));
       document.querySelector("[data-mobile-remaining-count]").textContent = `${remaining.length}건`;
