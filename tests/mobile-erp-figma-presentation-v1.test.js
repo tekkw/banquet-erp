@@ -5,12 +5,12 @@ const html = fs.readFileSync("outputs/index.html", "utf8");
 const css = fs.readFileSync("outputs/src/styles/mobile.css", "utf8");
 const ai = fs.readFileSync("outputs/src/aiAssistant.js", "utf8");
 
-for (const widget of ["today-events", "remaining-schedules", "ai-questions", "asset-search", "current-setup"]) {
+for (const widget of ["today_events", "remaining_schedule", "ai_quick_questions", "asset_search", "current_setup"]) {
   assert(html.includes(`data-mobile-widget="${widget}"`), `${widget} widget missing`);
 }
-assert(html.includes('const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v1"'));
-assert(html.includes('{ id: "current-setup", label: "현재 세팅 상태", visible: false }'));
-assert(html.includes('data-mobile-widget="current-setup" hidden'));
+assert(html.includes('const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v2"'));
+assert(html.includes('{ id: "current_setup", label: "현재 세팅 상태", enabled: false'));
+assert(html.includes('data-mobile-widget="current_setup" hidden'));
 assert(html.includes("applyMobileHomeWidgets"));
 assert(html.includes("data-mobile-widget-move"));
 assert(html.includes("data-mobile-widget-reset"));

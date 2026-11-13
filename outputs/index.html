@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>이벤트오더 엑셀 프리뷰</title>
-  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-figma-v1">
+  <link rel="stylesheet" href="./src/styles/app.css?v=mobile-v2-state-fix">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
 </head>
 <body>
@@ -98,11 +98,11 @@
             <button type="button" data-mobile-widget-reset>기본값 복원</button>
           </section>
           <div class="mobile-widget-stack" data-mobile-widget-stack>
-            <section class="mobile-home-section" data-mobile-widget="today-events"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span><h2>오늘 행사</h2></div><strong data-mobile-today-count>0건</strong></header><div data-mobile-today-events></div></section>
-            <section class="mobile-home-section" data-mobile-widget="remaining-schedules"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h2>오늘 남은 일정</h2></div><strong data-mobile-remaining-count>0건</strong></header><div data-mobile-remaining-schedules></div></section>
-            <section class="mobile-home-ai" data-mobile-widget="ai-questions"><header><span>AI</span><div><strong>AI 비서</strong><small>저장된 운영 데이터에서 바로 찾아드려요.</small></div></header><button type="button" data-mobile-ai-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>AI 비서에게 물어보기</button><div class="mobile-home-question-list"><button type="button" data-mobile-ai-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-mobile-ai-question="오늘 남은 일정 알려줘">오늘 남은 일정</button><button type="button" data-mobile-ai-question="다음 세팅 뭐야?">다음 세팅</button><button type="button" data-mobile-ai-question="자산 찾아줘">자산 찾기</button></div></section>
-            <section class="mobile-home-shortcuts" data-mobile-widget="asset-search"><button type="button" data-mobile-asset-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg><span><strong>자산 찾기</strong><small>수량과 보관 위치를 확인하세요.</small></span></button><a href="./board/"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8M12 8v8"/></svg><span><strong>운영보드</strong><small>별도 작업 화면 열기</small></span></a></section>
-            <section class="mobile-home-section mobile-current-setup" data-mobile-widget="current-setup" hidden><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3v18"/><circle cx="12" cy="12" r="9"/></svg></span><h2>현재 세팅 상태</h2></div></header><p>운영 작업과 완료 처리는 독립 운영보드에서 확인합니다.</p><a href="./board/">운영보드에서 확인</a></section>
+            <section class="mobile-home-section" data-mobile-widget="today_events"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg></span><h2>오늘 행사</h2></div><strong data-mobile-today-count>0건</strong></header><div data-mobile-today-events></div></section>
+            <section class="mobile-home-section" data-mobile-widget="remaining_schedule"><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><h2>오늘 남은 일정</h2></div><strong data-mobile-remaining-count>0건</strong></header><div data-mobile-remaining-schedules></div></section>
+            <section class="mobile-home-ai" data-mobile-widget="ai_quick_questions"><header><span>AI</span><div><strong>AI 비서</strong><small>저장된 운영 데이터에서 바로 찾아드려요.</small></div></header><button type="button" data-mobile-ai-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>AI 비서에게 물어보기</button><div class="mobile-home-question-list"><button type="button" data-mobile-ai-question="오늘 뭐 있어?">오늘 뭐 있어?</button><button type="button" data-mobile-ai-question="오늘 남은 일정 알려줘">오늘 남은 일정</button><button type="button" data-mobile-ai-question="다음 세팅 뭐야?">다음 세팅</button><button type="button" data-mobile-ai-question="자산 찾아줘">자산 찾기</button></div></section>
+            <section class="mobile-home-shortcuts" data-mobile-widget="asset_search"><button type="button" data-mobile-asset-open><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg><span><strong>자산 찾기</strong><small>수량과 보관 위치를 확인하세요.</small></span></button><a href="./board/"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8M12 8v8"/></svg><span><strong>운영보드</strong><small>별도 작업 화면 열기</small></span></a></section>
+            <section class="mobile-home-section mobile-current-setup" data-mobile-widget="current_setup" hidden><header><div><span class="mobile-section-icon" aria-hidden="true"><svg class="lucide-icon" viewBox="0 0 24 24"><path d="M3 12h18"/><path d="M12 3v18"/><circle cx="12" cy="12" r="9"/></svg></span><h2>현재 세팅 상태</h2></div></header><p>운영 작업과 완료 처리는 독립 운영보드에서 확인합니다.</p><a href="./board/">운영보드에서 확인</a></section>
           </div>
         </section>
 
@@ -4143,58 +4143,78 @@
     function scheduleStartTime(value) { return cleanValue(value).match(/^(\d{1,2}:\d{2})/)?.[1]?.padStart(5, "0") || ""; }
     function eventTimeForDate(eventItem, dateKey) { return (eventItem.schedule || []).filter((row) => !row.date || row.date === dateKey).map((row) => scheduleStartTime(row.time)).find(Boolean) || getDashboardEventTime(eventItem); }
 
-    const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v1";
+    const MOBILE_HOME_WIDGETS_KEY = "banquet-erp-mobile-home-widgets-v2";
+    const MOBILE_HOME_WIDGETS_LEGACY_KEY = "banquet-erp-mobile-home-widgets-v1";
+    const MOBILE_HOME_WIDGET_ID_ALIASES = { "today-events": "today_events", "remaining-schedules": "remaining_schedule", "ai-questions": "ai_quick_questions", "asset-search": "asset_search", "current-setup": "current_setup" };
     const MOBILE_HOME_WIDGET_DEFAULTS = [
-      { id: "today-events", label: "오늘 행사", visible: true },
-      { id: "remaining-schedules", label: "오늘 남은 일정", visible: true },
-      { id: "ai-questions", label: "AI 빠른질문", visible: true },
-      { id: "asset-search", label: "자산 찾기", visible: true },
-      { id: "current-setup", label: "현재 세팅 상태", visible: false },
+      { id: "today_events", label: "오늘 행사", enabled: true, order: 0, collapsed: false },
+      { id: "remaining_schedule", label: "오늘 남은 일정", enabled: true, order: 1, collapsed: false },
+      { id: "ai_quick_questions", label: "AI 빠른질문", enabled: true, order: 2, collapsed: false },
+      { id: "asset_search", label: "자산 찾기", enabled: true, order: 3, collapsed: false },
+      { id: "current_setup", label: "현재 세팅 상태", enabled: false, order: 4, collapsed: false },
     ];
+    let mobileHomeWidgetPreferences = null;
 
     function loadMobileHomeWidgets() {
       try {
-        const saved = JSON.parse(localStorage.getItem(MOBILE_HOME_WIDGETS_KEY) || "[]");
-        const savedItems = Array.isArray(saved) ? saved : [];
-        const savedById = new Map(savedItems.map((item) => [item.id, item]));
-        const ordered = [...savedItems, ...MOBILE_HOME_WIDGET_DEFAULTS].filter((item, index, list) => item?.id && list.findIndex((entry) => entry.id === item.id) === index);
-        return ordered.map((item) => {
-          const fallback = MOBILE_HOME_WIDGET_DEFAULTS.find((entry) => entry.id === item.id);
-          return { id: item.id, label: fallback?.label || item.label || item.id, visible: savedById.has(item.id) ? savedById.get(item.id).visible !== false : fallback?.visible !== false };
-        }).filter((item) => MOBILE_HOME_WIDGET_DEFAULTS.some((entry) => entry.id === item.id));
+        const currentValue = localStorage.getItem(MOBILE_HOME_WIDGETS_KEY);
+        const legacyValue = localStorage.getItem(MOBILE_HOME_WIDGETS_LEGACY_KEY);
+        if (currentValue === null && legacyValue === null) return MOBILE_HOME_WIDGET_DEFAULTS.map((item) => ({ ...item }));
+        const parsed = JSON.parse(currentValue ?? legacyValue);
+        const savedItems = Array.isArray(parsed) ? parsed : [];
+        const savedById = new Map(savedItems.map((item, index) => [MOBILE_HOME_WIDGET_ID_ALIASES[item?.id] || item?.id, { ...item, savedOrder: index }]));
+        return MOBILE_HOME_WIDGET_DEFAULTS.map((fallback) => {
+          const saved = savedById.get(fallback.id);
+          if (!saved) return { ...fallback };
+          return {
+            ...fallback,
+            enabled: typeof saved.enabled === "boolean" ? saved.enabled : typeof saved.visible === "boolean" ? saved.visible : fallback.enabled,
+            order: Number.isFinite(Number(saved.order)) ? Number(saved.order) : saved.savedOrder,
+            collapsed: typeof saved.collapsed === "boolean" ? saved.collapsed : fallback.collapsed,
+          };
+        }).sort((a, b) => a.order - b.order);
       } catch (error) {
-        console.warn("mobile home widget preferences reset:", error);
+        console.error("mobile home widget preferences load failed", error);
         return MOBILE_HOME_WIDGET_DEFAULTS.map((item) => ({ ...item }));
       }
     }
 
     function saveMobileHomeWidgets(items) {
-      localStorage.setItem(MOBILE_HOME_WIDGETS_KEY, JSON.stringify(items.map(({ id, visible }) => ({ id, visible }))));
-      applyMobileHomeWidgets(items);
-      renderMobileWidgetEditor(items);
+      mobileHomeWidgetPreferences = items.map((item, order) => ({ ...item, order }));
+      try {
+        localStorage.setItem(MOBILE_HOME_WIDGETS_KEY, JSON.stringify(mobileHomeWidgetPreferences.map(({ id, enabled, order, collapsed }) => ({ id, enabled, order, collapsed }))));
+      } catch (error) {
+        console.error("mobile home widget preferences save failed", error);
+        window.alert("홈 위젯 설정을 저장하지 못했습니다.");
+      }
+      renderMobileErpHome();
+      renderMobileWidgetEditor(mobileHomeWidgetPreferences);
     }
 
-    function applyMobileHomeWidgets(items = loadMobileHomeWidgets()) {
+    function applyMobileHomeWidgets(items = mobileHomeWidgetPreferences || loadMobileHomeWidgets()) {
       const stack = document.querySelector("[data-mobile-widget-stack]");
       if (!stack) return;
-      items.forEach((item) => {
+      items.slice().sort((a, b) => a.order - b.order).forEach((item) => {
         const widget = stack.querySelector(`[data-mobile-widget="${item.id}"]`);
         if (!widget) return;
-        widget.hidden = !item.visible;
+        widget.hidden = item.enabled !== true;
+        widget.style.display = item.enabled === true ? "" : "none";
+        widget.dataset.collapsed = String(item.collapsed === true);
         stack.append(widget);
       });
     }
 
-    function renderMobileWidgetEditor(items = loadMobileHomeWidgets()) {
+    function renderMobileWidgetEditor(items = mobileHomeWidgetPreferences || loadMobileHomeWidgets()) {
       const root = document.querySelector("[data-mobile-widget-options]");
       if (!root) return;
-      root.innerHTML = items.map((item, index) => `<div class="mobile-widget-option" data-mobile-widget-option="${escapeHtml(item.id)}"><label><input type="checkbox" ${item.visible ? "checked" : ""}><span>${escapeHtml(item.label)}</span></label><div><button type="button" data-mobile-widget-move="up" aria-label="${escapeHtml(item.label)} 위로" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-mobile-widget-move="down" aria-label="${escapeHtml(item.label)} 아래로" ${index === items.length - 1 ? "disabled" : ""}>↓</button></div></div>`).join("");
+      const ordered = items.slice().sort((a, b) => a.order - b.order);
+      root.innerHTML = ordered.map((item, index) => `<div class="mobile-widget-option" data-mobile-widget-option="${escapeHtml(item.id)}" data-enabled="${item.enabled === true}"><label><input type="checkbox" ${item.enabled === true ? "checked" : ""}><span>${escapeHtml(item.label)}</span></label><div><button type="button" data-mobile-widget-move="up" aria-label="${escapeHtml(item.label)} 위로" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-mobile-widget-move="down" aria-label="${escapeHtml(item.label)} 아래로" ${index === ordered.length - 1 ? "disabled" : ""}>↓</button></div></div>`).join("");
       root.querySelectorAll("[data-mobile-widget-option]").forEach((row) => {
-        row.querySelector("input").onchange = (event) => saveMobileHomeWidgets(items.map((item) => item.id === row.dataset.mobileWidgetOption ? { ...item, visible: event.target.checked } : item));
+        row.querySelector("input").onchange = (event) => saveMobileHomeWidgets(ordered.map((item) => item.id === row.dataset.mobileWidgetOption ? { ...item, enabled: event.target.checked } : item));
         row.querySelectorAll("[data-mobile-widget-move]").forEach((button) => button.onclick = () => {
-          const from = items.findIndex((item) => item.id === row.dataset.mobileWidgetOption); const to = button.dataset.mobileWidgetMove === "up" ? from - 1 : from + 1;
-          if (from < 0 || to < 0 || to >= items.length) return;
-          const next = [...items]; [next[from], next[to]] = [next[to], next[from]]; saveMobileHomeWidgets(next);
+          const from = ordered.findIndex((item) => item.id === row.dataset.mobileWidgetOption); const to = button.dataset.mobileWidgetMove === "up" ? from - 1 : from + 1;
+          if (from < 0 || to < 0 || to >= ordered.length) return;
+          const next = [...ordered]; [next[from], next[to]] = [next[to], next[from]]; saveMobileHomeWidgets(next);
         });
       });
     }
@@ -4212,19 +4232,21 @@
     function renderMobileErpHome() {
       const eventRoot = document.querySelector("[data-mobile-today-events]"); const scheduleRoot = document.querySelector("[data-mobile-remaining-schedules]");
       if (!eventRoot || !scheduleRoot) return;
+      if (!mobileHomeWidgetPreferences) mobileHomeWidgetPreferences = loadMobileHomeWidgets();
+      applyMobileHomeWidgets(mobileHomeWidgetPreferences);
+      const widgetEnabled = (id) => mobileHomeWidgetPreferences.some((item) => item.id === id && item.enabled === true);
       const now = seoulNowParts(); const todayEvents = getEventsForDate(now.date);
       const today = dateKeyToLocalDate(now.date); document.querySelector("[data-mobile-home-date]").textContent = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "long" }).format(today);
       document.querySelector("[data-mobile-today-count]").textContent = `${todayEvents.length}건`;
-      eventRoot.innerHTML = todayEvents.length ? todayEvents.map((eventItem) => `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(getDashboardEventVenue(eventItem, true))}${eventItem.guestCount !== "" && eventItem.guestCount != null ? ` · ${escapeHtml(eventItem.guestCount)}명` : ""}</small></span></button>`).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>';
+      eventRoot.innerHTML = widgetEnabled("today_events") ? (todayEvents.length ? todayEvents.map((eventItem) => `<button type="button" class="mobile-home-event" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(eventTimeForDate(eventItem, now.date))}</time><span><strong>${escapeHtml(getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(getDashboardEventVenue(eventItem, true))}${eventItem.guestCount !== "" && eventItem.guestCount != null ? ` · ${escapeHtml(eventItem.guestCount)}명` : ""}</small></span></button>`).join("") : '<p class="mobile-home-empty">오늘 진행되는 행사가 없습니다.</p>') : "";
       const remaining = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => !row.date || row.date === now.date).map((row) => ({ eventItem, row, time: scheduleStartTime(row.time) }))).filter((item) => item.time && item.time >= now.time).sort((a, b) => a.time.localeCompare(b.time));
       const uncertain = todayEvents.flatMap((eventItem) => (eventItem.schedule || []).filter((row) => (!row.date || row.date === now.date) && !scheduleStartTime(row.time)).map((row) => ({ eventItem, row })));
       document.querySelector("[data-mobile-remaining-count]").textContent = `${remaining.length}건`;
-      scheduleRoot.innerHTML = `${remaining.map(({ eventItem, row, time }) => `<button type="button" class="mobile-home-schedule" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(time)}</time><span><strong>${escapeHtml(row.content || getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}${row.people !== "" && row.people != null ? ` · ${escapeHtml(row.people)}명` : ""}</small></span></button>`).join("") || '<p class="mobile-home-empty">오늘 남은 일정이 없습니다.</p>'}${uncertain.length ? `<details class="mobile-home-uncertain"><summary>시간 미정 ${uncertain.length}건</summary>${uncertain.map(({ eventItem, row }) => `<button type="button" data-mobile-event-id="${escapeHtml(eventItem.id)}">${escapeHtml(row.content || getDashboardEventTitle(eventItem))} · ${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}</button>`).join("")}</details>` : ""}`;
+      scheduleRoot.innerHTML = widgetEnabled("remaining_schedule") ? `${remaining.map(({ eventItem, row, time }) => `<button type="button" class="mobile-home-schedule" data-mobile-event-id="${escapeHtml(eventItem.id)}"><time>${escapeHtml(time)}</time><span><strong>${escapeHtml(row.content || getDashboardEventTitle(eventItem))}</strong><small>${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}${row.people !== "" && row.people != null ? ` · ${escapeHtml(row.people)}명` : ""}</small></span></button>`).join("") || '<p class="mobile-home-empty">오늘 남은 일정이 없습니다.</p>'}${uncertain.length ? `<details class="mobile-home-uncertain"><summary>시간 미정 ${uncertain.length}건</summary>${uncertain.map(({ eventItem, row }) => `<button type="button" data-mobile-event-id="${escapeHtml(eventItem.id)}">${escapeHtml(row.content || getDashboardEventTitle(eventItem))} · ${escapeHtml(row.venue || getDashboardEventVenue(eventItem, true))}</button>`).join("")}</details>` : ""}` : "";
       document.querySelectorAll(".mobile-erp-home [data-mobile-event-id]").forEach((button) => button.onclick = () => { const eventItem = savedEvents.find((item) => String(item.id) === String(button.dataset.mobileEventId)); if (eventItem) openEventModal(eventItem, now.date); });
       document.querySelector("[data-mobile-ai-open]").onclick = () => { showErpPage("ai"); requestAnimationFrame(() => aiPageChatInput.focus()); };
       document.querySelectorAll("[data-mobile-ai-question]").forEach((button) => button.onclick = () => { showErpPage("ai"); aiPageChatInput.value = button.dataset.mobileAiQuestion; resizeAiPageComposer(); requestAnimationFrame(() => aiPageChatInput.focus()); });
       document.querySelector("[data-mobile-asset-open]").onclick = () => { showErpPage("assets"); requestAnimationFrame(() => assetSearchInput.focus()); };
-      applyMobileHomeWidgets();
       bindMobileWidgetEditor();
     }
 

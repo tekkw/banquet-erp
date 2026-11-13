@@ -1935,3 +1935,125 @@
   .mobile-home-shortcuts :is(button,a) { padding-inline: 10px; }
   .erp-shell[data-active-page="ai"] .ai-page-chat-form { grid-template-columns: 40px 40px minmax(0, 1fr) 42px !important; padding-inline: 7px; }
 }
+
+/* Mobile V2 token alignment and real-device contrast fixes. */
+@media (max-width: 768px) {
+  :root {
+    --mobile-bg: #06111F;
+    --mobile-nav: #071A31;
+    --mobile-surface: #102A40;
+    --mobile-surface-raised: #0D2235;
+    --mobile-gold: #D6B35A;
+    --mobile-blue: #4C8DFF;
+    --mobile-mint: #49C7A3;
+    --mobile-text-primary: #F4F7FA;
+    --mobile-text-secondary: #96A9BA;
+    --mobile-border: rgba(150, 169, 186, .22);
+    --mobile-nav-surface: #F7F4EC;
+    --mobile-nav-inactive: #61717F;
+  }
+
+  body,
+  main.erp-shell:not([data-active-page="ai"]),
+  main.erp-shell:not([data-active-page="ai"]) .erp-workspace,
+  main.erp-shell:not([data-active-page="ai"]) .erp-page,
+  main.erp-shell:not([data-active-page="ai"]) .dashboard-overview {
+    background: var(--mobile-bg) !important;
+  }
+
+  .erp-shell[data-active-page="home"] .dashboard-widget-layout,
+  .erp-shell[data-active-page="home"] .dashboard-widget-grid,
+  .erp-shell[data-active-page="home"] .dashboard-operations-row,
+  .erp-shell[data-active-page="home"] .operations-status-grid,
+  .erp-shell[data-active-page="home"] #beverageInventoryWidget,
+  .erp-shell[data-active-page="home"] #todayOperationBoard,
+  .erp-shell[data-active-page="home"] #todayRemainingScheduleWidget,
+  .erp-shell[data-active-page="home"] #weeklySetupWidget,
+  .erp-shell[data-active-page="home"] #hallCurrentStatesWidget {
+    display: none !important;
+  }
+
+  .mobile-erp-home { color: var(--mobile-text-primary); }
+  .mobile-home-header h1 { color: var(--mobile-text-primary); text-shadow: 0 1px 0 rgba(0,0,0,.2); }
+  .mobile-home-header p,
+  .mobile-home-header .eyebrow { color: var(--mobile-text-secondary); }
+  .mobile-home-header > button { border-color: var(--mobile-border); background: var(--mobile-surface); color: var(--mobile-text-primary); }
+
+  .mobile-home-section,
+  .mobile-home-shortcuts,
+  .mobile-widget-editor {
+    border-color: var(--mobile-border);
+    background: var(--mobile-surface);
+    color: var(--mobile-text-primary);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .2);
+  }
+  .mobile-home-section h2,
+  .mobile-home-event strong,
+  .mobile-home-schedule strong,
+  .mobile-home-shortcuts strong { color: var(--mobile-text-primary); }
+  .mobile-home-section > header > strong,
+  .mobile-home-event time,
+  .mobile-home-schedule time { color: var(--mobile-gold); }
+  .mobile-section-icon { background: rgba(214, 179, 90, .14); color: var(--mobile-gold); }
+  .mobile-home-event,
+  .mobile-home-schedule { grid-template-columns: 86px minmax(0, 1fr); align-items: start; border-top-color: var(--mobile-border); color: var(--mobile-text-primary); }
+  .mobile-home-event time,
+  .mobile-home-schedule time { min-width: 0; padding-right: 8px; line-height: 1.35; white-space: normal; overflow-wrap: anywhere; }
+  .mobile-home-event span,
+  .mobile-home-schedule span { overflow: hidden; }
+  .mobile-home-event strong,
+  .mobile-home-schedule strong { display: block; overflow: visible; line-height: 1.4; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+  .mobile-home-event small,
+  .mobile-home-schedule small,
+  .mobile-home-empty,
+  .mobile-current-setup p { color: var(--mobile-text-secondary); }
+  .mobile-current-setup a { color: var(--mobile-blue); }
+
+  .mobile-home-ai { border-color: rgba(214, 179, 90, .28); background: linear-gradient(145deg, var(--mobile-nav), var(--mobile-surface)); }
+  .mobile-home-ai > button { background: var(--mobile-gold); color: var(--mobile-nav); }
+  .mobile-home-question-list button { border-color: var(--mobile-border); background: rgba(244,247,250,.08); color: var(--mobile-text-primary); }
+  .mobile-home-shortcuts :is(button,a) { background: transparent; color: var(--mobile-text-primary); }
+  .mobile-home-shortcuts a { border-left-color: var(--mobile-border); }
+  .mobile-home-shortcuts .lucide-icon { color: var(--mobile-gold); }
+  .mobile-home-shortcuts small { color: var(--mobile-text-secondary); }
+
+  .mobile-widget-editor > header strong,
+  .mobile-widget-option label { color: var(--mobile-text-primary); }
+  .mobile-widget-editor > header small { color: var(--mobile-text-secondary); }
+  .mobile-widget-editor > header button,
+  .mobile-widget-option button,
+  .mobile-widget-editor > button { background: var(--mobile-surface-raised); color: var(--mobile-text-primary); }
+  .mobile-widget-option { border-color: var(--mobile-border); background: var(--mobile-surface-raised); }
+  .mobile-widget-option[data-enabled="false"] { opacity: 1; }
+  .mobile-widget-option[data-enabled="false"] label { color: #B9C6D1; }
+  .mobile-widget-option input { accent-color: var(--mobile-gold); }
+  .mobile-widget-option button:disabled { color: #667988; opacity: .6; }
+
+  .mobile-event-orders h2,
+  .mobile-event-order-group h3 { color: var(--mobile-text-primary); }
+  .mobile-event-order-search,
+  .mobile-event-order-group h3 small,
+  .mobile-event-order-group > p { color: var(--mobile-text-secondary); }
+  .mobile-event-order-search input,
+  .mobile-event-order-group > button { border-color: var(--mobile-border); background: var(--mobile-surface); color: var(--mobile-text-primary); }
+  .mobile-event-order-group > button strong { color: var(--mobile-text-primary); }
+  .mobile-event-order-group > button small { color: var(--mobile-text-secondary); }
+  .mobile-event-order-group > button b { color: var(--mobile-gold); }
+
+  .mobile-bottom-nav { border-top-color: rgba(7,26,49,.12); background: var(--mobile-nav-surface); }
+  .mobile-bottom-nav button,
+  .mobile-bottom-nav button strong,
+  .mobile-bottom-nav button .mobile-nav-icon { color: var(--mobile-nav-inactive) !important; opacity: 1 !important; }
+  .mobile-bottom-nav button.active { background: rgba(214, 179, 90, .2); }
+  .mobile-bottom-nav button.active strong,
+  .mobile-bottom-nav button.active .mobile-nav-icon { color: var(--mobile-nav) !important; }
+  .mobile-bottom-nav button.active .lucide-icon { color: var(--mobile-gold) !important; stroke: var(--mobile-gold) !important; }
+  .mobile-bottom-nav button.active::before { background: var(--mobile-gold); }
+
+  .global-ai-launcher { display: none !important; }
+}
+
+@media (min-width: 360px) and (max-width: 430px) {
+  .mobile-home-event,
+  .mobile-home-schedule { grid-template-columns: 86px minmax(0, 1fr); }
+}
