@@ -746,7 +746,7 @@
           </form>
         </div>
 
-        <details id="venueLayoutPanel" class="tab-panel asset-section venue-layout-section layout-collapsible-section" aria-label="저장된 도면과 레이아웃 이미지 관리">
+        <details id="venueLayoutPanel" class="tab-panel asset-section venue-layout-section layout-collapsible-section" aria-label="세팅 매뉴얼과 레이아웃 이미지 관리">
           <summary class="layout-collapsible-summary">
             <span>
               <strong>저장된 도면 / 레이아웃 이미지</strong>
@@ -1146,6 +1146,7 @@
   <script src="./src/erpActionRegistry.js?v=multi-step-planner-v1"></script>
   <script src="./src/erpConversationAgent.js?v=planner-renderer-v2"></script>
   <script src="./src/eventOrderAnalytics.js?v=event-natural-query-plan-v1"></script>
+  <script src="./src/layoutGuidance.js?v=layout-guidance-v1"></script>
   <script src="./src/beverageInventory.js?v=beverage-demand-rules-v2"></script>
   <script src="./src/aiKnowledgeRules.js?v=ai-knowledge-execution-v1"></script>
   <script src="./src/eventOrder.js?v=event-order-analytics-v1"></script>
@@ -1242,6 +1243,8 @@
     const refreshAssetsButton = document.querySelector("#refreshAssetsButton");
     const venueLayoutPanel = document.querySelector("#venueLayoutPanel");
     const venueLayoutForm = document.querySelector("#venueLayoutForm");
+    document.querySelector("#venueLayoutPanel summary strong")?.replaceChildren("세팅 매뉴얼 / 레이아웃 이미지");
+    document.querySelector("#venueLayoutPanel .asset-header h2")?.replaceChildren("세팅 매뉴얼 / 레이아웃 이미지");
     const venueLayoutFileInput = document.querySelector("#venueLayoutFileInput");
     const venueLayoutPreview = document.querySelector("#venueLayoutPreview");
     const venueLayoutVenueSelect = document.querySelector("#venueLayoutVenueSelect");
@@ -1858,6 +1861,7 @@
         getAssets: () => banquetAssets,
         getEvents: () => savedEvents,
         getPendingEvent: () => pendingEvent,
+        isAdminUser: () => authController.isAdminUser(),
         getPageContext: () => ({ page: appMain.dataset.activePage || "home" }),
       },
       callbacks: {

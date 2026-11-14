@@ -2191,6 +2191,9 @@
   main.erp-shell[data-active-page="ai"] .ai-answer-content { gap: 10px; }
   main.erp-shell[data-active-page="ai"] .ai-answer-content p { color: inherit; font-size: 15px; line-height: 1.68; }
   main.erp-shell[data-active-page="ai"] .ai-answer-list-item { background: var(--mobile-surface); color: var(--mobile-text-primary); }
+  main.erp-shell[data-active-page="ai"] .ai-layout-guidance-card { border-color: var(--mobile-border); background: var(--mobile-surface); }
+  main.erp-shell[data-active-page="ai"] .ai-layout-guidance-card img { max-height: 210px; background: var(--mobile-surface-raised); }
+  main.erp-shell[data-active-page="ai"] .ai-layout-guidance-card span { color: var(--mobile-text-secondary); }
 
   main.erp-shell[data-active-page="ai"] .ai-page-loading {
     display: flex;

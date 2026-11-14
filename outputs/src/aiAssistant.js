@@ -91,6 +91,7 @@
     let aiPendingAttachments = [];
     let aiMessagesLoading = false;
     let aiChatViewState = "new";
+    let layoutGuidanceContext = null;
     let aiConversationPersistenceAvailable = true;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
     const eventConversationAgent = globalThis.erpConversationAgent?.create({ storage: globalThis.sessionStorage, storageKey: "banquetBoard.conversationContext.v1", maxSteps: 4 });
@@ -127,6 +128,37 @@
         .replace(/\n?[^\n]*(?:event_orders|event_calendar_dates|event_schedules|event_items|event_notes|approvedKnowledge|ai_knowledge)[^\n]*/gi, "")
         .replace(/\n?(?:참고로|필요하시면)[^\n]*/gi, "")
         .trim();
+    }
+
+    async function loadLayoutGuidanceData() {
+      const requests = [
+        "venue_layout_images?select=*&is_active=eq.true&order=updated_at.desc&limit=300",
+        "layout_rules?select=*&is_active=eq.true&order=updated_at.desc&limit=300",
+        "venue_layouts?select=*&is_active=eq.true&order=updated_at.desc&limit=300",
+        "ai_knowledge?select=*&status=eq.approved&order=updated_at.desc&limit=300",
+        "venues?select=id,venue_name&limit=100",
+        "venue_spaces?select=id,space_name,space_code&limit=200",
+        "files?select=id,public_url,original_filename&limit=500",
+      ];
+      const [images, rules, layouts, knowledge, venues, spaces, files] = await Promise.all(requests.map((url) => supabaseRequest(url).catch((error) => { console.warn("layout guidance source skipped", { url, error }); return []; })));
+      return { images, rules, layouts, knowledge, venues, spaces, files };
+    }
+
+    async function answerLayoutGuidance(question) {
+      const guidance = window.BANQUET_ERP_LAYOUT_GUIDANCE;
+      if (!guidance?.matches(question, layoutGuidanceContext)) return null;
+      const result = guidance.answer(question, await loadLayoutGuidanceData(), layoutGuidanceContext);
+      layoutGuidanceContext = result.context || layoutGuidanceContext;
+      if (result.intent === "LAYOUT_TEACH") {
+        if (!state.isAdminUser?.()) return { text: "세팅 기준 등록은 관리자만 할 수 있습니다." };
+        const parsed = result.parsed;
+        const venue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue;
+        const layoutType = guidance.layoutTypeLabel(parsed.layoutType);
+        const description = [venue, layoutType, parsed.people ? `${parsed.people}석` : "", parsed.columns ? `${parsed.columns}열` : "", parsed.rows ? `${parsed.rows}줄` : ""].filter(Boolean).join(" · ");
+        return { text: `${description}\n확정 전까지 기준으로 사용하지 않습니다.`, meta: { saveSuggestion: { id: `layout-manual-${Date.now()}`, type: "layout_manual", table: "ai_knowledge", tableLabel: "세팅 매뉴얼", title: "새 세팅 기준 등록", description, question, answer: description, parsed, status: "pending" } } };
+      }
+      const manual = result.manual;
+      return { text: result.text, meta: manual ? { layoutCard: { venue: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(manual.venue) || manual.venue, layoutType: guidance.layoutTypeLabel(manual.layoutType), title: `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(manual.venue) || manual.venue} ${guidance.layoutTypeLabel(manual.layoutType)}`, imageUrl: manual.imageUrl, rows: manual.rows, columns: manual.columns, tableCount: manual.tableCount, totalSeats: manual.totalSeats, layoutId: manual.layoutId } } : {} };
     }
 
     /*
@@ -276,6 +308,7 @@
       chatSendButton.disabled = true;
       const loadingMessage = appendChatMessage("assistant", "답변을 생성하는 중입니다...");
       try {
+        const layoutAnswer = await answerLayoutGuidance(question); if (layoutAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = layoutAnswer.text; return; }
         const analyticsAnswer = answerEventOrderAnalytics(question); if (analyticsAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = analyticsAnswer; return; }
         const autopilotContextAnswer = await answerAutopilotContext(question); if (autopilotContextAnswer) { loadingMessage.querySelector(".chat-bubble").textContent = autopilotContextAnswer; return; }
         if (window.BANQUET_ERP_OPERATIONS_AUTOPILOT?.matchesCommand(question)) { loadingMessage.remove(); await runOperationsAutopilot({ force: true }); return; }
@@ -449,10 +482,21 @@
       if (meta?.saveSuggestion) {
         bubble.append(createSaveSuggestionCard(meta.saveSuggestion));
       }
+      if (meta?.layoutCard) bubble.append(createLayoutGuidanceCard(meta.layoutCard));
       if (meta?.autopilot) renderAutopilotCards(meta.autopilot, bubble);
       if (meta?.error) row.classList.add("error");
       row.append(bubble);
       return row;
+    }
+
+    function createLayoutGuidanceCard(card) {
+      const wrap = document.createElement("article");
+      wrap.className = "ai-layout-guidance-card";
+      if (card.imageUrl) { const image = document.createElement("img"); image.src = card.imageUrl; image.alt = `${card.title} 배치도`; wrap.append(image); }
+      const body = document.createElement("div");
+      const title = document.createElement("strong"); title.textContent = card.title;
+      const summary = document.createElement("span"); summary.textContent = [card.columns && card.rows ? `${card.columns}열 × ${card.rows}줄` : "", card.tableCount != null ? `${card.tableCount}T` : "", card.totalSeats != null ? `${card.totalSeats}석` : ""].filter(Boolean).join(" · ");
+      body.append(title, summary); wrap.append(body); return wrap;
     }
 
     function createSaveSuggestionCard(suggestion) {
@@ -506,10 +550,19 @@
       saveButton.addEventListener("click", () => saveOperationalSuggestion(suggestion.id));
       actions.append(saveButton);
 
+      if (suggestion.type === "layout_manual") {
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "btn-secondary compact";
+        editButton.textContent = "수정";
+        editButton.addEventListener("click", () => editLayoutManualSuggestion(suggestion.id));
+        actions.append(editButton);
+      }
+
       const dismissButton = document.createElement("button");
       dismissButton.type = "button";
       dismissButton.className = "btn-secondary compact";
-      dismissButton.textContent = "저장하지 않음";
+      dismissButton.textContent = suggestion.type === "layout_manual" ? "취소" : "저장하지 않음";
       dismissButton.disabled = suggestion.status === "saving";
       dismissButton.addEventListener("click", () => dismissOperationalSuggestion(suggestion.id));
       actions.append(dismissButton);
@@ -874,6 +927,8 @@
       renderAiPageMessages();
       renderConversationList();
       try {
+        const layoutAnswer = !attachmentsToSend.length ? await answerLayoutGuidance(question) : null;
+        if (layoutAnswer) { conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: layoutAnswer.text, meta: layoutAnswer.meta || {} }; await persistAiMessage(conversation.id, "user", question, []); await persistAiMessage(conversation.id, "assistant", layoutAnswer.text, []); return; }
         const analyticsAnswer = !attachmentsToSend.length ? answerEventOrderAnalytics(question) : "";
         if (analyticsAnswer) { conversation.messages[conversation.messages.length - 1] = { type: "assistant", text: analyticsAnswer }; await persistAiMessage(conversation.id, "user", question, []); await persistAiMessage(conversation.id, "assistant", analyticsAnswer, []); return; }
         const autopilotContextAnswer = !attachmentsToSend.length ? await answerAutopilotContext(question) : "";
@@ -1287,6 +1342,19 @@
       renderAiPageMessages();
     }
 
+    function editLayoutManualSuggestion(suggestionId) {
+      const suggestion = findSaveSuggestion(suggestionId);
+      if (!suggestion?.parsed) return;
+      const current = [suggestion.parsed.people || "", suggestion.parsed.columns || "", suggestion.parsed.rows || ""].join(",");
+      const edited = window.prompt("인원, 열, 줄 순서로 입력하세요.", current);
+      if (edited == null) return;
+      const [people, columns, rows] = edited.split(",").map((value) => Number(value.trim()) || null);
+      suggestion.parsed = { ...suggestion.parsed, people, columns, rows };
+      suggestion.description = [window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(suggestion.parsed.venue) || suggestion.parsed.venue, window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(suggestion.parsed.layoutType), people ? `${people}석` : "", columns ? `${columns}열` : "", rows ? `${rows}줄` : ""].filter(Boolean).join(" · ");
+      suggestion.answer = suggestion.description;
+      renderAiPageMessages();
+    }
+
     async function saveOperationalSuggestion(suggestionId) {
       const suggestion = findSaveSuggestion(suggestionId);
       if (!suggestion || suggestion.status === "saving" || suggestion.status === "saved") return;
@@ -1294,6 +1362,7 @@
       suggestion.errorMessage = "";
       renderAiPageMessages();
       try {
+        if (suggestion.type === "layout_manual" && !state.isAdminUser?.()) throw new Error("세팅 기준 등록은 관리자만 할 수 있습니다.");
         const payload = buildOperationalSuggestionPayload(suggestion);
         const rows = await supabaseRequest(suggestion.table, {
           method: "POST",
@@ -1362,6 +1431,11 @@
             natural_language: question,
             change_reason: answer || null,
           };
+        case "layout_manual": {
+          const parsed = suggestion.parsed || {};
+          const metadata = { venue: parsed.venue, layoutType: parsed.layoutType, peopleMin: parsed.people, peopleMax: parsed.people, totalSeats: parsed.people, columns: parsed.columns, rows: parsed.rows, source: "AI_CHAT_MANUAL", status: "CONFIRMED" };
+          return { category: "layout", subject: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue, predicate: "confirmed_setup_manual", object: parsed.layoutType, value: answer, natural_language: answer, object_value: answer, explanation: "AI 채팅에서 관리자 확인 후 등록", reason: "AI_CHAT_MANUAL", confidence: 1, status: "approved", original_answer: JSON.stringify(metadata), confirmed_at: now, updated_at: now };
+        }
         default:
           return { note: question };
       }
