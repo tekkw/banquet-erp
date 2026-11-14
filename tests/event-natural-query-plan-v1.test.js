@@ -16,6 +16,23 @@ const events = [
   { id: "burano-next", companyName: "호남센터", eventName: "교육", venue: "부라노1", startDate: "2026-10-29", endDate: "2026-10-29", guestCount: 60, layoutText: "라운드 8T", schedule: [{ date: "2026-10-29", time: "08:00", content: "행사 시작" }] },
 ];
 
+let compactList = analytics.answerQuestion("오늘 행사 알려줘", events, null, { now });
+assert.strictEqual(compactList.answer, "10월 28일\n\n- 부라노전체 · 대한전기학회");
+for (const hiddenDetail of ["150명", "커피브레이크", "VIP 동선 주의", "출처", "필요하시면"]) assert(!compactList.answer.includes(hiddenDetail));
+
+const buranoOnly = analytics.answerQuestion("부라노 행사만", events, compactList.context, { now });
+assert.strictEqual(buranoOnly.results.length, 1);
+assert.strictEqual(buranoOnly.results[0].eventOrderId, "burano");
+const buranoPeople = analytics.answerQuestion("몇 명이야?", events, buranoOnly.context, { now });
+assert(buranoPeople.answer.includes("150명"));
+assert(!buranoPeople.answer.includes("VIP 동선 주의"));
+const buranoNotes = analytics.answerQuestion("특이사항은?", events, buranoOnly.context, { now });
+assert(buranoNotes.answer.includes("VIP 동선 주의"));
+assert(!buranoNotes.answer.includes("150명"));
+assert.strictEqual(analytics.answerQuestion("시간은?", events, buranoOnly.context, { now }).answer, "15:00");
+assert.strictEqual(analytics.answerQuestion("레이아웃은?", events, buranoOnly.context, { now }).answer, "스쿨 60석");
+assert.strictEqual(analytics.answerQuestion("어디서 확인했어?", events, buranoOnly.context, { now }).answer, "이벤트오더 원본과 저장된 행사 일정에서 확인했습니다.");
+
 const plan = analytics.buildEventQueryPlan("오늘 부라노 행사 특이사항 있어?", null, { now });
 assert.strictEqual(plan.domain, "event");
 assert.deepStrictEqual({ ...plan.dateRange }, { start: "2026-10-28", end: "2026-10-28", label: "오늘" });

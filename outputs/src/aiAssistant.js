@@ -116,7 +116,17 @@
       const result = analytics?.answerQuestion(question, state.getEvents?.() || [], context.analytics || null);
       if (!result) return "";
       conversationAgent?.save?.({ ...context, analytics: result.context, lastDomain: "eventAnalytics" });
-      return result.text;
+      return applyConciseAnswerPolicy(question, result.text);
+    }
+
+    function applyConciseAnswerPolicy(question, answer) {
+      const value = String(answer || "").trim();
+      if (!value || /출처|근거|어디서\s*확인|원본/.test(question)) return value;
+      return value
+        .replace(/\n?\s*(?:\*\*)?출처(?:\*\*)?\s*:\s*[^\n]+/gi, "")
+        .replace(/\n?[^\n]*(?:event_orders|event_calendar_dates|event_schedules|event_items|event_notes|approvedKnowledge|ai_knowledge)[^\n]*/gi, "")
+        .replace(/\n?(?:참고로|필요하시면)[^\n]*/gi, "")
+        .trim();
     }
 
     /*
@@ -296,7 +306,7 @@
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
-        loadingMessage.querySelector(".chat-bubble").textContent = body.answer || body.message || "답변을 생성하지 못했습니다.";
+        loadingMessage.querySelector(".chat-bubble").textContent = applyConciseAnswerPolicy(question, body.answer || body.message || "답변을 생성하지 못했습니다.");
       } catch (error) {
         console.error(error);
         loadingMessage.classList.add("error");
@@ -913,7 +923,7 @@
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
         conversation.messages[conversation.messages.length - 1] = {
           type: "assistant",
-          text: body.answer || body.message || "답변을 생성하지 못했습니다.",
+          text: applyConciseAnswerPolicy(question, body.answer || body.message || "답변을 생성하지 못했습니다."),
         };
         const assistantMessage = conversation.messages[conversation.messages.length - 1];
         assistantMessage.meta = {

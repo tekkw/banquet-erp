@@ -31,6 +31,8 @@ assert(html.includes("function unbindMobileAiViewport()"));
 assert(html.includes('appMain.classList.toggle("mobile-keyboard-open", keyboardOpen)'));
 assert(html.includes('Math.min(aiPageChatInput.scrollHeight, 144)'));
 assert(css.includes('main.erp-shell.mobile-keyboard-open ~ .mobile-bottom-nav'));
+assert(css.includes('main.erp-shell[data-active-page="ai"] ~ .mobile-bottom-nav'));
+assert(css.includes("inset: 0;"));
 assert(css.includes("--mobile-ai-viewport-height"));
 assert(css.includes("min-height: 68px"));
 assert(css.includes("max-height: 144px"));

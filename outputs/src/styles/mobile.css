@@ -2062,7 +2062,7 @@
 @media (max-width: 768px) {
   main.erp-shell[data-active-page="ai"] {
     position: fixed;
-    inset: 0 0 calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom)) 0;
+    inset: 0;
     z-index: 900;
     width: 100%;
     max-width: 100%;
@@ -2315,6 +2315,7 @@
   main.erp-shell[data-active-page="ai"] .ai-attachment-chip small { display: none; }
   main.erp-shell[data-active-page="ai"] .ai-attachment-chip button { position: absolute; top: -7px; right: -7px; width: 24px; height: 24px; background: #263B4D; color: #fff; }
 
+  main.erp-shell[data-active-page="ai"] ~ .mobile-bottom-nav,
   main.erp-shell.mobile-keyboard-open ~ .mobile-bottom-nav { display: none !important; }
 }
 
