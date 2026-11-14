@@ -94,6 +94,7 @@
     let aiChatViewState = "new";
     let layoutGuidanceContext = null;
     let pendingSetupManualTeach = null;
+    let pendingSetupRuleTeach = null;
     let aiConversationPersistenceAvailable = true;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
     const eventConversationAgent = globalThis.erpConversationAgent?.create({ storage: globalThis.sessionStorage, storageKey: "banquetBoard.conversationContext.v1", maxSteps: 4 });
@@ -179,18 +180,40 @@
       return verified;
     }
 
+    async function persistConfirmedSetupRule(parsed, sourceText = "") {
+      if (!state.isAdminUser?.()) throw new Error("세팅 규칙 등록은 관리자만 할 수 있습니다.");
+      const guidance = window.BANQUET_ERP_LAYOUT_GUIDANCE;
+      const candidates = guidance?.generateSetupCandidates?.(parsed) || [];
+      if (!parsed.venue || !parsed.layoutType || !candidates.length) throw new Error("열, 가능 줄, 테이블당 좌석 규칙을 확인해 주세요.");
+      const payload = buildOperationalSuggestionPayload({ type: "layout_rule", question: sourceText, answer: sourceText, parsed });
+      const wanted = setupManualMetadata(payload); const key = wanted.ruleKey;
+      const rows = await supabaseRequest("ai_knowledge?select=*&status=eq.approved&predicate=eq.confirmed_setup_rule&order=updated_at.desc&limit=300");
+      const existing = (rows || []).find((row) => setupManualMetadata(row).ruleKey === key);
+      const savedRows = await supabaseRequest(existing?.id ? `ai_knowledge?id=eq.${encodeURIComponent(existing.id)}` : "ai_knowledge", { method: existing?.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify(payload) });
+      const saved = Array.isArray(savedRows) ? savedRows[0] : savedRows;
+      if (!saved?.id) throw new Error("세팅 규칙 저장 결과를 확인하지 못했습니다.");
+      const data = await loadLayoutGuidanceData();
+      const verified = guidance?.setupRules?.(data).find((rule) => rule.ruleKey === key);
+      if (!verified) throw new Error("저장한 세팅 규칙을 다시 확인하지 못했습니다.");
+      await renderSetupManualManagement();
+      return { rule: verified, candidates: guidance.generateSetupCandidates(verified) };
+    }
+
     async function renderSetupManualManagement() {
       if (!setupManualTableBody) return;
       try {
-        const rows = await supabaseRequest("ai_knowledge?select=*&status=eq.approved&predicate=eq.confirmed_setup_manual&order=updated_at.desc&limit=300");
-        const manuals = (rows || []).map((row) => ({ row, meta: setupManualMetadata(row) })).filter(({ row, meta }) => meta.source === "AI_CHAT_MANUAL" && meta.status === "CONFIRMED" && (meta.knowledgeType === "SETUP_MANUAL" || row.predicate === "confirmed_setup_manual"));
+        const rows = await supabaseRequest("ai_knowledge?select=*&status=eq.approved&category=eq.layout&order=updated_at.desc&limit=300");
+        const manuals = (rows || []).map((row) => ({ row, meta: setupManualMetadata(row) })).filter(({ row, meta }) => meta.source === "AI_CHAT_MANUAL" && meta.status === "CONFIRMED" && (["SETUP_MANUAL", "SETUP_RULE"].includes(meta.knowledgeType) || ["confirmed_setup_manual", "confirmed_setup_rule"].includes(row.predicate)));
         setupManualTableBody.innerHTML = "";
         if (!manuals.length) { setupManualTableBody.innerHTML = '<tr><td colspan="6">직접 가르치기로 저장한 세팅 기준이 없습니다.</td></tr>'; return; }
         manuals.forEach(({ row, meta }) => {
           const tr = document.createElement("tr");
-          [window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(meta.venue) || meta.venue, window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(meta.layoutType) || meta.layoutType, window.BANQUET_ERP_LAYOUT_GUIDANCE?.formatManual?.(meta) || row.natural_language, "AI 직접 가르치기", "확정"].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
+          const isRule = meta.knowledgeType === "SETUP_RULE" || row.predicate === "confirmed_setup_rule"; const generated = isRule ? window.BANQUET_ERP_LAYOUT_GUIDANCE?.generateSetupCandidates?.(meta) || [] : [];
+          const summary = isRule ? `${meta.columns}열 · ${(meta.allowedRows || []).join("/")}줄 · +${meta.extraTables || 0}T · ${(meta.allowedSeatsPerTable || []).join("/")}석 · ${generated[0]?.capacity || "-"}~${generated.at(-1)?.capacity || "-"}석` : window.BANQUET_ERP_LAYOUT_GUIDANCE?.formatManual?.(meta) || row.natural_language;
+          [window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(meta.canonicalVenue || meta.venue) || meta.canonicalVenue || meta.venue, window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(meta.layoutType) || meta.layoutType, `${isRule ? "세팅 규칙 · " : "개별 세팅 · "}${summary}`, "AI 직접 가르치기", "확정"].forEach((value) => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
           const actions = document.createElement("td");
-          const edit = createInterviewButton("수정", "secondary-button", async () => { const initial = `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(meta.venue) || meta.venue} ${window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(meta.layoutType) || meta.layoutType}은 ${meta.columns || ""}열 ${meta.rows || ""}줄, 앞에 ${meta.extraTables || 0}T, ${meta.seatsPerTable || ""}석씩`; const revised = window.prompt("수정할 세팅 기준을 입력하세요.", initial); if (!revised) return; const result = window.BANQUET_ERP_LAYOUT_GUIDANCE?.answer?.(revised, await loadLayoutGuidanceData(), { venue: meta.venue, layoutType: meta.layoutType }); if (result?.intent !== "LAYOUT_TEACH") return window.alert("행사장, 유형, 열·줄 등 세팅 기준을 확인해 주세요."); await persistConfirmedSetupManual(result.parsed, revised); });
+          if (isRule) { const candidatesButton = createInterviewButton("후보 보기", "secondary-button", () => window.alert(generated.map((candidate) => `${candidate.columns}×${candidate.rows} + ${candidate.extraTables}T · ${candidate.tableCount}T · ${candidate.seatsPerTable}석 · ${candidate.capacity}석`).join("\n"))); actions.append(candidatesButton); }
+          const edit = createInterviewButton("수정", "secondary-button", async () => { const venue = meta.canonicalVenue || meta.venue; const initial = isRule ? `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(venue) || venue} ${window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(meta.layoutType) || meta.layoutType}은 ${meta.columns}열이고 ${(meta.allowedRows || []).at(0)}줄부터 ${(meta.allowedRows || []).at(-1)}줄까지 가능해. 기둥 앞에는 항상 ${meta.extraTables || 0}T 들어가고 테이블당 ${(meta.allowedSeatsPerTable || []).join("석이나 ")}석으로 써.` : `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(venue) || venue} ${window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(meta.layoutType) || meta.layoutType}은 ${meta.columns || ""}열 ${meta.rows || ""}줄, 앞에 ${meta.extraTables || 0}T, ${meta.seatsPerTable || ""}석씩`; const revised = window.prompt("수정할 세팅 기준을 입력하세요.", initial); if (!revised) return; const result = window.BANQUET_ERP_LAYOUT_GUIDANCE?.answer?.(revised, await loadLayoutGuidanceData(), { venue, layoutType: meta.layoutType }); if (result?.intent === "SETUP_RULE_TEACH") await persistConfirmedSetupRule(result.parsed, revised); else if (result?.intent === "LAYOUT_TEACH") await persistConfirmedSetupManual(result.parsed, revised); else window.alert("행사장, 유형, 열·줄 등 세팅 기준을 확인해 주세요."); });
           const disable = createInterviewButton("비활성", "secondary-button", async () => { if (!state.isAdminUser?.()) return; const nextMeta = { ...meta, status: "INACTIVE" }; await supabaseRequest(`ai_knowledge?id=eq.${encodeURIComponent(row.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json", Prefer: "return=representation" }, body: JSON.stringify({ original_answer: JSON.stringify(nextMeta), updated_at: new Date().toISOString() }) }); await renderSetupManualManagement(); });
           actions.append(edit, disable); tr.append(actions); setupManualTableBody.append(tr);
         });
@@ -202,6 +225,12 @@
       if (!guidance?.matches(question, layoutGuidanceContext)) return null;
       const result = guidance.answer(question, await loadLayoutGuidanceData(), layoutGuidanceContext);
       layoutGuidanceContext = result.context || layoutGuidanceContext;
+      if (result.intent === "SETUP_RULE_TEACH") {
+        if (!state.isAdminUser?.()) return { text: "세팅 규칙 등록은 관리자만 할 수 있습니다." };
+        const parsed = result.parsed; const candidates = result.candidates || [];
+        const description = `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue} · ${guidance.layoutTypeLabel(parsed.layoutType)} · ${parsed.columns}열 · ${parsed.allowedRows.join("/")}줄 · +${parsed.extraTables || 0}T · ${parsed.allowedSeatsPerTable.join("/")}석 · ${candidates[0]?.capacity || "-"}~${candidates.at(-1)?.capacity || "-"}석`;
+        return { text: `${description}\n계산 후보 ${candidates.length}개를 확인한 뒤 규칙을 저장할 수 있습니다.`, meta: { saveSuggestion: { id: `layout-rule-${Date.now()}`, type: "layout_rule", table: "ai_knowledge", tableLabel: "세팅 규칙", title: "새 세팅 규칙 등록", description, question, answer: description, parsed, candidates, status: "pending" } } };
+      }
       if (result.intent === "LAYOUT_TEACH") {
         if (!state.isAdminUser?.()) return { text: "세팅 기준 등록은 관리자만 할 수 있습니다." };
         const parsed = result.parsed;
@@ -585,7 +614,7 @@
       if (suggestion.status === "saved") {
         const saved = document.createElement("p");
         saved.className = "ai-save-suggestion-success";
-        saved.textContent = suggestion.type === "layout_manual" ? suggestion.description : `${suggestion.tableLabel || suggestion.table}에 저장했습니다.`;
+        saved.textContent = ["layout_manual", "layout_rule"].includes(suggestion.type) ? suggestion.description : `${suggestion.tableLabel || suggestion.table}에 저장했습니다.`;
         card.append(saved);
         return card;
       }
@@ -603,7 +632,7 @@
       saveButton.addEventListener("click", () => saveOperationalSuggestion(suggestion.id));
       actions.append(saveButton);
 
-      if (suggestion.type === "layout_manual") {
+      if (["layout_manual", "layout_rule"].includes(suggestion.type)) {
         const editButton = document.createElement("button");
         editButton.type = "button";
         editButton.className = "btn-secondary compact";
@@ -615,7 +644,7 @@
       const dismissButton = document.createElement("button");
       dismissButton.type = "button";
       dismissButton.className = "btn-secondary compact";
-      dismissButton.textContent = suggestion.type === "layout_manual" ? "취소" : "저장하지 않음";
+      dismissButton.textContent = ["layout_manual", "layout_rule"].includes(suggestion.type) ? "취소" : "저장하지 않음";
       dismissButton.disabled = suggestion.status === "saving";
       dismissButton.addEventListener("click", () => dismissOperationalSuggestion(suggestion.id));
       actions.append(dismissButton);
@@ -1398,6 +1427,15 @@
     function editLayoutManualSuggestion(suggestionId) {
       const suggestion = findSaveSuggestion(suggestionId);
       if (!suggestion?.parsed) return;
+      if (suggestion.type === "layout_rule") {
+        const current = `${suggestion.parsed.columns};${suggestion.parsed.allowedRows.join(",")};${suggestion.parsed.extraTables || 0};${suggestion.parsed.allowedSeatsPerTable.join(",")}`;
+        const edited = window.prompt("열; 가능 줄(쉼표); 추가 T; T당 좌석(쉼표) 순서로 입력하세요.", current); if (edited == null) return;
+        const [columns, rows, extraTables, seats] = edited.split(";");
+        suggestion.parsed = { ...suggestion.parsed, columns: Number(columns) || null, allowedRows: rows.split(",").map(Number).filter(Boolean), extraTables: Number(extraTables) || 0, allowedSeatsPerTable: seats.split(",").map(Number).filter(Boolean) };
+        const candidates = window.BANQUET_ERP_LAYOUT_GUIDANCE?.generateSetupCandidates?.(suggestion.parsed) || []; suggestion.candidates = candidates;
+        suggestion.description = `${suggestion.parsed.columns}열 · ${suggestion.parsed.allowedRows.join("/")}줄 · +${suggestion.parsed.extraTables}T · ${suggestion.parsed.allowedSeatsPerTable.join("/")}석 · ${candidates[0]?.capacity || "-"}~${candidates.at(-1)?.capacity || "-"}석`;
+        renderAiPageMessages(); return;
+      }
       const current = [suggestion.parsed.people || "", suggestion.parsed.columns || "", suggestion.parsed.rows || ""].join(",");
       const edited = window.prompt("인원, 열, 줄 순서로 입력하세요.", current);
       if (edited == null) return;
@@ -1416,6 +1454,12 @@
       renderAiPageMessages();
       try {
         if (suggestion.type === "layout_manual" && !state.isAdminUser?.()) throw new Error("세팅 기준 등록은 관리자만 할 수 있습니다.");
+        if (suggestion.type === "layout_rule") {
+          const verified = await persistConfirmedSetupRule(suggestion.parsed, suggestion.question);
+          suggestion.status = "saved"; suggestion.savedRow = verified.rule;
+          suggestion.description = `${window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(verified.rule.venue) || verified.rule.venue} ${window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(verified.rule.layoutType)} 세팅 생성 규칙으로 저장했습니다. 후보 ${verified.candidates.length}개 · ${verified.candidates[0]?.capacity}~${verified.candidates.at(-1)?.capacity}석`;
+          return;
+        }
         if (suggestion.type === "layout_manual") {
           const verified = await persistConfirmedSetupManual(suggestion.parsed, suggestion.question);
           suggestion.status = "saved";
@@ -1497,6 +1541,13 @@
           metadata.manualKey = window.BANQUET_ERP_LAYOUT_GUIDANCE?.manualKey?.(metadata);
           const summary = window.BANQUET_ERP_LAYOUT_GUIDANCE?.formatManual?.(metadata) || answer;
           return { category: "layout", subject: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue, predicate: "confirmed_setup_manual", object: parsed.layoutType, value: summary, natural_language: summary, object_value: summary, explanation: "AI 채팅에서 관리자 확인 후 등록", reason: "AI_CHAT_MANUAL", confidence: 1, status: "approved", original_answer: JSON.stringify(metadata), confirmed_at: now, updated_at: now };
+        }
+        case "layout_rule": {
+          const parsed = suggestion.parsed || {}; const guidance = window.BANQUET_ERP_LAYOUT_GUIDANCE;
+          const metadata = { knowledgeType: "SETUP_RULE", source: "AI_CHAT_MANUAL", status: "CONFIRMED", canonicalVenue: parsed.venue, layoutType: parsed.layoutType, columns: parsed.columns, allowedRows: parsed.allowedRows, extraTables: parsed.extraTables || 0, allowedSeatsPerTable: parsed.allowedSeatsPerTable, description: parsed.description || answer };
+          metadata.ruleKey = guidance?.ruleKey?.(metadata); const candidates = guidance?.generateSetupCandidates?.(metadata) || [];
+          const summary = `${metadata.columns}열 · ${metadata.allowedRows.join("/")}줄 · +${metadata.extraTables}T · ${metadata.allowedSeatsPerTable.join("/")}석 · ${candidates[0]?.capacity || "-"}~${candidates.at(-1)?.capacity || "-"}석`;
+          return { category: "layout", subject: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue, predicate: "confirmed_setup_rule", object: parsed.layoutType, value: summary, natural_language: summary, object_value: summary, explanation: "AI 채팅에서 관리자 확인 후 등록한 세팅 생성 규칙", reason: "AI_CHAT_MANUAL", confidence: 1, status: "approved", original_answer: JSON.stringify(metadata), confirmed_at: now, updated_at: now };
         }
         default:
           return { note: question };
@@ -2377,6 +2428,11 @@
         const guidance = window.BANQUET_ERP_LAYOUT_GUIDANCE;
         if (guidance?.matches(answer, layoutGuidanceContext)) {
           const result = guidance.answer(answer, await loadLayoutGuidanceData(), layoutGuidanceContext);
+          if (result.intent === "SETUP_RULE_TEACH") {
+            pendingSetupRuleTeach = result.parsed;
+            directTeachAnalysis = { summary: `세팅 생성 후보 ${result.candidates.length}개`, knowledge: [] };
+            return;
+          }
           if (result.intent === "LAYOUT_TEACH") {
             pendingSetupManualTeach = result.parsed;
             directTeachAnalysis = { summary: guidance.formatManual(result.parsed), knowledge: [] };
@@ -2417,6 +2473,7 @@
     }
 
     function createDirectTeachConfirmationCard() {
+      if (pendingSetupRuleTeach) return createSetupRuleTeachConfirmationCard();
       if (pendingSetupManualTeach) return createSetupManualTeachConfirmationCard();
       const card = document.createElement("article");
       card.className = "ai-knowledge-confirm-card ai-direct-teach-result";
@@ -2514,6 +2571,16 @@
       card.append(actions); return card;
     }
 
+    function createSetupRuleTeachConfirmationCard() {
+      const parsed = pendingSetupRuleTeach; const guidance = window.BANQUET_ERP_LAYOUT_GUIDANCE; const candidates = guidance?.generateSetupCandidates?.(parsed) || [];
+      const card = document.createElement("article"); card.className = "ai-knowledge-confirm-card ai-direct-teach-result";
+      const venue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(parsed.venue) || parsed.venue; const layout = guidance?.layoutTypeLabel?.(parsed.layoutType) || parsed.layoutType;
+      card.innerHTML = `<div class="ai-knowledge-confirm-title"><h3>세팅 생성 규칙을 확인해 주세요.</h3><p>저장 전 계산 후보는 답변 기준으로 사용하지 않습니다.</p></div><div class="ai-knowledge-list"><div class="ai-knowledge-row"><strong>행사장 / 유형</strong><p>${escapeHtml(venue)} · ${escapeHtml(layout)}</p></div><div class="ai-knowledge-row"><strong>열</strong><p>${parsed.columns}</p></div><div class="ai-knowledge-row"><strong>가능 줄</strong><p>${parsed.allowedRows.join(" / ")}</p></div><div class="ai-knowledge-row"><strong>고정 추가 테이블</strong><p>${parsed.extraTables || 0}T</p></div><div class="ai-knowledge-row"><strong>테이블당 좌석</strong><p>${parsed.allowedSeatsPerTable.join(" / ")}</p></div><div class="ai-knowledge-row"><strong>자동 계산 후보</strong><p>${candidates.map((c) => `${c.tableCount}T → ${c.capacity}석`).join(" · ")}</p></div></div>`;
+      const actions = document.createElement("div"); actions.className = "ai-interview-actions sticky-actions";
+      actions.append(createInterviewButton("취소", "secondary-button", () => { pendingSetupRuleTeach = null; directTeachAnalysis = null; renderDirectTeachPanel(); }), createInterviewButton("수정", "secondary-button", () => { pendingSetupRuleTeach = null; directTeachAnalysis = null; renderDirectTeachPanel(); }), createInterviewButton(directTeachSaving ? "저장 중..." : "규칙 저장", "primary-button", confirmDirectTeachKnowledge));
+      card.append(actions); return card;
+    }
+
     function scrollDirectTeachResultToTop() {
       requestAnimationFrame(() => {
         const scrollHost = aiDirectTeachModePanel?.closest(".ai-main-scroll") || aiDirectTeachModePanel;
@@ -2529,6 +2596,13 @@
 
     async function confirmDirectTeachKnowledge() {
       if (directTeachSaving) return;
+      if (pendingSetupRuleTeach) {
+        directTeachSaving = true; directTeachError = ""; renderDirectTeachPanel();
+        try { const verified = await persistConfirmedSetupRule(pendingSetupRuleTeach, directTeachAnswer); const venue = window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(verified.rule.venue) || verified.rule.venue; directTeachSuccess = `${venue} ${window.BANQUET_ERP_LAYOUT_GUIDANCE?.layoutTypeLabel?.(verified.rule.layoutType)} 세팅 생성 규칙으로 저장했습니다. 후보 ${verified.candidates.length}개 · ${verified.candidates[0]?.capacity}~${verified.candidates.at(-1)?.capacity}석`; pendingSetupRuleTeach = null; directTeachAnswer = ""; directTeachAnalysis = null; }
+        catch (error) { console.error("setup rule direct teaching confirm failed", error); directTeachError = error.message || "세팅 규칙 저장에 실패했습니다."; }
+        finally { directTeachSaving = false; renderDirectTeachPanel(); }
+        return;
+      }
       if (pendingSetupManualTeach) {
         directTeachSaving = true; directTeachError = ""; renderDirectTeachPanel();
         try {
