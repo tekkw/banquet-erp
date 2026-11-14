@@ -844,7 +844,7 @@
                 <p>베네치아 호텔의 행사 운영, 자산, 공간, 과거 데이터를 바탕으로 답변합니다.</p>
               </div>
             </div>
-            <button class="ai-mobile-reference-button" type="button" data-ai-mobile-reference>참조 보기</button>
+            <button class="ai-mobile-reference-button" type="button" data-ai-mobile-reference>이전 대화</button>
             <button id="aiMobileMenuButton" class="ai-mobile-menu-button" type="button" aria-label="AI 메뉴">⋮</button>
             <button id="aiNewConversationButton" class="primary-button" type="button">새 대화 시작</button>
           </header>
@@ -1876,6 +1876,7 @@
       openAiAttachmentPicker,
       showAiAttachmentList,
       startNewAiConversation,
+      openAiConversationHistory,
       initializeAiAssistantPage,
       loadAiReferenceStats,
       requestAiAnalysis,
@@ -1931,17 +1932,18 @@
     aiPageAttachButton.addEventListener("click", openAiAttachmentPicker);
     aiPageAttachmentListButton.addEventListener("click", showAiAttachmentList);
     aiNewConversationButton.addEventListener("click", startNewAiConversation);
-    aiSideNewConversationButton.addEventListener("click", startNewAiConversation);
+    aiSideNewConversationButton.addEventListener("click", () => {
+      startNewAiConversation();
+      document.querySelector(".ai-conversation-panel")?.classList.remove("mobile-open");
+    });
     aiRefreshStatsButton.addEventListener("click", loadAiReferenceStats);
     aiMobileMenuButton?.addEventListener("click", () => {
       aiMobileMenu.hidden = !aiMobileMenu.hidden;
     });
     aiMobileBackButton?.addEventListener("click", () => showErpPage("home"));
     aiMobileReferenceButton?.addEventListener("click", () => {
-      const referencePanel = document.querySelector(".ai-reference-panel");
-      const isOpen = referencePanel?.classList.toggle("mobile-open");
-      aiMobileReferenceButton.textContent = isOpen ? "참조 닫기" : "참조 보기";
-      if (isOpen) loadAiReferenceStats();
+      document.querySelector(".ai-conversation-panel")?.classList.add("mobile-open");
+      openAiConversationHistory();
     });
     aiMobileMenu?.querySelectorAll("[data-ai-mobile-mode]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1954,7 +1956,9 @@
       aiMobileMenu.hidden = true;
     });
     aiMobileMenu?.querySelector('[data-ai-mobile-action="history"]')?.addEventListener("click", () => {
-      document.querySelector(".ai-conversation-panel")?.classList.toggle("mobile-open");
+      const conversationPanel = document.querySelector(".ai-conversation-panel");
+      conversationPanel?.classList.add("mobile-open");
+      openAiConversationHistory();
       aiMobileMenu.hidden = true;
     });
     aiMobileMenu?.querySelector('[data-ai-mobile-action="settings"]')?.addEventListener("click", () => {
@@ -3881,6 +3885,7 @@
     let aiPageSpeechRecognition = null;
     let aiPageListening = false;
     let mobileAiViewportBaseline = 0;
+    let mobileAiViewportCleanup = null;
     let globalAiBriefingPendingOpen = false;
 
     function openGlobalAiDrawer(showBriefing = true) {
@@ -3960,9 +3965,26 @@
       requestAnimationFrame(() => { if (keyboardOpen && aiPageMessages) aiPageMessages.scrollTop = aiPageMessages.scrollHeight; });
     }
 
-    window.visualViewport?.addEventListener("resize", syncMobileAiViewport);
-    window.visualViewport?.addEventListener("scroll", syncMobileAiViewport);
-    window.addEventListener("orientationchange", () => { mobileAiViewportBaseline = 0; window.setTimeout(syncMobileAiViewport, 120); });
+    function bindMobileAiViewport() {
+      if (mobileAiViewportCleanup) return;
+      const viewport = window.visualViewport;
+      const handleOrientationChange = () => { mobileAiViewportBaseline = 0; window.setTimeout(syncMobileAiViewport, 120); };
+      viewport?.addEventListener("resize", syncMobileAiViewport);
+      viewport?.addEventListener("scroll", syncMobileAiViewport);
+      window.addEventListener("orientationchange", handleOrientationChange);
+      mobileAiViewportCleanup = () => {
+        viewport?.removeEventListener("resize", syncMobileAiViewport);
+        viewport?.removeEventListener("scroll", syncMobileAiViewport);
+        window.removeEventListener("orientationchange", handleOrientationChange);
+        mobileAiViewportCleanup = null;
+        mobileAiViewportBaseline = 0;
+        appMain.classList.remove("mobile-keyboard-open");
+      };
+    }
+
+    function unbindMobileAiViewport() {
+      mobileAiViewportCleanup?.();
+    }
 
     function toggleAiPageVoiceInput() {
       const SpeechRecognitionApi = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -4048,7 +4070,12 @@
       mobileNavButtons.forEach((button) => {
         button.classList.toggle("active", button.dataset.mobileTarget === activeTarget);
       });
-      syncMobileAiViewport();
+      if (pageName === "ai") {
+        bindMobileAiViewport();
+        syncMobileAiViewport();
+      } else {
+        unbindMobileAiViewport();
+      }
 
       if (pageName === "calendar") {
         activateWorkspaceTab("calendar");

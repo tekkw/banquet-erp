@@ -2065,6 +2065,9 @@
     inset: 0 0 calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom)) 0;
     z-index: 900;
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     height: auto !important;
     min-height: 0;
     padding: 0 !important;
@@ -2086,6 +2089,9 @@
   main.erp-shell[data-active-page="ai"] .ai-main-scroll,
   main.erp-shell[data-active-page="ai"] #aiChatModePanel.active {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     height: 100% !important;
     min-height: 0;
     margin: 0;
@@ -2133,6 +2139,8 @@
   main.erp-shell[data-active-page="ai"] .ai-page-title p { display: none !important; }
   main.erp-shell[data-active-page="ai"] .ai-page-title h2 { margin: 0; color: var(--mobile-text-primary); font-size: 17px; line-height: 1.2; }
   main.erp-shell[data-active-page="ai"] .ai-mobile-reference-button { min-height: 36px; padding: 0 8px; border: 0; background: transparent; color: var(--mobile-text-secondary); font-size: 12px; }
+  main.erp-shell[data-active-page="ai"] .ai-mobile-menu-button,
+  main.erp-shell[data-active-page="ai"] .ai-mobile-menu { display: none !important; }
 
   main.erp-shell[data-active-page="ai"] .ai-page-layout { flex: 1 1 auto; display: block; }
   main.erp-shell[data-active-page="ai"] .ai-main-panel,
@@ -2144,6 +2152,9 @@
     flex: 1 1 auto;
     gap: 18px;
     min-height: 0;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 18px 14px 24px;
     overflow-x: hidden;
     overflow-y: auto;
@@ -2153,6 +2164,9 @@
   }
 
   main.erp-shell[data-active-page="ai"] .ai-page-message { width: 100%; gap: 9px; }
+  main.erp-shell[data-active-page="ai"] .ai-page-message,
+  main.erp-shell[data-active-page="ai"] .ai-page-bubble,
+  main.erp-shell[data-active-page="ai"] .ai-answer-content { min-width: 0; max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
   main.erp-shell[data-active-page="ai"] .ai-message-avatar { width: 28px; height: 28px; border-radius: 9px; font-size: 9px; }
   main.erp-shell[data-active-page="ai"] .ai-page-message.assistant .ai-page-bubble {
     width: calc(100% - 38px);
@@ -2191,6 +2205,19 @@
   main.erp-shell[data-active-page="ai"] .ai-page-loading span:nth-child(3) { animation-delay: .28s; }
   main.erp-shell[data-active-page="ai"] .ai-page-loading small { margin-left: 5px; font-size: 12px; }
 
+  main.erp-shell[data-active-page="ai"] .ai-new-chat-empty {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 8px;
+    min-height: 42vh;
+    padding: 24px 18px;
+    text-align: center;
+    color: var(--mobile-text-primary);
+  }
+  main.erp-shell[data-active-page="ai"] .ai-new-chat-empty strong { font-size: 18px; line-height: 1.35; }
+  main.erp-shell[data-active-page="ai"] .ai-new-chat-empty span { max-width: 290px; color: var(--mobile-text-secondary); font-size: 13px; line-height: 1.55; }
+
   main.erp-shell[data-active-page="ai"] .ai-quick-question-row {
     flex: 0 0 auto;
     gap: 7px;
@@ -2212,15 +2239,23 @@
     left: auto !important;
     z-index: 4;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr) 42px 44px !important;
+    grid-template-columns: 42px auto minmax(0, 1fr) 42px 44px !important;
     grid-template-areas:
-      "preview preview preview preview"
-      "attach input input input"
-      "tools tools voice send";
+      "preview preview preview preview preview"
+      "input input input input input"
+      "attach tools . voice send";
     align-items: center;
     gap: 7px;
-    margin: 0 10px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    margin-top: 0;
+    margin-right: max(16px, env(safe-area-inset-right));
+    margin-bottom: max(8px, env(safe-area-inset-bottom));
+    margin-left: max(16px, env(safe-area-inset-left));
     padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden;
     border: 1px solid var(--mobile-border);
     border-radius: 24px;
     background: var(--mobile-surface);
@@ -2238,11 +2273,16 @@
   main.erp-shell[data-active-page="ai"] .ai-page-chat-form .ai-attachment-list-button { display: grid !important; min-width: 42px; min-height: 42px; place-items: center; border: 0; border-radius: 13px; background: var(--mobile-surface-raised); color: var(--mobile-text-primary); }
   main.erp-shell[data-active-page="ai"] #aiPageChatInput {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
     height: auto;
     min-height: 68px;
     max-height: 144px;
     padding: 10px 4px;
     resize: none;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     overflow-y: auto;
     border: 0;
     border-radius: 0;
@@ -2260,6 +2300,8 @@
     display: flex;
     gap: 8px;
     min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 0 0 5px;
     overflow-x: auto;
     border: 0;

@@ -90,6 +90,7 @@
     let aiReferenceData = null;
     let aiPendingAttachments = [];
     let aiMessagesLoading = false;
+    let aiChatViewState = "new";
     let aiConversationPersistenceAvailable = true;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
     const eventConversationAgent = globalThis.erpConversationAgent?.create({ storage: globalThis.sessionStorage, storageKey: "banquetBoard.conversationContext.v1", maxSteps: 4 });
@@ -309,7 +310,13 @@
     async function initializeAiAssistantPage(mode = aiPageMode) {
       if (!aiPageInitialized) {
         aiPageInitialized = true;
-        await loadAiConversationsFromSupabase();
+        if (window.matchMedia("(min-width: 769px)").matches) {
+          await loadAiConversationsFromSupabase();
+        } else {
+          activeConversationId = "";
+          aiChatViewState = "new";
+          renderAiPageMessages();
+        }
       }
       setAiPageMode(mode);
       renderConversationList();
@@ -330,7 +337,17 @@
       aiDirectTeachModePanel?.classList.toggle("active", aiPageMode === "teach");
     }
 
-    async function startNewAiConversation() {
+    async function startNewAiConversation(options = {}) {
+      const createImmediately = options.createImmediately ?? window.matchMedia("(min-width: 769px)").matches;
+      if (!createImmediately) {
+        activeConversationId = "";
+        aiMessagesLoading = false;
+        aiChatViewState = "new";
+        localStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+        renderAiPageMessages();
+        renderConversationList();
+        return null;
+      }
       const id = createUuid();
       const conversation = {
         id,
@@ -341,6 +358,7 @@
       };
       aiConversations = [conversation, ...aiConversations];
       activeConversationId = id;
+      aiChatViewState = "active";
       localStorage.setItem(ACTIVE_CONVERSATION_KEY, id);
       renderAiPageMessages();
       renderConversationList();
@@ -357,11 +375,11 @@
             }),
           });
         }
-        await createInitialAssistantMessage(conversation, { persist: aiConversationPersistenceAvailable });
+        if (options.includeGreeting !== false) await createInitialAssistantMessage(conversation, { persist: aiConversationPersistenceAvailable });
       } catch (error) {
         aiConversationPersistenceAvailable = false;
         console.warn("AI conversation persistence unavailable, using local state:", error);
-        await createInitialAssistantMessage(conversation, { persist: false });
+        if (options.includeGreeting !== false) await createInitialAssistantMessage(conversation, { persist: false });
       }
       renderAiPageMessages();
       renderConversationList();
@@ -384,10 +402,16 @@
         return;
       }
       const messages = conversation?.messages || [];
+      if (aiChatViewState === "new" && !messages.length) {
+        const empty = document.createElement("div");
+        empty.className = "ai-new-chat-empty";
+        empty.innerHTML = "<strong>AI 비서에게 무엇이든 물어보세요</strong><span>행사, 일정, 공간, 자산 정보를 실제 ERP 데이터에서 찾아드립니다.</span>";
+        aiPageMessages.append(empty);
+      }
       messages.forEach((message) => {
         aiPageMessages.append(createAiPageMessage(message.type, message.text, message.meta));
       });
-      if (aiQuickQuestionRow) aiQuickQuestionRow.hidden = messages.some((message) => message.type === "user");
+      if (aiQuickQuestionRow) aiQuickQuestionRow.hidden = aiChatViewState === "loading-history" || messages.some((message) => message.type === "user");
       aiPageMessages.scrollTop = aiPageMessages.scrollHeight;
     }
 
@@ -543,6 +567,7 @@
             await loadAiMessagesForConversation(conversation.id);
             renderAiPageMessages();
             renderConversationList();
+            aiConversationList.closest(".ai-conversation-panel")?.classList.remove("mobile-open");
           });
           item.addEventListener("keydown", async (event) => {
             if (event.key !== "Enter" && event.key !== " ") return;
@@ -552,6 +577,7 @@
             await loadAiMessagesForConversation(conversation.id);
             renderAiPageMessages();
             renderConversationList();
+            aiConversationList.closest(".ai-conversation-panel")?.classList.remove("mobile-open");
           });
           item.querySelector(".ai-conversation-hide")?.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -605,9 +631,9 @@
       }, {});
     }
 
-    async function loadAiConversationsFromSupabase() {
+    async function loadAiConversationsFromSupabase({ createIfEmpty = true } = {}) {
       if (!supabaseRequest) {
-        await startNewAiConversation();
+        if (createIfEmpty) await startNewAiConversation({ createImmediately: true });
         return;
       }
       try {
@@ -630,13 +656,27 @@
         if (activeConversationId) {
           localStorage.setItem(ACTIVE_CONVERSATION_KEY, activeConversationId);
           await loadAiMessagesForConversation(activeConversationId);
-        } else {
-          await startNewAiConversation();
+        } else if (createIfEmpty) {
+          await startNewAiConversation({ createImmediately: true });
         }
       } catch (error) {
         aiConversationPersistenceAvailable = false;
         console.warn("AI conversations load skipped:", error);
-        if (!aiConversations.length) await startNewAiConversation();
+        if (!aiConversations.length && createIfEmpty) await startNewAiConversation({ createImmediately: true });
+      }
+    }
+
+    async function openAiConversationHistory() {
+      aiChatViewState = "loading-history";
+      aiMessagesLoading = true;
+      renderAiPageMessages();
+      try {
+        await loadAiConversationsFromSupabase({ createIfEmpty: false });
+        aiChatViewState = getActiveConversation() ? "active" : "new";
+      } finally {
+        aiMessagesLoading = false;
+        renderAiPageMessages();
+        renderConversationList();
       }
     }
 
@@ -648,6 +688,7 @@
         return;
       }
       aiMessagesLoading = true;
+      aiChatViewState = "loading-history";
       renderAiPageMessages();
       try {
         const rows = await supabaseRequest(
@@ -667,6 +708,7 @@
         if (!conversation.messages?.length) await createInitialAssistantMessage(conversation, { persist: false });
       } finally {
         aiMessagesLoading = false;
+        aiChatViewState = "active";
       }
     }
 
@@ -799,8 +841,9 @@
       const attachmentsToSend = [...aiPendingAttachments];
       const question = rawQuestion || (attachmentsToSend.length ? "이 이미지와 첨부 자료의 내용을 자세히 확인하고, 보이는 정보와 판단 가능한 내용을 설명해주세요." : "");
       if (!question) return;
-      if (!getActiveConversation()) await startNewAiConversation();
+      if (!getActiveConversation()) await startNewAiConversation({ createImmediately: true, includeGreeting: false });
       const conversation = getActiveConversation();
+      aiChatViewState = "active";
       const userMessage = {
         type: "user",
         text: question,
@@ -3404,6 +3447,7 @@
       openAiAttachmentPicker,
       showAiAttachmentList,
       startNewAiConversation,
+      openAiConversationHistory,
       initializeAiAssistantPage,
       loadAiReferenceStats,
       requestAiAnalysis,
