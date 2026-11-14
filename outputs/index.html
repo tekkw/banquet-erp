@@ -794,6 +794,13 @@
             <button id="venueLayoutSaveButton" class="primary-button" type="submit">등록</button>
             <button id="venueLayoutResetButton" class="secondary-button" type="button">초기화</button>
           </form>
+          <div class="asset-table-wrap setup-manual-table-wrap">
+            <h3>AI 직접 가르치기 세팅 기준</h3>
+            <table class="asset-table setup-manual-table">
+              <thead><tr><th>행사장</th><th>유형</th><th>세팅 기준</th><th>출처</th><th>상태</th><th>관리</th></tr></thead>
+              <tbody id="setupManualTableBody"><tr><td colspan="6">세팅 기준을 불러오는 중입니다.</td></tr></tbody>
+            </table>
+          </div>
           <div class="asset-table-wrap venue-layout-table-wrap">
             <table class="asset-table venue-layout-table">
               <colgroup>
@@ -1262,6 +1269,7 @@
     const venueLayoutResetButton = document.querySelector("#venueLayoutResetButton");
     const refreshVenueLayoutsButton = document.querySelector("#refreshVenueLayoutsButton");
     const venueLayoutTableBody = document.querySelector("#venueLayoutTableBody");
+    const setupManualTableBody = document.querySelector("#setupManualTableBody");
     const layoutObjectTypeForm = document.querySelector("#layoutObjectTypeForm");
     const layoutObjectNameInput = document.querySelector("#layoutObjectNameInput");
     const layoutObjectCategoryInput = document.querySelector("#layoutObjectCategoryInput");
@@ -1848,6 +1856,7 @@
         aiReferenceStats,
         aiKnowledgeStats,
         aiLearningStats,
+        setupManualTableBody,
         aiRefreshStatsButton,
       },
       deps: {
