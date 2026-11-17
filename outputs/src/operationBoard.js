@@ -22,6 +22,8 @@
   let mobileOpenGroups = loadOpenGroups();
   let activeBoardTab = "operations";
   let timelineColorFilter = "all";
+  let timelineWeekOffset = 0;
+  let timelineDayCount = 21;
   let todayRoleFilter = "all";
   let todayAssigneeFilter = "all";
   let pinnedSetupOpenGroup = "all";
@@ -766,6 +768,7 @@
     return [...(tasks || [])].sort((left, right) => rank(left) - rank(right) || (setupScheduledDate(left) || "9999-12-31").localeCompare(setupScheduledDate(right) || "9999-12-31") || String(time(left)).localeCompare(String(time(right))));
   }
   function addDays(key, amount) { const date = new Date(`${key}T12:00:00`); date.setDate(date.getDate() + amount); return dateKey(date); }
+  function mondayOfWeek(key) { const date = new Date(`${key}T12:00:00`); const day = date.getDay(); return addDays(key, -(day === 0 ? 6 : day - 1)); }
   function buildWeeklySetupTasks(events, today = dateKey()) {
     const tasks = new Map();
     (events || []).forEach((event) => {
@@ -783,19 +786,24 @@
     return [...tasks.values()].sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.eventDate.localeCompare(b.eventDate));
   }
   function timelineUsageKey(usage) { return `setup-event:${usage.eventOrderId}:${usage.canonicalVenue}:${usage.date}`; }
-  function timelineUsageColor(usage) { const task = state.manual.find((item) => setupUsageMatches(item, usage)); return task?.metadata?.color || usage.color || colorForSpace(usage.canonicalVenue); }
+  function timelineDefaultColor(usage) { const key = timelineUsageKey(usage); let hash = 0; for (let index = 0; index < key.length; index += 1) hash = ((hash << 5) - hash + key.charCodeAt(index)) | 0; return COLORS[Math.abs(hash) % COLORS.length]; }
+  function timelineColorValue(value, fallback) { const raw = normalize(value); if (/^#[0-9a-f]{6}$/i.test(raw)) return raw; const preset = window.BANQUET_ERP_CONSTANTS?.eventColors?.[raw]; return preset?.border || preset?.dot || fallback; }
+  function timelineUsageColor(usage) { const key = timelineUsageKey(usage); const task = state.manual.find((item) => setupUsageMatches(item, usage)); const stored = state.setupOverrides[key]?.color || task?.metadata?.setupOverride?.color || task?.metadata?.color || usage.color; return timelineColorValue(stored, timelineDefaultColor(usage)); }
+  function timelineEventTitle(event = {}) { return normalize(event.companyName || event.company_name || event.organizer || event.host || event.eventName || event.event_name) || "행사"; }
   function renderVenueUsageTimeline(events, centerDate) {
-    const dates = [-1, 0, 1, 2, 3].map((offset) => addDays(centerDate, offset));
+    const periodStart = addDays(mondayOfWeek(centerDate), timelineWeekOffset * 7);
+    const dates = Array.from({ length: timelineDayCount }, (_, offset) => addDays(periodStart, offset));
     const calendar = window.BANQUET_ERP_BANQUET_VENUE_USAGE?.buildBanquetVenueCalendar?.(events, { dates, venueUtils: window.BANQUET_ERP_VENUE_UTILS }) || { dates, lanes: [], reviewItems: [] };
     const colors = [...new Set(calendar.venueUsages.map(timelineUsageColor))];
-    const filter = `<div class="venue-timeline-toolbar"><strong>행사장 사용 타임라인</strong><label>색상 필터<select data-timeline-color-filter><option value="all">전체</option>${colors.map((color) => `<option value="${escapeHtml(color)}" ${timelineColorFilter === color ? "selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select></label>${calendar.reviewItems.length ? `<span class="venue-timeline-review">검수 대기 ${calendar.reviewItems.length}건</span>` : ""}</div>`;
-    const header = `<div class="venue-timeline-corner">행사장</div>${dates.map((date) => `<div class="venue-timeline-date ${date === centerDate ? "today" : ""}">${escapeHtml(date.slice(5).replace("-", "/"))}</div>`).join("")}`;
-    const rows = calendar.lanes.map((lane) => `<div class="venue-timeline-lane">${escapeHtml(lane.venueLabel)}</div>${dates.map((date) => { const cards = (lane.slots[date] || []).filter((usage) => timelineColorFilter === "all" || timelineUsageColor(usage) === timelineColorFilter).sort((left, right) => Number(state.setupOverrides[timelineUsageKey(left)]?.sortOrder ?? 9999) - Number(state.setupOverrides[timelineUsageKey(right)]?.sortOrder ?? 9999) || String(left.startTime).localeCompare(String(right.startTime))); return `<div class="venue-timeline-slot" data-timeline-date="${date}" data-timeline-venue="${escapeHtml(lane.canonicalVenue)}">${cards.map((usage) => { const event = events.find((item) => String(item.id) === String(usage.eventOrderId)); const key = timelineUsageKey(usage); const color = timelineUsageColor(usage); return `<article class="venue-timeline-card" draggable="true" tabindex="0" data-timeline-key="${escapeHtml(key)}" data-event-order-id="${escapeHtml(usage.eventOrderId)}" style="--timeline-card-color:${escapeHtml(color)}"><span>${escapeHtml(usage.startTime || "시간 미정")}</span><strong>${escapeHtml(eventDisplayTitle(event || {}))}</strong><small>${escapeHtml(eventSecondaryTitle(event || {}) || event?.companyName || "")}${usage.people ? ` · ${escapeHtml(usage.people)}명` : ""}</small></article>`; }).join("")}</div>`; }).join("")}`).join("");
+    const periodEnd = dates[dates.length - 1];
+    const filter = `<div class="venue-timeline-toolbar"><div><strong>행사장 사용 타임라인</strong><small>${escapeHtml(periodStart)} ~ ${escapeHtml(periodEnd)} · ${timelineDayCount / 7}주</small></div><div class="venue-timeline-navigation"><button type="button" data-timeline-week-step="-1">← 이전 주</button><button type="button" data-timeline-week-today>이번 주</button><button type="button" data-timeline-week-step="1">다음 주 →</button><button type="button" data-timeline-expand>${timelineDayCount === 21 ? "6주 보기" : "3주 보기"}</button></div><label>색상 필터<select data-timeline-color-filter><option value="all">전체</option>${colors.map((color) => `<option value="${escapeHtml(color)}" ${timelineColorFilter === color ? "selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select></label>${calendar.reviewItems.length ? `<span class="venue-timeline-review" title="날짜 또는 연회장이 명확하지 않아 자동 후보에서 제외된 원본 일정">검수 대기 ${calendar.reviewItems.length}건</span>` : ""}</div>`;
+    const header = `<div class="venue-timeline-corner">행사장</div>${dates.map((date) => { const weekday = new Intl.DateTimeFormat("ko-KR", { weekday: "short", timeZone: "Asia/Seoul" }).format(new Date(`${date}T12:00:00+09:00`)); return `<div class="venue-timeline-date ${date === seoulDateKey() ? "today" : ""} ${["토", "일"].includes(weekday) ? "weekend" : ""}"><span>${escapeHtml(date.slice(5).replace("-", "/"))}</span><small>${escapeHtml(weekday)}</small></div>`; }).join("")}`;
+    const rows = calendar.lanes.map((lane) => `<div class="venue-timeline-lane">${escapeHtml(lane.venueLabel)}</div>${dates.map((date) => { const cards = (lane.slots[date] || []).filter((usage) => timelineColorFilter === "all" || timelineUsageColor(usage) === timelineColorFilter).sort((left, right) => Number(state.setupOverrides[timelineUsageKey(left)]?.sortOrder ?? 9999) - Number(state.setupOverrides[timelineUsageKey(right)]?.sortOrder ?? 9999) || String(left.startTime).localeCompare(String(right.startTime))); return `<div class="venue-timeline-slot" data-timeline-date="${date}" data-timeline-venue="${escapeHtml(lane.canonicalVenue)}">${cards.map((usage) => { const event = events.find((item) => String(item.id) === String(usage.eventOrderId)); const key = timelineUsageKey(usage); const color = timelineUsageColor(usage); const meta = [usage.startTime || "", usage.people ? `${usage.people}명` : ""].filter(Boolean).join(" · "); return `<article class="venue-timeline-card" draggable="true" tabindex="0" data-timeline-key="${escapeHtml(key)}" data-event-order-id="${escapeHtml(usage.eventOrderId)}" style="--timeline-card-color:${escapeHtml(color)}"><strong>${escapeHtml(timelineEventTitle(event || {}))}</strong>${meta ? `<small>${escapeHtml(meta)}</small>` : ""}<label class="venue-timeline-color" title="카드 색상"><span class="sr-only">카드 색상</span><input type="color" value="${escapeHtml(color)}" data-timeline-color="${escapeHtml(key)}"></label></article>`; }).join("")}</div>`; }).join("")}`).join("");
     return `<section class="venue-usage-timeline">${filter}<div class="venue-timeline-grid" style="--timeline-columns:${dates.length}">${header}${rows || `<div class="venue-timeline-empty">표시할 실제 연회장 사용 일정이 없습니다.</div>`}</div></section>`;
   }
   function renderTimelineEventDetail(event, usage) {
-    const layout = normalize(event?.layoutText || event?.layout_text); const others = normalize(event?.othersText || event?.others_text || event?.internalMemo); const activities = (usage.activities || []).map((row) => `${row.time || ""} ${row.content || ""}`.trim()).filter(Boolean).join(" · ");
-    return `<article class="venue-timeline-detail"><header><span>${escapeHtml(usage.venueLabel || usage.canonicalVenue)} · ${escapeHtml(usage.date)}</span><h3>${escapeHtml(eventDisplayTitle(event || {}))}</h3><p>${escapeHtml(eventSecondaryTitle(event || {}) || event?.companyName || "")}</p></header><dl><dt>행사장 일정</dt><dd>${escapeHtml(activities || `${usage.startTime || "시간 미정"}${usage.endTime ? `~${usage.endTime}` : ""}`)}</dd><dt>LAY & OUT</dt><dd>${escapeHtml(layout || "등록된 내용 없음")}</dd><dt>특이사항</dt><dd>${escapeHtml(others || "등록된 내용 없음")}</dd></dl><div class="operation-detail-actions">${event?.storagePath ? `<button type="button" data-setup-original="${escapeHtml(event.id)}">원본 엑셀 보기</button>` : ""}<button type="button" data-event-attachments data-event-order-id="${escapeHtml(event?.id || "")}">레이아웃/첨부자료</button><button type="button" data-field-notes data-event-order-id="${escapeHtml(event?.id || "")}">특이사항</button><button type="button" data-timeline-detail-close>닫기</button></div></article>`;
+    const layout = normalize(event?.layoutText || event?.layout_text); const others = normalize(event?.othersText || event?.others_text || event?.internalMemo); const activities = (usage.activities || []).map((row) => `${row.time || ""} ${row.content || ""}`.trim()).filter(Boolean).join("\n"); const time = `${usage.startTime || "시간 미정"}${usage.endTime ? ` ~ ${usage.endTime}` : ""}`;
+    return `<article class="venue-timeline-detail"><header><div><span>${escapeHtml(usage.venueLabel || usage.canonicalVenue)}</span><h3>${escapeHtml(timelineEventTitle(event || {}))}</h3></div><button type="button" data-timeline-detail-close aria-label="닫기">×</button></header><div class="venue-timeline-detail-facts"><section><small>날짜</small><strong>${escapeHtml(usage.date)}</strong></section><section><small>행사장</small><strong>${escapeHtml(usage.venueLabel || usage.canonicalVenue)}</strong></section><section><small>시간</small><strong>${escapeHtml(time)}</strong></section><section><small>인원</small><strong>${escapeHtml(usage.people ? `${usage.people}명` : "미입력")}</strong></section></div><section class="venue-timeline-detail-section"><h4>행사 일정</h4><p>${escapeHtml(activities || time)}</p></section><section class="venue-timeline-detail-section"><h4>LAY &amp; OUT</h4><p>${escapeHtml(layout || "등록된 내용 없음")}</p></section><section class="venue-timeline-detail-section"><h4>특이사항</h4><p>${escapeHtml(others || "등록된 내용 없음")}</p></section><div class="operation-detail-actions">${event?.storagePath ? `<button type="button" data-setup-original="${escapeHtml(event.id)}">원본 엑셀</button>` : ""}<button type="button" data-event-attachments data-event-order-id="${escapeHtml(event?.id || "")}">첨부자료</button><button type="button" data-field-notes data-event-order-id="${escapeHtml(event?.id || "")}">현장 특이사항</button><button type="button" data-timeline-detail-close>닫기</button></div></article>`;
   }
   function render({ events = currentEvents } = {}) {
     root = root || document.getElementById("todayOperationBoard");
@@ -1407,6 +1415,20 @@
       root.querySelectorAll("[data-board-tab-panel]").forEach((panel) => { panel.hidden = panel.dataset.boardTabPanel !== activeBoardTab; });
     });
     root.querySelector("[data-timeline-color-filter]")?.addEventListener("change", (event) => { timelineColorFilter = event.target.value || "all"; render(); });
+    root.querySelectorAll("[data-timeline-week-step]").forEach((button) => button.addEventListener("click", () => { timelineWeekOffset += Number(button.dataset.timelineWeekStep || 0); render(); }));
+    root.querySelector("[data-timeline-week-today]")?.addEventListener("click", () => { timelineWeekOffset = 0; render(); });
+    root.querySelector("[data-timeline-expand]")?.addEventListener("click", () => { timelineDayCount = timelineDayCount === 21 ? 42 : 21; render(); });
+    root.querySelectorAll("[data-timeline-color]").forEach((input) => {
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("change", (event) => {
+        event.stopPropagation(); const key = input.dataset.timelineColor; const color = input.value;
+        state.setupOverrides[key] = { ...(state.setupOverrides[key] || {}), color };
+        const usage = currentEvents.flatMap((entry) => banquetVenueUsages(entry)).find((entry) => timelineUsageKey(entry) === key);
+        const candidate = usage ? rawSetupCandidate(currentEvents.find((entry) => String(entry.id) === String(usage.eventOrderId)), usage) : null;
+        const persistent = state.manual.find((item) => item.key === key) || (candidate ? ensurePersistentSetupBlock(candidate) : null);
+        saveState(); if (persistent) syncItem(persistent); render();
+      });
+    });
     let draggedTimelineKey = "";
     root.querySelectorAll("[data-timeline-key]").forEach((card) => {
       card.addEventListener("dragstart", () => { draggedTimelineKey = card.dataset.timelineKey; card.classList.add("dragging"); });

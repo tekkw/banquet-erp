@@ -28,4 +28,8 @@ const unknown = api.extractBanquetVenueUsages({ id: "unknown", schedule: [{ time
 assert.equal(unknown.venueUsages.length, 0); assert(unknown.reviewItems.length > 0);
 const grid = api.buildBanquetVenueCalendar([event], { dates: ["2026-11-17", "2026-11-18", "2026-11-19"] });
 assert(!grid.lanes.some((lane) => /프론트|피렌체/.test(lane.venueLabel))); assert.equal(grid.lanes[0].slots["2026-11-18"].length, 1);
+const firenzeOnly = api.extractBanquetVenueUsages({ id: "firenze-only", venue: "1F 피렌체", calendarDates: ["2026-11-18"] });
+assert.equal(firenzeOnly.reviewItems.length, 0); assert.equal(firenzeOnly.excludedSchedules[0].reason, "NON_BANQUET_VENUE");
+const outOfPeriod = { id: "old-review", venue: "미정", calendarDates: ["2025-01-01"] };
+assert.equal(api.buildBanquetVenueCalendar([outOfPeriod], { dates: ["2026-11-17"] }).reviewItems.length, 0, "표시 기간 밖 검수 항목은 집계하지 않는다");
 console.log("banquet venue usage V1 tests passed");
