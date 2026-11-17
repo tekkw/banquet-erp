@@ -119,11 +119,13 @@
   function getSetupTaskKey(task = {}) {
     const eventOrderId = task.eventOrderId || task.nextEventOrderId || task.next?.eventOrderId || "";
     const venue = [...normalizeVenueSet(task.venue)].sort().join("+") || comparable(task.venue);
-    return `${eventOrderId}|${venue}`;
+    const venueUsageDate = task.venueUsageDate || task.metadata?.venueUsageDate || task.eventDate || task.metadata?.eventDate || task.next?.date || task.metadata?.setupOverride?.eventDate || "";
+    return `${eventOrderId}|${venue}|${venueUsageDate}`;
   }
   function dedupeSetupCandidates(items = []) {
     const persistent = items.filter((item) => item.kind === "manual" || item.persistent === true); const automatic = [];
-    const matches = (left, right) => { const leftEvent = left.eventOrderId || left.nextEventOrderId || left.next?.eventOrderId; const rightEvent = right.eventOrderId || right.nextEventOrderId || right.next?.eventOrderId; return !!leftEvent && String(leftEvent) === String(rightEvent || "") && spacesOverlap(left.venue, right.venue); };
+    const usageDate = (item) => item.venueUsageDate || item.metadata?.venueUsageDate || item.eventDate || item.metadata?.eventDate || item.next?.date || item.metadata?.setupOverride?.eventDate || "";
+    const matches = (left, right) => { const leftEvent = left.eventOrderId || left.nextEventOrderId || left.next?.eventOrderId; const rightEvent = right.eventOrderId || right.nextEventOrderId || right.next?.eventOrderId; const leftDate = usageDate(left); const rightDate = usageDate(right); return !!leftEvent && String(leftEvent) === String(rightEvent || "") && spacesOverlap(left.venue, right.venue) && (!leftDate || !rightDate || leftDate === rightDate); };
     items.filter((item) => !(item.kind === "manual" || item.persistent === true)).forEach((item) => { if (!persistent.some((saved) => matches(saved, item)) && !automatic.some((saved) => matches(saved, item))) automatic.push(item); });
     return [...persistent, ...automatic];
   }

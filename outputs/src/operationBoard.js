@@ -21,6 +21,7 @@
   let defaultReminder = localStorage.getItem(REMINDER_DEFAULT_KEY) || "none";
   let mobileOpenGroups = loadOpenGroups();
   let activeBoardTab = "operations";
+  let timelineColorFilter = "all";
   let todayRoleFilter = "all";
   let todayAssigneeFilter = "all";
   let pinnedSetupOpenGroup = "all";
@@ -105,6 +106,22 @@
       return { row, index, day, time: timeValue(row.time), endTime: scheduleEndTime(row) };
     });
   }
+  function banquetVenueAnalysis(event) {
+    const analyzed = window.BANQUET_ERP_BANQUET_VENUE_USAGE?.extractBanquetVenueUsages?.(event, window.BANQUET_ERP_VENUE_UTILS); if (analyzed) return analyzed;
+    const usages = normalizedScheduleRows(event).filter((entry) => entry.day && !isHiddenHotelSchedule(entry.row, event) && !isFirenzeSchedule(entry.row, event)).flatMap((entry) => [...(window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueList?.(venueName(entry.row, event)) || [])].map((code) => ({ eventOrderId: event.id, date: entry.day, canonicalVenue: code, venueLabel: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(code) || code, startTime: entry.time, people: entry.row.people || event.guestCount || "", sourceScheduleIndexes: [entry.index], confidence: "legacy_fallback", needsReview: false })));
+    if (!usages.length) { const codes = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenueList?.(event.venue) || []; eventDates(event).forEach((date) => codes.forEach((code) => usages.push({ eventOrderId: event.id, date, canonicalVenue: code, venueLabel: window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(code) || code, startTime: timeValue(event.eventDateTime), people: event.guestCount || "", sourceScheduleIndexes: [], confidence: "legacy_fallback", needsReview: false }))); }
+    return { sourceEventPeriod: { startDate: event.startDate || "", endDate: event.endDate || "", calendarDates: eventDates(event) }, venueUsages: usages, excludedSchedules: [], reviewItems: [] };
+  }
+  function banquetVenueUsages(event, { includeReview = false } = {}) {
+    return banquetVenueAnalysis(event).venueUsages.filter((usage) => includeReview || !usage.needsReview);
+  }
+  function setupUsageIdentity(value = {}) {
+    const eventOrderId = value.eventOrderId || value.nextEventOrderId || value.next?.eventOrderId || "";
+    const canonicalVenue = value.canonicalVenue || value.metadata?.canonicalVenue || window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue?.(value.venue) || normalize(value.venue);
+    const usageDate = value.venueUsageDate || value.metadata?.venueUsageDate || value.next?.date || value.eventDate || value.metadata?.eventDate || value.metadata?.setupOverride?.eventDate || "";
+    return `${eventOrderId}|${canonicalVenue}|${usageDate}`;
+  }
+  function setupUsageMatches(left, right) { const leftParts = setupUsageIdentity(left).split("|"); const rightParts = setupUsageIdentity(right).split("|"); return leftParts[0] === rightParts[0] && leftParts[1] === rightParts[1] && (!leftParts[2] || !rightParts[2] || leftParts[2] === rightParts[2]); }
   function venueName(row, event) { return normalize(row.venue || event.venue) || "장소 미입력"; }
   function scheduleVenueName(row) { return normalize(row.venue || row.location || row.place); }
   function isFirenzeMealSchedule(row, type = classifySchedule(row.content)) { return ["lunch", "dinner", "meal"].includes(type) && /피렌체|firenze|florence/i.test(scheduleVenueName(row)); }
@@ -234,11 +251,23 @@
     const venueUtils = window.BANQUET_ERP_VENUE_UTILS; const normalizedVenue = venueUtils?.normalizeVenue(venue) || normalize(venue);
     const venueSet = venueUtils?.normalizeVenueSet(normalizedVenue); if (!normalizedVenue || !venueSet?.size) return null;
     const after = nextEventAfterParts(afterDateTime); const afterKey = `${after.date}T${after.time}`; const candidates = [];
+    if (window.BANQUET_ERP_BANQUET_VENUE_USAGE) {
+      (events || []).forEach((event) => {
+        if (excludeEventOrderId != null && String(event.id) === String(excludeEventOrderId)) return;
+        banquetVenueUsages(event).forEach((usage) => {
+          if (!venueUtils.spacesOverlap?.(normalizedVenue, usage.canonicalVenue)) return;
+          const candidateTime = usage.startTime || "23:59"; const dateTime = `${usage.date}T${candidateTime}`;
+          if (dateTime > afterKey) candidates.push({ event, row: (event.schedule || [])[usage.sourceScheduleIndexes?.[0]] || null, date: usage.date, time: usage.startTime || "", venue: usage.venueLabel || venueUtils.venueLabel(usage.canonicalVenue), canonicalVenue: usage.canonicalVenue, dateTime });
+        });
+      });
+      return coreRules().resolveNextEventForVenue({ venue: normalizedVenue, afterDateTime: afterKey, candidates });
+    }
     (events || []).forEach((event) => {
       if (excludeEventOrderId != null && String(event.id) === String(excludeEventOrderId)) return;
       const rows = normalizedScheduleRows(event).filter(({ row, day }) => day && !isHiddenHotelSchedule(row, event) && venueUtils.normalizeVenueSet(venueName(row, event)).size && spacesOverlap({ venue: normalizedVenue }, { venue: venueName(row, event) }));
       rows.forEach(({ row, day, time }) => { const candidateTime = time || "23:59"; if (`${day}T${candidateTime}` > afterKey) candidates.push({ event, row, date: day, time, venue: venueName(row, event), dateTime: `${day}T${candidateTime}` }); });
       if (rows.length) return;
+      if ((event.schedule || []).length) return;
       const candidateVenue = normalize(event.venue); const candidateSet = venueUtils.normalizeVenueSet(venueUtils.normalizeVenue(candidateVenue) || candidateVenue);
       if (!candidateSet.size || !spacesOverlap({ venue: normalizedVenue }, { venue: candidateVenue })) return;
       eventDates(event).forEach((day) => { const time = timeValue(event.eventDateTime); const candidateTime = time || "23:59"; if (`${day}T${candidateTime}` > afterKey) candidates.push({ event, row: null, date: day, time, venue: candidateVenue, dateTime: `${day}T${candidateTime}` }); });
@@ -753,6 +782,21 @@
     });
     return [...tasks.values()].sort((a, b) => a.plannedDate.localeCompare(b.plannedDate) || a.eventDate.localeCompare(b.eventDate));
   }
+  function timelineUsageKey(usage) { return `setup-event:${usage.eventOrderId}:${usage.canonicalVenue}:${usage.date}`; }
+  function timelineUsageColor(usage) { const task = state.manual.find((item) => setupUsageMatches(item, usage)); return task?.metadata?.color || usage.color || colorForSpace(usage.canonicalVenue); }
+  function renderVenueUsageTimeline(events, centerDate) {
+    const dates = [-1, 0, 1, 2, 3].map((offset) => addDays(centerDate, offset));
+    const calendar = window.BANQUET_ERP_BANQUET_VENUE_USAGE?.buildBanquetVenueCalendar?.(events, { dates, venueUtils: window.BANQUET_ERP_VENUE_UTILS }) || { dates, lanes: [], reviewItems: [] };
+    const colors = [...new Set(calendar.venueUsages.map(timelineUsageColor))];
+    const filter = `<div class="venue-timeline-toolbar"><strong>행사장 사용 타임라인</strong><label>색상 필터<select data-timeline-color-filter><option value="all">전체</option>${colors.map((color) => `<option value="${escapeHtml(color)}" ${timelineColorFilter === color ? "selected" : ""}>${escapeHtml(color)}</option>`).join("")}</select></label>${calendar.reviewItems.length ? `<span class="venue-timeline-review">검수 대기 ${calendar.reviewItems.length}건</span>` : ""}</div>`;
+    const header = `<div class="venue-timeline-corner">행사장</div>${dates.map((date) => `<div class="venue-timeline-date ${date === centerDate ? "today" : ""}">${escapeHtml(date.slice(5).replace("-", "/"))}</div>`).join("")}`;
+    const rows = calendar.lanes.map((lane) => `<div class="venue-timeline-lane">${escapeHtml(lane.venueLabel)}</div>${dates.map((date) => { const cards = (lane.slots[date] || []).filter((usage) => timelineColorFilter === "all" || timelineUsageColor(usage) === timelineColorFilter).sort((left, right) => Number(state.setupOverrides[timelineUsageKey(left)]?.sortOrder ?? 9999) - Number(state.setupOverrides[timelineUsageKey(right)]?.sortOrder ?? 9999) || String(left.startTime).localeCompare(String(right.startTime))); return `<div class="venue-timeline-slot" data-timeline-date="${date}" data-timeline-venue="${escapeHtml(lane.canonicalVenue)}">${cards.map((usage) => { const event = events.find((item) => String(item.id) === String(usage.eventOrderId)); const key = timelineUsageKey(usage); const color = timelineUsageColor(usage); return `<article class="venue-timeline-card" draggable="true" tabindex="0" data-timeline-key="${escapeHtml(key)}" data-event-order-id="${escapeHtml(usage.eventOrderId)}" style="--timeline-card-color:${escapeHtml(color)}"><span>${escapeHtml(usage.startTime || "시간 미정")}</span><strong>${escapeHtml(eventDisplayTitle(event || {}))}</strong><small>${escapeHtml(eventSecondaryTitle(event || {}) || event?.companyName || "")}${usage.people ? ` · ${escapeHtml(usage.people)}명` : ""}</small></article>`; }).join("")}</div>`; }).join("")}`).join("");
+    return `<section class="venue-usage-timeline">${filter}<div class="venue-timeline-grid" style="--timeline-columns:${dates.length}">${header}${rows || `<div class="venue-timeline-empty">표시할 실제 연회장 사용 일정이 없습니다.</div>`}</div></section>`;
+  }
+  function renderTimelineEventDetail(event, usage) {
+    const layout = normalize(event?.layoutText || event?.layout_text); const others = normalize(event?.othersText || event?.others_text || event?.internalMemo); const activities = (usage.activities || []).map((row) => `${row.time || ""} ${row.content || ""}`.trim()).filter(Boolean).join(" · ");
+    return `<article class="venue-timeline-detail"><header><span>${escapeHtml(usage.venueLabel || usage.canonicalVenue)} · ${escapeHtml(usage.date)}</span><h3>${escapeHtml(eventDisplayTitle(event || {}))}</h3><p>${escapeHtml(eventSecondaryTitle(event || {}) || event?.companyName || "")}</p></header><dl><dt>행사장 일정</dt><dd>${escapeHtml(activities || `${usage.startTime || "시간 미정"}${usage.endTime ? `~${usage.endTime}` : ""}`)}</dd><dt>LAY & OUT</dt><dd>${escapeHtml(layout || "등록된 내용 없음")}</dd><dt>특이사항</dt><dd>${escapeHtml(others || "등록된 내용 없음")}</dd></dl><div class="operation-detail-actions">${event?.storagePath ? `<button type="button" data-setup-original="${escapeHtml(event.id)}">원본 엑셀 보기</button>` : ""}<button type="button" data-event-attachments data-event-order-id="${escapeHtml(event?.id || "")}">레이아웃/첨부자료</button><button type="button" data-field-notes data-event-order-id="${escapeHtml(event?.id || "")}">특이사항</button><button type="button" data-timeline-detail-close>닫기</button></div></article>`;
+  }
   function render({ events = currentEvents } = {}) {
     root = root || document.getElementById("todayOperationBoard");
     weeklyRoot = weeklyRoot || document.getElementById("weeklySetupWidget");
@@ -782,13 +826,14 @@
       ${beverageWarning}
       <div class="operation-date-controls" aria-label="운영보드 날짜 선택"><button type="button" data-board-date-step="-1" aria-label="이전 날짜">◀</button><input type="date" data-board-date value="${escapeHtml(selectedDate)}" aria-label="운영 날짜"><button type="button" data-board-date-step="1" aria-label="다음 날짜">▶</button><button type="button" data-board-today>오늘</button></div>
       <div class="operation-briefing-counts"><span>행사 <strong>${selectedEvents.length}</strong>건</span><span>중식 <strong>${counts.lunch}</strong>건</span><span>석식 <strong>${counts.dinner}</strong>건</span><span>커피브레이크 <strong>${counts.coffee}</strong>건</span><span>다음 세팅 <strong>${counts.next_setup}</strong>건</span></div>
-      <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
+      <nav class="operation-board-tabs" aria-label="운영보드 보기"><button type="button" data-board-tab="operations" aria-selected="${activeBoardTab === "operations"}">운영</button><button type="button" data-board-tab="timeline" aria-selected="${activeBoardTab === "timeline"}">행사장 타임라인</button><button type="button" data-board-tab="setup" aria-selected="${activeBoardTab === "setup"}">다음 세팅</button></nav>
       <section class="operation-board-tab-panel" data-board-tab-panel="operations" ${activeBoardTab === "operations" ? "" : "hidden"}>
         ${showStandaloneMobileAgenda ? renderTodayAgenda(activeAgenda, completedAgenda) : ""}
         <div class="operation-timeline">${spaceGroups.length ? renderSpaceGroups(spaceGroups) : '<div class="operation-board-empty">이 날짜에 등록된 운영 일정이 없습니다.<br><button class="primary-button" type="button" data-general-board-add>일반 작업 추가</button></div>'}</div>
       </section>
+      <section class="operation-board-tab-panel" data-board-tab-panel="timeline" ${activeBoardTab === "timeline" ? "" : "hidden"}>${renderVenueUsageTimeline(currentEvents, selectedDate)}</section>
       <section class="operation-board-tab-panel" data-board-tab-panel="setup" ${activeBoardTab === "setup" ? "" : "hidden"}>
-        <div class="setup-tab-toolbar"><button type="button" class="primary-button" data-setup-create>+ 다음 세팅 추가</button></div>
+        <div class="setup-tab-toolbar"><button type="button" class="primary-button" data-setup-create>+ 다음 세팅 추가</button>${setupLists.reviewItems?.length ? `<span class="venue-timeline-review">자동 후보 제외 · 검수 대기 ${setupLists.reviewItems.length}건</span>` : ""}</div>
         ${renderSetupTaskBoard(setupLists.pinned, actualToday)}
         ${renderSetupCandidates(setupLists.candidates)}
       </section>
@@ -1223,34 +1268,35 @@
     const end = new Date(start); end.setUTCDate(end.getUTCDate() + ((7 - day) % 7) + 7);
     return { start: today, end: end.toISOString().slice(0, 10) };
   }
-  function setupEventDetails(event, preferredDate = "") {
-    const dates = eventDates(event).sort();
-    const eventDate = preferredDate || dates.find((day) => day >= seoulDateKey()) || dates[0] || "";
-    const row = normalizedScheduleRows(event).filter((entry) => !eventDate || entry.day === eventDate).sort((left, right) => left.time.localeCompare(right.time))[0];
-    return { eventDate, time: row?.time || timeValue(event.eventDateTime), venue: venueName(row?.row || {}, event), title: eventDisplayTitle(event), subtitle: eventSecondaryTitle(event), people: row?.row?.people || event.guestCount || "" };
+  function setupEventDetails(event, preferredDate = "", preferredVenue = "") {
+    const usages = banquetVenueUsages(event); const preferredCode = window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue?.(preferredVenue) || preferredVenue;
+    const usage = usages.filter((item) => (!preferredDate || item.date === preferredDate) && (!preferredCode || window.BANQUET_ERP_VENUE_UTILS?.spacesOverlap?.(item.canonicalVenue, preferredCode))).sort((left, right) => left.date.localeCompare(right.date) || String(left.startTime).localeCompare(String(right.startTime)))[0];
+    if (usage) return { eventDate: usage.date, venueUsageDate: usage.date, time: usage.startTime || "", venue: usage.venueLabel || window.BANQUET_ERP_VENUE_UTILS?.venueLabel?.(usage.canonicalVenue) || usage.canonicalVenue, canonicalVenue: usage.canonicalVenue, title: eventDisplayTitle(event), subtitle: eventSecondaryTitle(event), people: usage.people || event.guestCount || "", confidence: usage.confidence, needsReview: usage.needsReview };
+    const dates = eventDates(event).sort(); const eventDate = preferredDate || dates.find((day) => day >= seoulDateKey()) || dates[0] || ""; const row = normalizedScheduleRows(event).filter((entry) => !eventDate || entry.day === eventDate).sort((left, right) => left.time.localeCompare(right.time))[0];
+    return { eventDate, time: row?.time || timeValue(event.eventDateTime), venue: venueName(row?.row || {}, event), canonicalVenue: window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue?.(venueName(row?.row || {}, event)) || "", title: eventDisplayTitle(event), subtitle: eventSecondaryTitle(event), people: row?.row?.people || event.guestCount || "", needsReview: true };
   }
   function futureEventDate(event, actualToday = seoulDateKey()) {
-    return eventDates(event).sort().find((day) => day >= actualToday) || "";
+    return banquetVenueUsages(event).map((usage) => usage.date).sort().find((day) => day >= actualToday) || "";
   }
-  function rawSetupCandidate(event, eventDate) {
-    const details = setupEventDetails(event, eventDate); const venue = details.venue || event.venue || "장소 미입력";
-    return { key: `setup-event:${event.id}`, id: `setup-event:${event.id}`, kind: "next_setup", type: "next_setup", rawSetupCandidate: true, date: eventDate, time: details.time || "", venue, spaceId: spaceKey({}, event), eventOrderId: event.id, title: details.title, eventSubtitle: details.subtitle, people: details.people, completed: false, metadataSource: "future_event_candidate", next: { eventOrderId: event.id, date: eventDate, time: details.time || "", name: details.title, subtitle: details.subtitle, people: details.people, layoutType: inferLayoutType(event), recommendation: recommendLayout(event.venueLayouts || [], inferLayoutType(event), details.people) } };
+  function rawSetupCandidate(event, usageOrDate) {
+    const usage = typeof usageOrDate === "object" ? usageOrDate : banquetVenueUsages(event).find((item) => item.date === usageOrDate); const details = setupEventDetails(event, usage?.date || usageOrDate, usage?.canonicalVenue || ""); const venue = details.venue || event.venue || "장소 미입력"; const eventDate = details.eventDate || usage?.date || ""; const canonicalVenue = details.canonicalVenue || usage?.canonicalVenue || window.BANQUET_ERP_VENUE_UTILS?.normalizeVenue?.(venue) || ""; const key = `setup-event:${event.id}:${canonicalVenue || normalize(venue)}:${eventDate}`;
+    return { key, id: key, kind: "next_setup", type: "next_setup", rawSetupCandidate: true, date: eventDate, venueUsageDate: eventDate, time: details.time || "", venue, canonicalVenue, spaceId: spaceKey({ venue }, event), eventOrderId: event.id, title: details.title, eventSubtitle: details.subtitle, people: details.people, completed: false, metadataSource: "future_event_candidate", metadata: { source: "future_event_candidate", canonicalVenue, venueUsageDate: eventDate, sourceEventPeriod: banquetVenueAnalysis(event).sourceEventPeriod }, next: { eventOrderId: event.id, date: eventDate, time: details.time || "", name: details.title, subtitle: details.subtitle, people: details.people, layoutType: inferLayoutType(event), recommendation: recommendLayout(event.venueLayouts || [], inferLayoutType(event), details.people) } };
   }
   function classifySetupBoardItems(events = currentEvents, setupTasks = state.manual, actualToday = seoulDateKey()) {
-    const tasks = coreRules().dedupeSetupCandidates((setupTasks || []).filter((item) => item.type === "next_setup"));
-    const completedEventIds = new Set(tasks.filter((item) => item.completed === true || state.completions[item.key] === true).map((item) => String(item.eventOrderId || item.next?.eventOrderId || "")).filter(Boolean));
-    const activeTasks = tasks.filter((item) => item.completed !== true && state.completions[item.key] !== true).map(applySetupOverride); const activeByEvent = new Map();
-    activeTasks.forEach((item) => { const id = String(item.eventOrderId || item.next?.eventOrderId || ""); if (!id) return; const current = activeByEvent.get(id); if (!current || (!state.pins[current.key] && state.pins[item.key])) activeByEvent.set(id, item); });
-    const pinned = [...activeByEvent.values(), ...activeTasks.filter((item) => !(item.eventOrderId || item.next?.eventOrderId))].filter((item) => state.pins[item.key]);
-    const pinnedEventIds = new Set(pinned.map((item) => String(item.eventOrderId || item.next?.eventOrderId || "")));
-    const candidatesByEvent = new Map();
-    [...activeByEvent.values()].filter((item) => !state.pins[item.key]).forEach((item) => { const id = String(item.eventOrderId || item.next?.eventOrderId || ""); const event = (events || []).find((entry) => String(entry.id) === id); if (event && futureEventDate(event, actualToday)) candidatesByEvent.set(id, item); });
-    (events || []).forEach((event) => { const id = String(event.id || ""); const eventDate = futureEventDate(event, actualToday); if (!id || !eventDate || completedEventIds.has(id) || pinnedEventIds.has(id) || candidatesByEvent.has(id)) return; candidatesByEvent.set(id, rawSetupCandidate(event, eventDate)); });
+    const tasks = (setupTasks || []).filter((item) => item.type === "next_setup");
+    const completedTasks = tasks.filter((item) => item.completed === true || state.completions[item.key] === true).map(applySetupOverride);
+    const activeTasks = tasks.filter((item) => item.completed !== true && state.completions[item.key] !== true).map(applySetupOverride); const activeByUsage = new Map();
+    activeTasks.forEach((item) => { const identity = setupUsageIdentity(item); const current = activeByUsage.get(identity); if (!current || (!state.pins[current.key] && state.pins[item.key])) activeByUsage.set(identity, item); });
+    const pinned = [...activeByUsage.values(), ...activeTasks.filter((item) => !(item.eventOrderId || item.next?.eventOrderId))].filter((item) => state.pins[item.key]);
+    const candidatesByUsage = new Map();
+    [...activeByUsage.values()].filter((item) => !state.pins[item.key]).forEach((item) => { const event = (events || []).find((entry) => String(entry.id) === String(item.eventOrderId || item.next?.eventOrderId || "")); if (event && banquetVenueUsages(event).some((usage) => usage.date >= actualToday && setupUsageMatches(item, { eventOrderId: event.id, canonicalVenue: usage.canonicalVenue, venueUsageDate: usage.date }))) candidatesByUsage.set(setupUsageIdentity(item), item); });
+    (events || []).forEach((event) => banquetVenueUsages(event).filter((usage) => usage.date >= actualToday).forEach((usage) => { const candidate = rawSetupCandidate(event, usage); const identity = setupUsageIdentity(candidate); if (!event.id || completedTasks.some((item) => setupUsageMatches(item, candidate)) || pinned.some((item) => setupUsageMatches(item, candidate)) || [...candidatesByUsage.values()].some((item) => setupUsageMatches(item, candidate))) return; candidatesByUsage.set(identity, candidate); }));
     const candidateSort = (left, right) => { const leftInfo = setupCardInfo(left); const rightInfo = setupCardInfo(right); return String(leftInfo.eventDate).localeCompare(String(rightInfo.eventDate)) || String(leftInfo.eventTime).localeCompare(String(rightInfo.eventTime)) || String(leftInfo.venue).localeCompare(String(rightInfo.venue), "ko"); };
-    return { pinned: sortSetupTasks(pinned, actualToday), candidates: [...candidatesByEvent.values()].sort(candidateSort) };
+    const reviewItems = (events || []).flatMap((event) => banquetVenueAnalysis(event).reviewItems.map((item) => ({ ...item, eventOrderId: event.id, eventName: eventDisplayTitle(event) })));
+    return { pinned: sortSetupTasks(pinned, actualToday), candidates: [...candidatesByUsage.values()].sort(candidateSort), reviewItems };
   }
   function setupEventCandidates(venue, today = seoulDateKey()) {
-    return currentEvents.flatMap((event) => { const eventDate = futureEventDate(event, today); if (!eventDate) return []; const details = setupEventDetails(event, eventDate); return [{ event, details, overlap: spacesOverlap({ venue }, event) }]; })
+    return currentEvents.flatMap((event) => banquetVenueUsages(event, { includeReview: true }).filter((usage) => usage.date >= today).map((usage) => { const details = setupEventDetails(event, usage.date, usage.canonicalVenue); return { event, details, overlap: spacesOverlap({ venue }, { venue: usage.venueLabel || usage.canonicalVenue }), needsReview: usage.needsReview }; }))
       .sort((left, right) => left.details.eventDate.localeCompare(right.details.eventDate) || String(left.details.time).localeCompare(String(right.details.time)) || Number(right.overlap) - Number(left.overlap) || left.details.title.localeCompare(right.details.title, "ko"));
   }
   function formatSetupCandidateLabel(details, includeSecondary = false) {
@@ -1359,6 +1405,24 @@
       activeBoardTab = button.dataset.boardTab;
       root.querySelectorAll("[data-board-tab]").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.boardTab === activeBoardTab)));
       root.querySelectorAll("[data-board-tab-panel]").forEach((panel) => { panel.hidden = panel.dataset.boardTabPanel !== activeBoardTab; });
+    });
+    root.querySelector("[data-timeline-color-filter]")?.addEventListener("change", (event) => { timelineColorFilter = event.target.value || "all"; render(); });
+    let draggedTimelineKey = "";
+    root.querySelectorAll("[data-timeline-key]").forEach((card) => {
+      card.addEventListener("dragstart", () => { draggedTimelineKey = card.dataset.timelineKey; card.classList.add("dragging"); });
+      card.addEventListener("dragend", () => card.classList.remove("dragging"));
+      card.addEventListener("click", () => {
+        const allUsages = currentEvents.flatMap((event) => banquetVenueUsages(event)); const usage = allUsages.find((item) => timelineUsageKey(item) === card.dataset.timelineKey); const event = currentEvents.find((item) => String(item.id) === String(usage?.eventOrderId)); const dialog = root.querySelector("[data-operation-detail]"); if (!usage || !event || !dialog) return;
+        dialog.querySelector("[data-operation-detail-content]").innerHTML = renderTimelineEventDetail(event, usage); dialog.showModal();
+        dialog.querySelector("[data-timeline-detail-close]").onclick = () => dialog.close();
+        dialog.querySelector("[data-setup-original]")?.addEventListener("click", () => openEventOriginal(event.id));
+        dialog.querySelector("[data-event-attachments]")?.addEventListener("click", () => window.BANQUET_ERP_EVENT_ATTACHMENTS?.openEventAttachments(event.id, eventDisplayTitle(event)));
+        dialog.querySelector("[data-field-notes]")?.addEventListener("click", () => window.BANQUET_ERP_EVENT_ATTACHMENTS?.openFieldNotes(event.id, eventDisplayTitle(event)));
+      });
+    });
+    root.querySelectorAll("[data-timeline-date][data-timeline-venue]").forEach((slot) => {
+      slot.addEventListener("dragover", (event) => event.preventDefault());
+      slot.addEventListener("drop", (event) => { event.preventDefault(); if (!draggedTimelineKey) return; const [prefix, eventOrderId, canonicalVenue, venueUsageDate] = draggedTimelineKey.split(":"); if (prefix !== "setup-event" || slot.dataset.timelineVenue !== canonicalVenue || slot.dataset.timelineDate !== venueUsageDate) return; const siblings = [...slot.querySelectorAll("[data-timeline-key]")].filter((card) => card.dataset.timelineKey !== draggedTimelineKey); const target = event.target.closest("[data-timeline-key]"); const index = target ? Math.max(0, siblings.indexOf(target)) : siblings.length; state.setupOverrides[draggedTimelineKey] = { ...(state.setupOverrides[draggedTimelineKey] || {}), sortOrder: index }; siblings.forEach((card, order) => { state.setupOverrides[card.dataset.timelineKey] = { ...(state.setupOverrides[card.dataset.timelineKey] || {}), sortOrder: order >= index ? order + 1 : order }; }); const candidate = classifySetupBoardItems(currentEvents, state.manual, seoulDateKey()).candidates.find((item) => item.key === draggedTimelineKey); const persistent = candidate ? ensurePersistentSetupBlock(candidate) : state.manual.find((item) => item.key === draggedTimelineKey); if (persistent) { persistent.metadata = { ...(persistent.metadata || {}), sortOrder: index, canonicalVenue, venueUsageDate }; syncItem(persistent); } saveState(); draggedTimelineKey = ""; render(); });
     });
     [root, weeklyRoot].filter(Boolean).forEach((container) => {
       container.querySelectorAll("[data-setup-original]").forEach((button) => {
