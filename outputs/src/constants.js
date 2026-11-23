@@ -30,6 +30,10 @@ window.BANQUET_ERP_CONSTANTS = {
   storageKey: "banquetErpEvents.v1",
   runtimeEnvironment: banquetRuntimeConfig.environment,
   assertSafeSupabaseWriteTarget,
+  featureFlags: Object.freeze({
+    venueTimelineEnabled: banquetRuntimeConfig.features?.venueTimelineEnabled !== false,
+    venueTimelineEditingEnabled: banquetRuntimeConfig.features?.venueTimelineEditingEnabled === true,
+  }),
 
   loginAccounts: [
     { id: "banquet123", password: "1303", role: "user", label: "일반 사용자" },

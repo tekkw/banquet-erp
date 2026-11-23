@@ -1,5 +1,9 @@
 supabase/.temp/
 work/.supabase/
+backups/
+.env
+.env.*
+!.env.example
 
 .DS_Store
 Thumbs.db
