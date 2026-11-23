@@ -15,9 +15,21 @@
  * - 객실, 식음, 시설, 구매 모듈이 추가되면 부서 공통 코드, 권한, 메뉴, 상태값도 이 파일 또는 shared constants로 확장한다.
  */
 
+const banquetRuntimeConfig = Object.freeze({ environment: "production", supabaseUrl: "", supabaseAnonKey: "", ...(window.BANQUET_ERP_RUNTIME_CONFIG || {}) });
+const banquetProductionProjectRef = "pnolttdubxxmxorufpyk";
+function supabaseProjectRef(value = "") { try { return new URL(value).hostname.split(".")[0] || ""; } catch { return ""; } }
+function assertSafeSupabaseWriteTarget(url) {
+  const targetRef = supabaseProjectRef(url); const environment = String(banquetRuntimeConfig.environment || "production").toLowerCase();
+  if (["test", "testing", "staging", "local"].includes(environment) && targetRef === banquetProductionProjectRef) throw new Error("테스트 환경의 운영 Supabase 쓰기 요청을 차단했습니다.");
+  if (environment === "production" && banquetRuntimeConfig.supabaseUrl && targetRef !== banquetProductionProjectRef) throw new Error("운영 환경의 비운영 Supabase 쓰기 요청을 차단했습니다.");
+  return true;
+}
+
 window.BANQUET_ERP_CONSTANTS = {
   authStorageKey: "banquetErpCurrentUser.v1",
   storageKey: "banquetErpEvents.v1",
+  runtimeEnvironment: banquetRuntimeConfig.environment,
+  assertSafeSupabaseWriteTarget,
 
   loginAccounts: [
     { id: "banquet123", password: "1303", role: "user", label: "일반 사용자" },
@@ -25,14 +37,14 @@ window.BANQUET_ERP_CONSTANTS = {
   ],
 
   supabaseConfig: {
-    url: "https://pnolttdubxxmxorufpyk.supabase.co",
-    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2x0dGR1Ynh4bXhvcnVmcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMDYxMTIsImV4cCI6MjA5NzU4MjExMn0.WhDRdoQUSQdQTfkcdEvzV2QT642vROHJxAE6k7hLqxA",
+    url: banquetRuntimeConfig.supabaseUrl || "https://pnolttdubxxmxorufpyk.supabase.co",
+    anonKey: banquetRuntimeConfig.supabaseAnonKey || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBub2x0dGR1Ynh4bXhvcnVmcHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMDYxMTIsImV4cCI6MjA5NzU4MjExMn0.WhDRdoQUSQdQTfkcdEvzV2QT642vROHJxAE6k7hLqxA",
     bucket: "event-orders",
     assetImageBucket: "asset-images",
     chatAttachmentBucket: "ai-chat-attachments",
     venueLayoutBucket: "venue-layouts",
     chatFunction: "event-order-ai-chat",
-    functionUrl: "https://pnolttdubxxmxorufpyk.supabase.co/functions/v1/event-order-ai-chat",
+    functionUrl: `${banquetRuntimeConfig.supabaseUrl || "https://pnolttdubxxmxorufpyk.supabase.co"}/functions/v1/event-order-ai-chat`,
   },
 
   /*

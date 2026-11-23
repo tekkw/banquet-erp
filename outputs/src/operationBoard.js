@@ -643,6 +643,8 @@
   async function remoteRequest(path, options = {}) {
     const config = window.BANQUET_ERP_CONSTANTS?.supabaseConfig;
     if (!config?.url || !config?.anonKey) throw new Error("Supabase 설정 없음");
+    const method = String(options.method || "GET").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) window.BANQUET_ERP_CONSTANTS?.assertSafeSupabaseWriteTarget?.(config.url);
     const response = await fetch(`${config.url}/rest/v1/${path}`, { ...options, headers: { apikey: config.anonKey, Authorization: `Bearer ${config.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) } });
     const text = await response.text();
     if (!response.ok) {

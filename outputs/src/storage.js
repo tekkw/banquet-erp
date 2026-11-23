@@ -110,6 +110,8 @@
      */
     async function supabaseRequest(path, options = {}) {
       const headers = { ...(options.headers || {}) };
+      const method = String(options.method || "GET").toUpperCase();
+      if (!["GET", "HEAD", "OPTIONS"].includes(method)) window.BANQUET_ERP_CONSTANTS?.assertSafeSupabaseWriteTarget?.(supabaseConfig.url);
       if (typeof options.body === "string" && !Object.keys(headers).some((name) => name.toLowerCase() === "content-type")) headers["Content-Type"] = "application/json";
       const response = await fetch(`${supabaseConfig.url}/rest/v1/${path}`, {
         ...options,

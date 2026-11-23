@@ -253,6 +253,8 @@
     render();
   }
   async function request(path, options = {}) {
+    const method = String(options.method || "GET").toUpperCase();
+    if (!["GET", "HEAD", "OPTIONS"].includes(method)) constants.assertSafeSupabaseWriteTarget?.(constants.supabaseConfig.url);
     const response = await fetch(`${constants.supabaseConfig.url}/rest/v1/${path}`, { ...options, headers: { apikey: constants.supabaseConfig.anonKey, Authorization: `Bearer ${constants.supabaseConfig.anonKey}`, "Content-Type": "application/json", ...(options.headers || {}) } });
     const text = await response.text();
     if (!response.ok) {
