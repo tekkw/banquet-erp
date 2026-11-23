@@ -21,6 +21,10 @@ assert(source.includes("timelineDayCount = 21"));
 assert(source.includes("mondayOfWeek(centerDate)"));
 assert(source.includes("data-timeline-week-step"));
 assert(source.includes("data-timeline-color"));
+assert(source.includes("data-timeline-cell-edit"));
+assert(source.includes("data-cell-split"));
+assert(source.includes("data-cell-merge"));
+assert(source.includes('name="scheduledEndDate"'));
 assert(source.includes("event.companyName || event.company_name || event.organizer"));
 const previousEvent = { id: "previous", companyName: "A학회", schedule: [{ date: "2026-11-17", time: "09:00~17:00", venue: "페스타", content: "행사" }] };
 const nextEvent = { id: "next", companyName: "B제약", schedule: [{ date: "2026-11-19", time: "09:00~18:00", venue: "페스타", content: "행사" }] };
@@ -38,4 +42,7 @@ assert.equal(board.buildSetupTimelineOpportunities([sameEventRows]).length, 1, "
 const afternoonKey = "setup-event:afternoon:FESTA:2026-11-17";
 board._setStateForTest({ manual: [{ key: afternoonKey, type: "next_setup", kind: "manual", eventOrderId: "afternoon", venue: "페스타", scheduledDate: "2026-11-17", metadata: { setupOverride: { scheduledDate: "2026-11-17", turnoverDecision: "confirmed" } } }], setupOverrides: { [afternoonKey]: { scheduledDate: "2026-11-17", turnoverDecision: "confirmed" } } });
 assert.equal(board.buildSetupTimelineOpportunities([previousEvent, afternoon]).find((item) => item.event.id === "afternoon").turnoverDecision, "confirmed", "수동 뒤집기 확정값을 보존한다");
+board._setStateForTest({ manual: [{ key: afternoonKey, type: "next_setup", kind: "manual", eventOrderId: "afternoon", venue: "페스타", scheduledDate: "2026-11-17", metadata: { setupOverride: { scheduledDate: "2026-11-17", scheduledEndDate: "2026-11-19", timelineSegments: [{ id: "a", label: "반입" }, { id: "b", label: "배치" }] } } }], setupOverrides: { [afternoonKey]: { scheduledDate: "2026-11-17", scheduledEndDate: "2026-11-19", timelineSegments: [{ id: "a", label: "반입" }, { id: "b", label: "배치" }] } } });
+const ranged = board.buildSetupTimelineOpportunities([previousEvent, afternoon]).find((item) => item.event.id === "afternoon");
+assert.equal(ranged.scheduledEndDate, "2026-11-19"); assert.equal(ranged.timelineSegments.length, 2);
 console.log("operation board banquet usage integration V1 tests passed");

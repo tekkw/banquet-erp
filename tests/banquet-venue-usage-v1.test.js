@@ -32,4 +32,7 @@ const firenzeOnly = api.extractBanquetVenueUsages({ id: "firenze-only", venue: "
 assert.equal(firenzeOnly.reviewItems.length, 0); assert.equal(firenzeOnly.excludedSchedules[0].reason, "NON_BANQUET_VENUE");
 const outOfPeriod = { id: "old-review", venue: "미정", calendarDates: ["2025-01-01"] };
 assert.equal(api.buildBanquetVenueCalendar([outOfPeriod], { dates: ["2026-11-17"] }).reviewItems.length, 0, "표시 기간 밖 검수 항목은 집계하지 않는다");
+const reentry = api.extractBanquetVenueUsages({ id: "reentry", schedule: [{ date: "2026-11-18", time: "09:00~10:00", venue: "페스타", content: "오전 행사" }, { date: "2026-11-18", time: "15:00~16:00", venue: "페스타", content: "오후 재입장" }] });
+assert.equal(reentry.venueUsages.length, 2, "같은 날 같은 연회장이라도 명시 시간 구간이 떨어진 재입장은 분리한다");
+assert.notEqual(reentry.venueUsages[0].id, reentry.venueUsages[1].id);
 console.log("banquet venue usage V1 tests passed");
