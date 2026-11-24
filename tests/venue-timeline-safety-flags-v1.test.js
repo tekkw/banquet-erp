@@ -27,6 +27,6 @@ const ignore = fs.readFileSync(".gitignore", "utf8"); assert(ignore.includes("ba
 for (const page of ["outputs/index.html", "outputs/event-order-preview.html", "outputs/board/index.html"]) {
   const html = fs.readFileSync(page, "utf8");
   assert(html.includes("constants.js?v=venue-timeline-v32-safety"), `${page} must cache-bust feature flags`);
-  assert(html.includes("operationBoard.js?v=venue-timeline-v32-safety"), `${page} must cache-bust timeline guards`);
+  assert(html.includes("operationBoard.js?v=venue-timeline-responsive-v1"), `${page} must cache-bust timeline guards`);
 }
 console.log("venue timeline safety flags V1 tests passed");
