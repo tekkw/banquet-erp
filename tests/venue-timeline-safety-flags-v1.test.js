@@ -12,8 +12,8 @@ assert.equal(constants({ features: { venueTimelineEditingEnabled: true } }).feat
 
 const boardSource = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
 assert(boardSource.includes('if (!requireVenueTimelineEditing()) return false;'), "save function must fail closed");
-assert(boardSource.includes('if (venueTimelineEditingEnabled()) root.querySelectorAll("[data-timeline-color]")'), "color handlers must not bind in read-only mode");
-assert(boardSource.includes('if (venueTimelineEditingEnabled()) root.querySelectorAll("[data-timeline-date][data-timeline-venue]")'), "drag/drop handlers must not bind in read-only mode");
+assert(boardSource.includes('if (venueTimelineEditingEnabled()) timelineContainer?.querySelectorAll("[data-timeline-color]")'), "color handlers must not bind in read-only mode");
+assert(boardSource.includes('if (venueTimelineEditingEnabled()) timelineContainer?.querySelectorAll("[data-timeline-date][data-timeline-venue]")'), "drag/drop handlers must not bind in read-only mode");
 assert(boardSource.includes('if (!venueTimelineEnabled() && activeBoardTab === "timeline") activeBoardTab = "operations"'), "emergency disable must return to operations");
 assert(boardSource.includes('{ ...(item.metadata || {}), setupOverride:'), "metadata must be merged, not replaced");
 assert(boardSource.includes('{ ...(state.setupOverrides[key] || {}), ...changes }'), "setupOverride changes must preserve existing keys");

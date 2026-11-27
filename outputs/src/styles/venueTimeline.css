@@ -12,6 +12,7 @@
 .venue-timeline-toolbar label { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .venue-timeline-review { color: #f2c46d; font-size: 12px; }
 .setup-timeline-pending { display: grid; gap: 8px; min-width: 0; padding: 10px 12px; border: 1px solid rgba(214,179,90,.28); border-radius: 12px; background: rgba(214,179,90,.06); }
+.setup-timeline-pending > summary { cursor: pointer; color: var(--text-primary, #f4f7fa); font-weight: 800; }
 .setup-timeline-pending > div { display: flex; gap: 7px; overflow-x: auto; }
 .setup-pending-card { flex: 0 0 210px; }
 .setup-scheduled-card.turnover { box-shadow: inset 0 0 0 2px #f2c46d; }
@@ -54,6 +55,19 @@
 .venue-timeline-detail-section h4 { margin: 0 0 6px; color: #b9c7d2; font-size: 12px; }
 .venue-timeline-detail-section p { margin: 0; overflow-wrap: anywhere; line-height: 1.55; white-space: pre-wrap; }
 .venue-timeline-detail .operation-detail-actions { flex-wrap: wrap; }
+
+.venue-timeline-page { width: 100%; min-width: 0; padding: 20px clamp(14px, 2vw, 30px) 32px; }
+.venue-timeline-page-header { display: block; margin-bottom: 14px; }
+.venue-timeline-page-header h1 { margin: 3px 0 4px; color: var(--text-primary, #f4f7fa); font-size: clamp(24px, 2.2vw, 34px); }
+.venue-timeline-page-header p { margin: 0; color: var(--text-secondary, #96a9ba); }
+.venue-timeline-page #venueTimelinePageRoot { min-width: 0; }
+.venue-timeline-page .operation-board-tab-panel[data-board-tab-panel="timeline"] { container: none; }
+.venue-timeline-page .venue-timeline-toolbar { position: sticky; top: 0; z-index: 5; }
+.venue-timeline-page .venue-timeline-grid { grid-template-columns: minmax(104px, 124px) repeat(var(--timeline-columns), minmax(48px, 1fr)); max-height: none; }
+.venue-timeline-page .venue-timeline-slot { min-height: 82px; }
+.venue-timeline-page .venue-timeline-card { max-height: 62px; }
+.venue-timeline-page .venue-timeline-card strong { font-size: 11px; }
+.venue-timeline-page .venue-timeline-fullscreen { display: none; }
 .turnover-decision { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .turnover-decision strong { margin-right: auto; color: #f2c46d; }
 .turnover-decision button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(150,180,205,.3); border-radius: 8px; background: #173955; color: #fff; }
