@@ -14,6 +14,7 @@
     ["search_layouts", "layout", "query"], ["get_layout_info", "layout", "query"], ["recommend_layouts", "layout", "query"], ["open_layout_preview", "layout", "query", "read_only"], ["link_layout_to_current_state", "layout", "mutation", "read_only"], ["save_layout_draft", "layout", "mutation", "read_only"],
     ["add_manual_task", "board", "mutation"], ["update_manual_task", "board", "mutation", "read_only"], ["complete_manual_task", "board", "mutation", "read_only"], ["delete_manual_task", "board", "mutation", "read_only"],
     ["search_knowledge", "knowledge", "query"], ["propose_add_knowledge", "knowledge", "mutation"], ["propose_update_knowledge", "knowledge", "mutation"], ["propose_disable_knowledge", "knowledge", "mutation"],
+    ["search_setting_manuals", "settingManual", "query"], ["get_setting_manual_detail", "settingManual", "query"],
     ["get_widget_settings", "dashboard", "query", "read_only"], ["update_widget_visibility", "dashboard", "mutation", "read_only"], ["update_widget_size", "dashboard", "mutation", "read_only"], ["reset_widget_layout", "dashboard", "mutation", "read_only"],
   ];
   const catalog = Object.freeze(Object.fromEntries(definitions.map(([id, domain, type, status = "active"]) => [id, Object.freeze({ id, domain, type, requiresApproval: type === "mutation", status })])));

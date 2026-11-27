@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="./src/styles/app.css?v=mobile-ai-chat-v1">
   <link rel="stylesheet" href="./src/styles/venueTimeline.css?v=venue-timeline-ui-v2">
   <link rel="stylesheet" href="./src/styles/eventAttachments.css?v=event-attachments-v1">
+  <link rel="stylesheet" href="./src/styles/settingManuals.css?v=setting-manual-v1">
 </head>
 <body>
   <section id="loginScreen" class="auth-screen" aria-label="로그인">
@@ -59,6 +60,7 @@
         <button class="sidebar-nav-item" type="button" data-dashboard-target="calendar">캘린더</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="assets">자산 관리</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="layouts">공간 / 레이아웃</button>
+        <button class="sidebar-nav-item" type="button" data-dashboard-target="manuals">세팅 매뉴얼</button>
         <button class="sidebar-nav-item" type="button" data-dashboard-target="ai">AI 비서</button>
       </nav>
       <div class="sidebar-version">
@@ -840,6 +842,8 @@
         </details>
       </section>
 
+      <section id="settingManualPage" class="erp-page setting-manual-page" data-erp-page="manuals" aria-label="세팅 매뉴얼 페이지" hidden><div id="settingManualRoot"></div></section>
+
       <section id="aiPage" class="erp-page" data-erp-page="ai" aria-label="AI 비서 페이지" hidden>
         <section class="ai-assistant-page">
           <header class="ai-page-header">
@@ -1164,6 +1168,7 @@
   <script src="./src/venueTransition.js?v=venue-transition-v1"></script>
   <script src="./src/assetManager.js?v=asset-search-v1"></script>
   <script src="./src/venueLayoutManager.js"></script>
+  <script src="./src/settingManualManager.js?v=setting-manual-v1"></script>
 <script src="./src/floorplanEditor.js?v=object-master-color-persistence-v1"></script>
 <script src="./src/baseFloorplanWizard.js?v=base-floorplan-management-v2"></script>
   <script src="./src/aiAssistant.js?v=mobile-ai-chat-v1"></script>
@@ -1427,6 +1432,7 @@
     const aiReferenceStats = document.querySelector("#aiReferenceStats");
     const aiKnowledgeStats = document.querySelector("#aiKnowledgeStats");
     const aiLearningStats = document.querySelector("#aiLearningStats");
+    const settingManualRoot = document.querySelector("#settingManualRoot");
     const aiRefreshStatsButton = document.querySelector("[data-ai-refresh-stats]");
     const mobileNavButtons = document.querySelectorAll("[data-mobile-target]");
     const dashboardNavButtons = document.querySelectorAll("[data-dashboard-target]");
@@ -1650,6 +1656,10 @@
       bindEvents: bindVenueLayoutEvents,
       loadVenueLayoutImages,
     } = venueLayoutManager;
+    const settingManualManager = window.BANQUET_ERP_SETTING_MANUALS.createSettingManualManager({
+      root: settingManualRoot,
+      deps: { supabaseConfig, request: supabaseRequest, headers: supabaseHeaders, currentUser: () => currentUser, isAdminUser: () => authController.isAdminUser(), setStatus },
+    });
     const floorplanEditor = window.BANQUET_ERP_FLOORPLAN_EDITOR.createFloorplanEditor({
       elements: {
         modal: floorplanEditorModal,
@@ -4064,7 +4074,7 @@
     }
 
     function showErpPage(target) {
-      const allowedPages = new Set(["home", "upload", "calendar", "assets", "layouts", "ai"]);
+      const allowedPages = new Set(["home", "upload", "calendar", "assets", "layouts", "manuals", "ai"]);
       const pageName = allowedPages.has(target) ? target : "home";
       const activeTarget = allowedPages.has(target) ? target : "home";
 
@@ -4101,6 +4111,11 @@
       if (pageName === "assets") {
         activateWorkspaceTab("assets");
         loadBanquetAssets();
+        return;
+      }
+
+      if (pageName === "manuals") {
+        settingManualManager.load();
         return;
       }
 

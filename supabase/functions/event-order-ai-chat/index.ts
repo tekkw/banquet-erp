@@ -34,7 +34,7 @@ Deno.serve(async (request) => {
 
   try {
     const payload = await request.json();
-    const { question, mode, analysisData, attachments, eventContext } = payload;
+    const { question, mode, analysisData, attachments, eventContext, manualContext } = payload;
     if (mode === "board_tts") {
       return synthesizeBoardSpeech(payload);
     }
@@ -134,6 +134,8 @@ Deno.serve(async (request) => {
     }
 
     const chatAttachments = Array.isArray(attachments) ? attachments : [];
+    const settingManualResult = !chatAttachments.length ? await answerSettingManualQuestion(cleanQuestion, manualContext ?? null) : null;
+    if (settingManualResult) return jsonResponse(settingManualResult);
     const eventDocumentResult = !chatAttachments.length ? await answerEventDocumentQuestion(cleanQuestion, eventContext ?? null) : null;
     if (eventDocumentResult) return jsonResponse(eventDocumentResult);
     const chatDataContext = await loadChatDataContext(cleanQuestion);
@@ -159,6 +161,85 @@ Deno.serve(async (request) => {
   }
 });
 
+function normalizeManualText(value: unknown) {
+  return String(value ?? "").toLowerCase().replace(/\s+/g, "").replace(/[^0-9a-z가-힣]/g, "");
+}
+
+function isSettingManualIntent(question: string, manualContext: Record<string, unknown> | null) {
+  if (manualContext?.manualId && /다른사진|추가사진|주의사항|방법|설명|다시보여/i.test(normalizeManualText(question))) return true;
+  const compact = normalizeManualText(question);
+  if (/오늘|내일|어제|몇명|인원|몇시|일정|행사/.test(compact)) return false;
+  if (/스쿨식|라운드식|u자|t자|ㅁ자|몇열|몇줄|몇테이블|배치도|레이아웃/.test(compact)) return false;
+  return /세팅|준비|매뉴얼|방법|사진|어떻게/.test(compact);
+}
+
+function manualScore(question: string, manual: Record<string, unknown>, categoryName: string) {
+  const query = normalizeManualText(question);
+  const title = normalizeManualText(manual.title);
+  const category = normalizeManualText(categoryName);
+  const keywords = Array.isArray(manual.keywords) ? manual.keywords.map(normalizeManualText) : [];
+  let score = 0;
+  if (title && query.includes(title)) score += 120;
+  if (category && query.includes(category)) score += 90;
+  keywords.forEach((keyword) => { if (keyword && query.includes(keyword)) score += 80; });
+  const words = [manual.title, categoryName, ...(Array.isArray(manual.keywords) ? manual.keywords : [])].flatMap((value) => String(value || "").split(/[\s,\/]+/)).map(normalizeManualText).filter((value) => value.length >= 2);
+  words.forEach((word) => { if (query.includes(word)) score += 12; });
+  if (!score) {
+    const haystack = normalizeManualText([manual.title, manual.description, manual.instructions, ...(Array.isArray(manual.keywords) ? manual.keywords : [])].join(" "));
+    if (query.length >= 2 && haystack.includes(query)) score += 20;
+  }
+  return score;
+}
+
+async function loadSettingManualFiles(manualId: string) {
+  const links = await safeSupabaseSelect("file_links", `select=file_id,link_type,sort_order&entity_type=eq.setting_manual&entity_id=eq.${encodeURIComponent(manualId)}&order=sort_order.asc,created_at.asc`);
+  const ids = [...new Set(links.map((row: Record<string, unknown>) => String(row.file_id || "")).filter(Boolean))];
+  if (!ids.length) return [];
+  const files = await safeSupabaseSelect("files", `select=id,bucket,storage_path,public_url,original_filename,file_type,mime_type,description&id=in.(${ids.map(encodeURIComponent).join(",")})`);
+  return links.map((link: Record<string, unknown>) => {
+    const file = files.find((row: Record<string, unknown>) => String(row.id) === String(link.file_id));
+    if (!file) return null;
+    const bucket = String(file.bucket || "setting-manuals");
+    const path = String(file.storage_path || "");
+    const url = String(file.public_url || `${SUPABASE_URL}/storage/v1/object/public/${encodeURIComponent(bucket)}/${path.split("/").map(encodeURIComponent).join("/")}`);
+    return { ...file, url, linkType: link.link_type, sortOrder: link.sort_order };
+  }).filter(Boolean);
+}
+
+async function answerSettingManualQuestion(question: string, rawContext: unknown) {
+  const manualContext = rawContext && typeof rawContext === "object" ? rawContext as Record<string, unknown> : null;
+  if (!isSettingManualIntent(question, manualContext)) return null;
+  const [manuals, categories] = await Promise.all([
+    safeSupabaseSelect("setting_manuals", "select=*&status=eq.PUBLISHED&order=updated_at.desc&limit=300"),
+    safeSupabaseSelect("setting_manual_categories", "select=id,name&is_active=eq.true&order=sort_order.asc,name.asc"),
+  ]);
+  const categoryById = new Map(categories.map((row: Record<string, unknown>) => [String(row.id), String(row.name || "")]));
+  let selected = manualContext?.manualId ? manuals.find((row: Record<string, unknown>) => String(row.id) === String(manualContext.manualId)) : null;
+  if (!selected) {
+    const ranked = manuals.map((manual: Record<string, unknown>) => ({ manual, score: manualScore(question, manual, categoryById.get(String(manual.category_id)) || "") })).filter((row) => row.score > 0).sort((a, b) => b.score - a.score || String(b.manual.updated_at).localeCompare(String(a.manual.updated_at)));
+    selected = ranked[0]?.manual || null;
+    if (ranked.length > 1 && ranked[0].score === ranked[1].score) {
+      return { answer: `${String(ranked[0].manual.title)}과 ${String(ranked[1].manual.title)} 중 어떤 매뉴얼을 확인할까요?`, manualChoices: ranked.slice(0, 5).map((row) => ({ id: row.manual.id, title: row.manual.title })) };
+    }
+  }
+  if (!selected) return { answer: "아직 등록된 세팅 매뉴얼이 없습니다." };
+  const files = await loadSettingManualFiles(String(selected.id));
+  const images = files.filter((file: any) => String(file.mime_type || "").startsWith("image/"));
+  const attachments = files.filter((file: any) => !String(file.mime_type || "").startsWith("image/"));
+  const compact = normalizeManualText(question);
+  const answer = /주의사항/.test(compact)
+    ? String(selected.precautions || "등록된 주의사항이 없습니다.")
+    : /사진|이미지|다른사진|추가사진/.test(compact)
+      ? images.length ? `${String(selected.title)} 사진입니다.` : "등록된 매뉴얼 사진이 없습니다."
+      : String(selected.instructions || selected.description || (images.length ? "아래 등록된 사진과 같이 세팅하면 됩니다." : "등록된 설명이 없습니다."));
+  return {
+    answer,
+    manualContext: { manualId: selected.id, title: selected.title },
+    uiActions: [{ type: "setting_manual_card", manualId: selected.id, title: selected.title, instructions: selected.instructions || "", precautions: selected.precautions || "", images, attachments }],
+  };
+}
+
+const BOARD_TTS_VOICES = new Set(["alloy", "ash", "ballad", "coral", "echo", "fable", "onyx", "nova", "sage", "shimmer", "verse", "marin", "cedar"]);
 async function synthesizeBoardSpeech(payload: Record<string, unknown>) {
   const input = String(payload.text ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
   if (!input) return jsonResponse({ message: "음성으로 읽을 내용이 없습니다." }, 400);

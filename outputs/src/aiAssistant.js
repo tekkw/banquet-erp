@@ -96,6 +96,7 @@
     let pendingSetupManualTeach = null;
     let pendingSetupRuleTeach = null;
     let aiConversationPersistenceAvailable = true;
+    let lastSettingManualContext = null;
     const ACTIVE_CONVERSATION_KEY = "banquet_ai_active_conversation_id";
     const eventConversationAgent = globalThis.erpConversationAgent?.create({ storage: globalThis.sessionStorage, storageKey: "banquetBoard.conversationContext.v1", maxSteps: 4 });
     const CORRECTION_LOG_KEY = "banquetErp.eventOrderCorrections.v1";
@@ -417,11 +418,14 @@
             apikey: supabaseConfig.anonKey,
             Authorization: `Bearer ${supabaseConfig.anonKey}`,
           },
-          body: JSON.stringify({ question: resolvedQuestion }),
+          body: JSON.stringify({ question: resolvedQuestion, manualContext: lastSettingManualContext }),
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
-        loadingMessage.querySelector(".chat-bubble").textContent = applyConciseAnswerPolicy(question, body.answer || body.message || "답변을 생성하지 못했습니다.");
+        if (body.manualContext?.manualId) lastSettingManualContext = body.manualContext;
+        const loadingBubble = loadingMessage.querySelector(".chat-bubble");
+        loadingBubble.textContent = applyConciseAnswerPolicy(question, body.answer || body.message || "답변을 생성하지 못했습니다.");
+        (Array.isArray(body.uiActions) ? body.uiActions : []).filter((action) => action.type === "setting_manual_card").forEach((action) => loadingBubble.append(createSettingManualCard(action)));
       } catch (error) {
         console.error(error);
         loadingMessage.classList.add("error");
@@ -558,7 +562,11 @@
       bubble.append(renderStructuredAiText(text));
       if (meta?.uiActions?.length) {
         const actions = document.createElement("div"); actions.className = "board-ai-actions";
-        meta.uiActions.forEach((action) => { const button = document.createElement("button"); button.type = "button"; button.textContent = action.label || "파일 열기"; button.addEventListener("click", () => { if (action.type === "open_event_original" && action.storagePath) window.open(`./index.html?excelPreview=${encodeURIComponent(action.storagePath)}`, "_blank", "noopener"); else if (action.type === "open_event_attachment" && action.bucket && action.storagePath) { const path = String(action.storagePath).split("/").map(encodeURIComponent).join("/"); window.open(`${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(action.bucket)}/${path}`, "_blank", "noopener"); } }); actions.append(button); });
+        meta.uiActions.forEach((action) => {
+          if (action.type === "setting_manual_card") { actions.append(createSettingManualCard(action)); return; }
+          const button = document.createElement("button"); button.type = "button"; button.textContent = action.label || "파일 열기";
+          button.addEventListener("click", () => { if (action.type === "open_event_original" && action.storagePath) window.open(`./index.html?excelPreview=${encodeURIComponent(action.storagePath)}`, "_blank", "noopener"); else if (action.type === "open_event_attachment" && action.bucket && action.storagePath) { const path = String(action.storagePath).split("/").map(encodeURIComponent).join("/"); window.open(`${supabaseConfig.url}/storage/v1/object/public/${encodeURIComponent(action.bucket)}/${path}`, "_blank", "noopener"); } }); actions.append(button);
+        });
         bubble.append(actions);
       }
       if (meta?.saveSuggestion) {
@@ -579,6 +587,15 @@
       const title = document.createElement("strong"); title.textContent = card.title;
       const summary = document.createElement("span"); summary.textContent = [card.columns && card.rows ? `${card.columns}열 × ${card.rows}줄` : "", card.tableCount != null ? `${card.tableCount}T` : "", card.totalSeats != null ? `${card.totalSeats}석` : ""].filter(Boolean).join(" · ");
       body.append(title, summary); wrap.append(body); return wrap;
+    }
+
+    function createSettingManualCard(action) {
+      const card = document.createElement("article"); card.className = "ai-setting-manual-card";
+      const images = Array.isArray(action.images) ? action.images : [];
+      card.innerHTML = `<header><span>세팅 매뉴얼</span><strong>${escapeHtml(action.title || "매뉴얼")}</strong></header>${images.length ? `<div class="ai-setting-manual-gallery">${images.map((image) => `<button type="button" data-manual-image="${escapeHtml(image.url || "")}" aria-label="${escapeHtml(image.description || image.original_filename || action.title || "매뉴얼 이미지")}"><img src="${escapeHtml(image.url || "")}" alt="${escapeHtml(image.description || image.original_filename || action.title || "매뉴얼 이미지")}" loading="lazy"><small>${escapeHtml(image.description || image.original_filename || "")}</small></button>`).join("")}</div>` : ""}${action.precautions ? `<details><summary>주의사항</summary><p>${escapeHtml(action.precautions)}</p></details>` : ""}`;
+      card.querySelectorAll("[data-manual-image]").forEach((button) => button.onclick = () => window.open(button.dataset.manualImage, "_blank", "noopener"));
+      (Array.isArray(action.attachments) ? action.attachments : []).forEach((file) => { const link = document.createElement("a"); link.href = file.url || "#"; link.target = "_blank"; link.rel = "noopener"; link.textContent = file.original_filename || "첨부자료 열기"; card.append(link); });
+      return card;
     }
 
     function createSaveSuggestionCard(suggestion) {
@@ -1054,10 +1071,11 @@
             apikey: supabaseConfig.anonKey,
             Authorization: `Bearer ${supabaseConfig.anonKey}`,
           },
-          body: JSON.stringify({ question: resolvedQuestion, attachments: uploadedAttachments, eventContext: dateReference.source === "none" ? eventConversationAgent?.load()?.event || null : null }),
+          body: JSON.stringify({ question: resolvedQuestion, attachments: uploadedAttachments, eventContext: dateReference.source === "none" ? eventConversationAgent?.load()?.event || null : null, manualContext: lastSettingManualContext }),
         });
         const body = await parseSupabaseResponse(response);
         if (!response.ok) throw new Error(body.message || "AI 답변 생성에 실패했습니다.");
+        if (body.manualContext?.manualId) lastSettingManualContext = body.manualContext;
         conversation.messages[conversation.messages.length - 1] = {
           type: "assistant",
           text: applyConciseAnswerPolicy(question, body.answer || body.message || "답변을 생성하지 못했습니다."),
