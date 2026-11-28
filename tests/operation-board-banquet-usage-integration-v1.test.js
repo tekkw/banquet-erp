@@ -17,7 +17,7 @@ classified = board.classifySetupBoardItems([multi], [completed], "2026-11-17");
 assert.equal(classified.candidates.length, 1, "완료한 event+venue+usageDate만 제외한다"); assert.equal(classified.candidates[0].canonicalVenue, "FESTA");
 assert(fs.readFileSync("outputs/src/operationBoard.js", "utf8").includes('data-board-tab="timeline"'));
 const source = fs.readFileSync("outputs/src/operationBoard.js", "utf8");
-assert(source.includes("timelineDayCount = 21"));
+assert(source.includes("timelineDayCount = 7"));
 assert(source.includes("mondayOfWeek(centerDate)"));
 assert(source.includes("data-timeline-week-step"));
 assert(source.includes("data-timeline-color"));

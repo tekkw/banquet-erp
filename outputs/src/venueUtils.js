@@ -88,6 +88,15 @@
     normalizeVenueList(value).forEach((code) => atoms(code).forEach((atom) => result.add(atom)));
     return result;
   }
+  function expandVenueDisplayCodes(value) {
+    const prepared = prepareVenueText(value);
+    const partial = prepared.match(/(부라노|BURANO|카프리|CAPRI)\s*([123](?:\s*\+\s*[123])+)/i);
+    if (partial) {
+      const prefix = /부라노|BURANO/i.test(partial[1]) ? "BURANO" : "CAPRI";
+      return [...new Set((partial[2].match(/[123]/g) || []).map((number) => `${prefix}_${number}`))];
+    }
+    return [...new Set(normalizeVenueList(value).flatMap((code) => GROUP_MEMBERS[code] || [code]))];
+  }
   function spacesOverlap(left, right) {
     const leftSet = normalizeVenueSet(left); const rightSet = normalizeVenueSet(right);
     return leftSet.size > 0 && rightSet.size > 0 && [...leftSet].some((space) => rightSet.has(space));
@@ -161,6 +170,6 @@
     return `${labels[0]} 외 ${labels.length - 1}`;
   }
 
-  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, formatOperationalVenue, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
+  global.BANQUET_ERP_VENUE_UTILS = { normalizeVenue, normalizeVenueResult, normalizeVenueList, normalizeVenueSet, expandVenueDisplayCodes, spacesOverlap, venueMatchRank, formatVenueShort, formatVenueShortList, formatOperationalVenue, collapseCodes, parseVenueCodes, buildVenueOptions, venueLabel, venueSearchKey };
   global.BANQUET_ERP_CORE_RULES = { normalizeVenue, normalizeVenueSet, spacesOverlap, venueMatchRank, getActualTodaySeoul, getSelectedBoardDate, getSetupTaskTimingStatus, getSetupTimingStatus, resolveNextEventForVenue, getSetupTaskKey, dedupeSetupCandidates, getSetupTaskStatus };
 })(typeof window !== "undefined" ? window : globalThis);

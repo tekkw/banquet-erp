@@ -21,5 +21,8 @@ assert(board.includes('const timelineContainer = activeTimelineRoot()'), "timeli
 assert(!board.includes("venue-timeline-fullscreen\" href"), "dedicated page must not render a fullscreen link");
 assert(css.includes(".venue-timeline-page .venue-timeline-grid") && css.includes("max-height: none"), "dedicated page size constraints must be removed");
 assert(css.includes(".setup-timeline-pending > summary"), "pending setup list must be collapsible");
+assert(board.includes('timelineDayCount = 7') && board.includes('timelineDayCount === 7 ? 14 : 7'), "timeline must switch between one and two weeks");
+assert(board.includes('const TIMELINE_VENUES = ["CONVENTION_A", "CONVENTION_B", "FESTA", "BURANO_1", "BURANO_2", "BURANO_3", "OLIVIA", "CAPRI_1", "CAPRI_2", "CAPRI_3"]'), "timeline must render only ten physical venue rows");
+assert(css.includes('[data-timeline-days="7"]') && css.includes('repeat(7, minmax(0, 1fr))'), "one-week view must fit seven equal columns");
 
 console.log("venue timeline dedicated page V1 tests passed");
